@@ -32,6 +32,61 @@ namespace erf_sbm { class SBMStateManager; class SBMTransport; }
  */
 class ShocDriver;
 
+/**
+ * The weight of the fluxes of RK stage nrk at this level in the update the step ends with.  The
+ * compressible integrator and the anelastic MidPoint integrator update from their final stage
+ * alone (nrk = 2 and nrk = 1), which takes weight 1.  The anelastic RK2 integrator is Heun's,
+ * S^{n+1} = S^n + dt (R0 + R1) / 2, so both of its stages take weight 1/2.
+ *
+ * @param[in] solverChoice  the solver options
+ * @param[in] level         the level being advanced
+ * @param[in] nrk           the RK stage
+ */
+inline amrex::Real
+StageFluxWeight (const SolverChoice& solverChoice, int level, int nrk)
+{
+    if (solverChoice.anelastic[level] == 1) {
+        if (solverChoice.anelastic_type[level] == AnelasticType::RK2) {
+            return amrex::Real(0.5);
+        }
+        return (nrk == 1) ? amrex::Real(1.) : amrex::Real(0.);
+    }
+    return (nrk == 2) ? amrex::Real(1.) : amrex::Real(0.);
+}
+
+/**
+ * The weight with which the fluxes of RK stage nrk at this level go into the flux registers:
+ * the weight of that stage's fluxes in the update the step ends with, or zero if they are not
+ * registered.  Only with two-way coupling and more than one level.  The compressible integrator
+ * and the anelastic MidPoint integrator update from their final stage alone (nrk = 2 and nrk = 1),
+ * which takes weight 1.  The anelastic RK2 integrator is Heun's, S^{n+1} = S^n + dt (R0 + R1) / 2,
+ * so both of its stages take weight 1/2.  Every stage that adds fluxes to the registers must use
+ * this, so that the registers hold the fluxes the update applied.
+ *
+ * @param[in] solverChoice  the solver options
+ * @param[in] level         the level being advanced
+ * @param[in] finest_level  the finest level
+ * @param[in] nrk           the RK stage
+ */
+inline amrex::Real
+RefluxStageWeight (const SolverChoice& solverChoice, int level, int finest_level, int nrk)
+{
+    if (solverChoice.coupling_type != CouplingType::TwoWay || finest_level == 0) {
+        return amrex::Real(0.);
+    }
+    return StageFluxWeight(solverChoice, level, nrk);
+}
+
+/**
+ * Whether the fluxes of RK stage nrk at this level go into the flux registers
+ * (RefluxStageWeight is not zero).
+ */
+inline bool
+IsRefluxStage (const SolverChoice& solverChoice, int level, int finest_level, int nrk)
+{
+    return RefluxStageWeight(solverChoice, level, finest_level, nrk) > amrex::Real(0.);
+}
+
 void erf_make_tau_terms (int level, int nrk,
                          const amrex::Vector<amrex::BCRec>& domain_bcs_type,
                          const amrex::MultiFab& z_phys_nd,
@@ -52,7 +107,9 @@ void erf_make_tau_terms (int level, int nrk,
                          const amrex::MultiFab& ax,
                          const amrex::MultiFab& ay,
                          const amrex::MultiFab& az,
-                         const eb_& ebfact);
+                         const eb_& ebfact,
+                         const amrex::MultiFab* ib_wall_face13 = nullptr,
+                         const amrex::MultiFab* ib_wall_face23 = nullptr);
 
 void copy_surface_tau_for_implicit (amrex::Vector<std::unique_ptr<amrex::MultiFab>>& Tau_lev,
                                     amrex::Vector<std::unique_ptr<amrex::MultiFab>>& Tau_corr_lev);
@@ -119,7 +176,11 @@ void erf_slow_rhs_pre (int level, int finest_level, int nrk,
                       amrex::YAFluxRegister* fr_as_fine,
                       const amrex::MultiFab* cloud_chamber_base_state,
                       const erf_cloud_chamber::Config* cloud_chamber_config,
-                      CloudChamberBudget* cloud_budget);
+                      CloudChamberBudget* cloud_budget,
+                      const amrex::MultiFab* ib_wall_face13 = nullptr,
+                      const amrex::MultiFab* ib_wall_face23 = nullptr,
+                      const amrex::MultiFab* ib_wall_face33 = nullptr,
+                      const amrex::MultiFab* ib_wall_hfx = nullptr);
 
 /**
  * Function for computing the slow RHS for the evolution equations for the scalars other than density or potential temperature
@@ -186,6 +247,8 @@ void erf_slow_rhs_post (int level, int finest_level, int nrk,
                        CloudChamberBudget* cloud_budget,
                        erf_auxiliary::AuxiliaryInertTracer* auxiliary_inert_tracer,
                        erf_sbm::SBMStateManager* sbm_state_manager,
-                       erf_sbm::SBMTransport* sbm_transport);
+                       erf_sbm::SBMTransport* sbm_transport,
+                       const amrex::MultiFab* ib_wall_face33 = nullptr,
+                       const amrex::MultiFab* ib_wall_ktarget = nullptr);
 
 #endif

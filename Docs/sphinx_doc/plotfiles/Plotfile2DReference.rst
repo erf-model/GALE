@@ -121,11 +121,56 @@ configuration and runtime details that cannot be inferred from metadata alone.
      - ``m``
      - ``FillMinus999WhenUnavailable``
      - Roughness height from the surface layer
+   * - ``u_10m``
+     - ``SurfaceLayer``
+     - ``m/s``
+     - ``FillMinus999WhenUnavailable``
+     - Grid-relative x wind 10 m above the local surface, from the surface-layer profile
+   * - ``v_10m``
+     - ``SurfaceLayer``
+     - ``m/s``
+     - ``FillMinus999WhenUnavailable``
+     - Grid-relative y wind 10 m above the local surface, from the surface-layer profile
+   * - ``u_east_10m``
+     - ``SurfaceLayer``
+     - ``m/s``
+     - ``FillMinus999WhenUnavailable``
+     - Eastward wind 10 m above the local surface, from the surface-layer profile
+   * - ``v_north_10m``
+     - ``SurfaceLayer``
+     - ``m/s``
+     - ``FillMinus999WhenUnavailable``
+     - Northward wind 10 m above the local surface, from the surface-layer profile
    * - ``OLR``
      - ``Radiation``
      - ``W/m^2``
      - ``FillMinus999WhenUnavailable``
      - Outgoing longwave radiation at the model top
+   * - ``topographic_shadow``
+     - ``Radiation``
+     - ``1``
+     - ``FillMinus999WhenUnavailable``
+     - Direct sunlight blocked by terrain or by a midpoint sun below the cutoff when averaged cosine exceeds it (1 blocked, 0 otherwise)
+   * - ``terrain_direct_factor``
+     - ``Radiation``
+     - ``1``
+     - ``FillMinus999WhenUnavailable``
+     - Terrain correction factor for direct shortwave
+   * - ``terrain_incidence``
+     - ``Radiation``
+     - ``1``
+     - ``FillMinus999WhenUnavailable``
+     - Nonnegative cosine of sunlight incidence on terrain
+   * - ``unshaded_sw_flux_dn``
+     - ``Radiation``
+     - ``W/m^2``
+     - ``FillMinus999WhenUnavailable``
+     - Surface downwelling shortwave before terrain correction
+   * - ``terrain_sw_flux_dn``
+     - ``Radiation``
+     - ``W/m^2``
+     - ``FillMinus999WhenUnavailable``
+     - Surface downwelling shortwave after terrain correction
    * - ``seb_t_sfc``
      - ``Radiation``
      - ``K``
@@ -160,7 +205,7 @@ configuration and runtime details that cannot be inferred from metadata alone.
      - ``SurfaceState``
      - ``Pa``
      - ``AlwaysAvailable``
-     - Surface pressure
+     - Surface pressure, at the ground
    * - ``sea_level_pressure``
      - ``SurfaceState``
      - ``Pa``
@@ -356,6 +401,16 @@ configuration and runtime details that cannot be inferred from metadata alone.
      - ``m``
      - ``FillMinus999WhenUnavailable``
      - Accumulated subsurface runoff
+   * - ``snow``
+     - ``LandSurface``
+     - ``kg m^-2``
+     - ``FillMinus999WhenUnavailable``
+     - Noah-MP snow water equivalent
+   * - ``snowh``
+     - ``LandSurface``
+     - ``m``
+     - ``FillMinus999WhenUnavailable``
+     - Noah-MP physical snow depth
    * - ``noahmp_temperature_2m_vegetated``
      - ``LandSurface``
      - ``K``
@@ -401,7 +456,9 @@ configuration and runtime details that cannot be inferred from metadata alone.
 .. note::
 
    For the ``landmask`` variable, land is ``1`` and sea is ``0``. Buildings are
-   ``2`` when using ``ImmersedForcing``.
+   ``2`` when using ``ImmersedForcing`` on levels where
+   :math:`\sqrt{\Delta x\,\Delta y} \leq 50\,\mathrm{m}`, matching the building
+   forcing cutoff. Immersed terrain retains its ``2`` mask at all resolutions.
 
 If a requested fixed diagnostic is not selectable for the active configuration,
 ERF warns and skips it. The descriptor table above records metadata; it does
@@ -431,12 +488,27 @@ The selection contract and the value written after selection are separate:
      - Selectable: ERF accepts these fixed request names; the runtime
        SurfaceLayer source may still be absent.
      - Value: SurfaceLayer scalar values; ``-999`` when the source pointer is absent.
+   * - ``u_10m``, ``v_10m``, ``u_east_10m``, ``v_north_10m``
+     - Selectable: fixed request names; the runtime SurfaceLayer source may still be absent.
+     - Value: the wind 10 m above the local surface, as WRF's ``U10``/``V10``. Its speed is
+       :math:`u_* / \kappa \, [\ln(10/z_0) - \psi_m(10/L)]` from the surface layer's
+       :math:`u_*`, :math:`z_0` and Obukhov length :math:`L` (with :math:`10/L` capped at 1,
+       as for ``temperature_2m``), and its direction that of the wind at the centre of the
+       first cell. ``u_east_10m`` and ``v_north_10m`` are turned earth-relative with the
+       grid orientation from the run's latitude and longitude, as the sampled ``u_east``
+       and ``v_north`` are; without them the grid is taken to be aligned with east. ``-999``
+       without a surface layer, or where :math:`z_0 \ge 10` m.
    * - ``pblh``
      - Selectable: fixed request name.
      - Native SHOC ``pblh`` is reported in metres above local ground (AGL). Value: native SHOC PBL height when native SHOC diagnostics are present; otherwise SurfaceLayer; ``-999`` if neither exists.
    * - ``OLR``
      - Selectable: fixed request name.
      - Value: radiation output; ``-999`` when the radiation source is absent.
+   * - ``topographic_shadow``, ``terrain_direct_factor``, ``terrain_incidence``, ``unshaded_sw_flux_dn``, ``terrain_sw_flux_dn``
+     - Selectable: when either ``erf.topo_shading`` or ``erf.slope_rad`` is enabled.
+     - Value: diagnostics of the RRTMGP terrain correction, held between radiation
+       updates. ``-999`` before the first radiation update. See
+       :ref:`sec:Plotfile2DTopographicRadiation`.
    * - ``seb_t_sfc``, ``seb_q_sfc``
      - Selectable: fixed request names.
      - Value: the two-stream simplified surface energy balance's own prognostic surface
@@ -456,7 +528,10 @@ The selection contract and the value written after selection are separate:
      - Value: legacy conservative surface flux outputs.
    * - ``surf_pres``
      - Selectable: fixed request name.
-     - Value: pressure computed from the lowest atmospheric state.
+     - Value: the pressure at the ground, as WRF's ``PSFC``: the pressure of the
+       lowest cell's state plus :math:`\rho g z_c`, with :math:`z_c` the height
+       of that cell's centre above the ground -- the same surface pressure the
+       radiation and the surface layer use.
    * - ``sea_level_pressure``
      - Selectable: fixed request name in dry and moist configurations.
      - Value: pressure reduced hydrostatically from the local terrain surface
@@ -504,6 +579,61 @@ The selection contract and the value written after selection are separate:
    * - ``near_surface_diagnostic_source``
      - Selectable: a Noah-MP or SurfaceLayer pathway exists, including a dry source-only request.
      - Value: categorical code ``0`` through ``6``; its ``AlwaysAvailable`` metadata policy records ``missing_value: null``.
+
+.. _sec:Plotfile2DTopographicRadiation:
+
+Topographic shading diagnostics
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+With RRTMGP on static fitted terrain, enabling ``erf.topo_shading`` or
+``erf.slope_rad`` produces five diagnostics of the surface shortwave correction.
+Both options default to false; see :ref:`inputs-topographic-radiation` for
+configuration and :ref:`sec:TopographicRadiation` for the equations.
+
+``topographic_shadow`` is 1 where intervening terrain blocks direct sunlight
+and 0 otherwise. It remains 0 when shading is disabled, even if slope
+correction is enabled. A slope facing away from the sun can have zero direct
+flux without a cast shadow, so the mask alone does not describe all slope
+effects.
+
+``terrain_direct_factor`` multiplies the horizontal direct shortwave flux.
+It is 0 in a cast shadow and can exceed 1 on a sun-facing slope.
+``terrain_incidence`` is the nonnegative cosine of the angle between the sun
+direction and the terrain normal. If RRTMGP's interval-averaged zenith cosine
+is at or below ``1.e-4``, the mask is 0 and the direct factor is 1. If the
+midpoint sun is at or below the same cutoff while the averaged cosine is above
+it, incidence is 0 and the direct factor is 0; the mask is 1 when shading is
+enabled and 0 when only slope correction is enabled. Thus mask 0 alone does
+not imply daytime illumination.
+
+``unshaded_sw_flux_dn`` and ``terrain_sw_flux_dn`` are the total downwelling
+shortwave fluxes before and after correction, respectively. They include the
+unchanged diffuse component, so corrected shortwave need not vanish in shadow.
+Where Noah-MP receives this forcing, its ``sw_flux_dn`` corresponds to the
+corrected flux.
+
+These fields update with radiation at ``erf.rad_freq_in_steps`` and remain
+fixed between radiation updates. More frequent plotfiles do not cause more
+frequent shadow calculations. Before the first radiation update, all five
+diagnostics use the missing value ``-999``. They are selectable only when
+``erf.topo_shading`` or ``erf.slope_rad`` is enabled.
+
+To visualize the mask and its effect, add these outputs to a case with terrain
+correction enabled:
+
+.. code-block:: text
+
+   erf.plot2d_file_1 = plt2d
+   erf.plot2d_int_1 = 1
+   erf.plot2d_vars_1 = z_surf topographic_shadow terrain_direct_factor terrain_incidence unshaded_sw_flux_dn terrain_sw_flux_dn
+
+In ParaView or VisIt, color by ``topographic_shadow`` and overlay ``z_surf``
+contours to locate shadows relative to ridges and valleys. Compare the two
+shortwave fields to see the forcing change. For a simple directional check,
+the fixed low eastern sun in :ref:`inputs-topographic-radiation` should cast
+shadows west of a hill; geographic west need not align with the negative grid
+x direction on a rotated real-case grid. Use outputs after a radiation update
+and exclude ``-999`` values from the color scale.
 
 .. _sec:Plotfile2DSeaLevelPressure:
 
@@ -577,7 +707,8 @@ The output units are pascals. It is pressure reduced to ERF's physical
 mean sea level. The diagnostic uses the lowest model level, assumes the fixed
 lapse rate below it, applies no horizontal smoothing, does not calculate
 1000-hPa height, is computed independently on each AMR level, and does not
-alter model state. ``surf_pres`` remains a separate lowest-cell-center field.
+alter model state. ``surf_pres`` remains a separate field, the pressure at the
+ground.
 
 .. code-block:: text
 
@@ -688,6 +819,15 @@ equivalent.
 | ``precip_frozen_accum``     | Accumulated frozen surface precipitation,        | kg/m^2   |
 |                             | liquid-water equivalent                          |          |
 +-----------------------------+--------------------------------------------------+----------+
+
+``precip_rain_accum``, ``precip_snow_accum`` and ``precip_graupel_accum`` each
+hold that one species, as their 3D counterparts ``rain_accum``, ``snow_accum``
+and ``graupel_accum`` do. For ``Morrison``, ``WSM6`` and ``WDM6``,
+``precip_total_accum`` is the scheme's precipitation total, the 3D
+``precip_accum``, which also counts the cloud ice (and, for ``Morrison``, the
+cloud water) that fell, so it can exceed the rain plus ``precip_frozen_accum``.
+For the other schemes it is the rain plus the frozen species; for ``SAM`` that
+leaves out the cloud ice that the 3D ``precip_accum`` counts.
 
 ``precip_total_accum`` is the normalized native total when one exists, or the
 sum of normalized rain and frozen accumulations otherwise.

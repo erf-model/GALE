@@ -37,7 +37,6 @@ ERF::FillCoarsePatch (int lev, double time)
                            &vars_new[lev-1][Vars::yvel], &vars_new[lev-1][Vars::zvel]},
                           {&vars_new[lev-1][Vars::cons],
                            &rU_new[lev-1], &rV_new[lev-1], &rW_new[lev-1]},
-                           base_state[lev-1], base_state[lev-1],
                            false, cons_only);
     }
 
@@ -97,6 +96,12 @@ ERF::FillCoarsePatch (int lev, double time)
     // ***************************************************************************
     // Physical bc's for cell centered variables at domain boundary
     // ***************************************************************************
+    // Quantities ingested from boundary planes are not imposed by physbcs_cons; the density
+    // among them is also read by MomentumToVelocity below at the ingested faces
+    if (m_r2d && !solverChoice.use_real_bcs) {
+        fill_from_bndryregs(lev, {&vars_new[lev][Vars::cons], &vars_new[lev][Vars::xvel],
+                                  &vars_new[lev][Vars::yvel], &vars_new[lev][Vars::zvel]}, time, true);
+    }
     (*physbcs_cons[lev])(vars_new[lev][Vars::cons],vars_new[lev][Vars::xvel],vars_new[lev][Vars::yvel],
                          0,ncomp_cons,ngvect_cons,time,BCVars::cons_bc,true);
 
@@ -155,6 +160,11 @@ ERF::FillCoarsePatch (int lev, double time)
     // ***************************************************************************
     IntVect ngvect_vels = vars_new[lev][Vars::xvel].nGrowVect();
 
+    if (m_r2d && !solverChoice.use_real_bcs) {
+        fill_from_bndryregs(lev, {&vars_new[lev][Vars::cons], &vars_new[lev][Vars::xvel],
+                                  &vars_new[lev][Vars::yvel], &vars_new[lev][Vars::zvel]}, time);
+    }
+
     (*physbcs_u[lev])(vars_new[lev][Vars::xvel],vars_new[lev][Vars::xvel],vars_new[lev][Vars::yvel],
                       ngvect_vels,time,BCVars::xvel_bc,true);
     (*physbcs_v[lev])(vars_new[lev][Vars::yvel],vars_new[lev][Vars::xvel],vars_new[lev][Vars::yvel],
@@ -163,6 +173,6 @@ ERF::FillCoarsePatch (int lev, double time)
                       ngvect_vels,time,BCVars::zvel_bc,true);
 
     // ***************************************************************************
-    // Since lev > 0 here we don't worry about m_r2d or wrfbdy data
+    // Since lev > 0 here we don't worry about wrfbdy data
     // ***************************************************************************
 }

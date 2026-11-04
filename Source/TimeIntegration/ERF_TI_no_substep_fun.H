@@ -318,11 +318,11 @@
                   fast_only=true, vel_and_mom_synced=false);
 
         if (solverChoice.anelastic[level]) {
-            bool have_tb = (thin_xforce[0] || thin_yforce[0] || thin_zforce[0]);
+            bool have_tb = (thin_xforce[level] || thin_yforce[level] || thin_zforce[level]);
             if (have_tb) {
                 project_velocity_tb(level, slow_dt, S_sum);
             } else {
-                project_momenta(level, time_for_fp, slow_dt, S_sum);
+                project_momenta(level, time_for_fp, slow_dt, S_sum, true);
             }
         }
     };
