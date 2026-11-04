@@ -13,13 +13,46 @@ allowing refinement in one coordinate direction but not another.
 
 We utilize two-way coupling, in which the coarse solution is used to provide boundary conditions for the fine solution
 and the fine solution is averaged down onto the coarser level.  In addition, we reflux all advected scalars to ensure conservation.
+(With immersed forcing, ``erf.if_average_down = fluid_mass`` weights that average by the fluid mass of the fine cells,
+which gives up conservation over the covered partial cells; see :ref:`Forcings <Forcings>`.)
 For coarse-to-fine communication we provide "ghost cell" data for cell-centered data and tangential momentum components to
 the fine level by interpolating in space and time outside the region covered by the fine level.
 We also interpolate the normal momentum from coarse to fine on the coarse-fine interface itself;
 this ensures mass conservation since the normal momentum is in fact the flux for the density field.
+Next to a wall that interpolation is linear in :math:`z` and does not know the log profile, so the fine face at the
+wall gets too much flow. With ``erf.cf_loglaw_fill = true`` (constant dz; the immersed surface, or a
+``surface_layer`` bottom; not EB terrain) the flux of the first coarse face above the wall is shared among its fine
+sub-faces in proportion to the integral of :math:`\ln(1 + z/z_0)` over the fluid part of each, :math:`z` the
+height above the wall, with :math:`z_0` from ``erf.cf_loglaw_z0`` (by default ``erf.if_z0`` with immersed forcing,
+else the inputs' ``erf.most.z0`` or ``erf.zlo.most.z0``). A half-solid sub-face of an immersed surface so carries its
+fluid share. The flux of every coarse face is kept, so the average down of the coarse/fine faces still returns the
+coarse values; the faces above the wall face keep the linear interpolation, as does the relax region
+(``erf.cf_width`` beyond ``erf.cf_set_width``), a fine box that does not reach the bottom of the domain, and a wall
+coarse face none of whose fine sub-faces is open (the two levels disagree on the surface by a coarse cell, the case
+``erf.if_cf_mismatch_warning`` reports).
+On a flat neutral two-level case (20 m over 10 m, surface layer, :math:`z_0 = 0.1` m) the linear fill puts the
+first fine cell at the inflow edge of the patch 17 % above the log profile through the coarse first cell and the
+second 8 % below it; the share puts both within 4 %, and the first-cell wind then varies by 0.6 % along the patch
+instead of 7 %.
 In order to ensure that the fine momentum on the coarse-fine boundary stays consistent with the
 interpolated coarse values throughout a fine timestep, we also interpolate the source term for
 the normal momentum on the coarse-fine interface.
+
+With acoustic substepping, interpolating linearly in time between the coarse level's old and new
+momenta is not enough: over a time step the density flux through a face is the time integral of the
+momentum on that face over the acoustic substeps, and the coarse level's integral uses what the
+momentum actually did, which acoustic waves crossing the face make far from linear. So, without
+terrain or with terrain that does not move, the coarse level records the
+flux through each face under the fine level's coarse-fine faces over each acoustic substep of its
+last RK stage. On its coarse-fine faces the fine level then uses the average of those fluxes over
+each of its own substeps, interpolated conservatively in space, and in the vertical sets the normal
+momentum (with terrain, the contravariant flux Omega) at the end of each substep from the same
+record. The fine fluxes through the interface then add up, over the coarse step, to the coarse ones,
+and the total mass is conserved to round-off.  Setting ``erf.cf_flux_history = false`` (the default
+is ``true``) goes back to interpolating the coarse momentum linearly in time on these faces; it is
+not done with moving terrain.  This is done under one-way coupling as well as two-way, so that
+the fine level sees the same fluxes through its coarse-fine faces whichever coupling is used.
+
 When using the anelastic approximation, this ensures that the computation of the updates to the
 fine momentum do not use any values of the perturbational pressure from the coarser level since
 the perturbational pressure is not synchronized between levels.
@@ -298,6 +331,29 @@ wrfinput-specific details.
 The restrictions are the same for both pathways: the PBL models and the column-integral
 derived quantities need entire columns and cannot be used on a level whose grids do not
 span the domain in z.  See :ref:`sec:nested-wrfinput`.
+
+**Anelastic runs.**  A level that stops inside the domain in z has coarse/fine faces at its
+top and bottom, and the anelastic projection treats them like its side faces: it applies no
+correction through them, so the flux through them has to come from the coarse level and add up
+to no net inflow.  On a terrain-fitted mesh the flux through a z-face is the contravariant
+:math:`\Omega = \rho_0 w - \rho_0 u\, \partial z/\partial x - \rho_0 v\, \partial z/\partial y`.
+ERF therefore
+
+-  fills the horizontal momenta just below and above the level from the coarse level, since
+   :math:`\Omega` on the level's lowest and highest faces reads them;
+
+-  sets :math:`\Omega` on the level's top and bottom faces from the coarse level's
+   :math:`\Omega`, interpolated so the fine faces over each coarse face average to it, both in
+   the projection and in the fine-level fills the time step uses, so that theta and the other
+   scalars are carried by the same face fluxes the projection balanced (the coarse
+   :math:`\rho w` alone would leave the net inflow in the level as a uniform divergence);
+
+-  passes ``gmres_fft`` only the level's own layers of :math:`\Delta z` for its preconditioner.
+
+All three terrain solvers (``erf.terrain_poisson_solver``) run such a level.  The wall distance
+``erf.wall_dist_type = terrain_height`` takes the ground heights a level does not hold from the
+coarser level.  With one-way coupling this is all the level needs; two-way coupling of such a
+level over terrain has not been tested yet.
 
 Moving Refinement Regions
 ~~~~~~~~~~~~~~~~~~~~~~~~~

@@ -50,12 +50,9 @@ void ERF::init_phys_bcs (bool& read_prim_theta)
 
         m_bc_neumann_vals[BCVars::RhoKE_bc_comp][ori]     = zero_d;
         m_bc_neumann_vals[BCVars::RhoScalar_bc_comp][ori] = zero_d;
-        m_bc_neumann_vals[BCVars::RhoQ1_bc_comp][ori]     = zero_d;
-        m_bc_neumann_vals[BCVars::RhoQ2_bc_comp][ori]     = zero_d;
-        m_bc_neumann_vals[BCVars::RhoQ3_bc_comp][ori]     = zero_d;
-        m_bc_neumann_vals[BCVars::RhoQ4_bc_comp][ori]     = zero_d;
-        m_bc_neumann_vals[BCVars::RhoQ5_bc_comp][ori]     = zero_d;
-        m_bc_neumann_vals[BCVars::RhoQ6_bc_comp][ori]     = zero_d;
+        for (int n = BCVars::RhoQ1_bc_comp; n < BCVars::xvel_bc; n++) {
+            m_bc_neumann_vals[n][ori]                     = zero_d;
+        }
 
         m_bc_neumann_vals[BCVars::xvel_bc][ori] = zero_d;
         m_bc_neumann_vals[BCVars::yvel_bc][ori] = zero_d;
@@ -554,15 +551,8 @@ void ERF::init_bcs ()
     // *****************************************************************************
     {
         auto wall_scalar_type = [this] (int bc_comp, Orientation ori) {
-            const auto intent = m_wall_scalar_bc_intent[bc_comp][ori];
-            if (intent == erf_wall_scalar_bc::WallScalarBCIntent::DirichletConserved) {
-                return ERFBCType::ext_dir;
-            } else if (intent == erf_wall_scalar_bc::WallScalarBCIntent::DirichletPrimitive) {
-                return ERFBCType::ext_dir_prim;
-            } else if (intent == erf_wall_scalar_bc::WallScalarBCIntent::Neumann) {
-                return ERFBCType::neumann;
-            }
-            return ERFBCType::foextrap;
+            return erf_wall_scalar_bc::logical_boundary_type(
+                m_wall_scalar_bc_intent[bc_comp][ori]);
         };
 
         for (OrientationIter oit; oit; ++oit) {
@@ -751,8 +741,16 @@ void ERF::init_bcs ()
     // Turn off implicit diffusion for a component if its BCs don't match
     // those allowed by the tridiagonal solver.
     const BCRec* bc_ptr = domain_bcs_type.data();
-    Vector<int> cc_comp_map = {BCVars::RhoTheta_bc_comp, BCVars::RhoKE_bc_comp, BCVars::RhoQ1_bc_comp};
-    Vector<std::string> cc_comp_name = {"Theta", "KE", "Qv"};
+    Vector<int> cc_comp_map = {BCVars::RhoTheta_bc_comp, BCVars::RhoKE_bc_comp};
+    Vector<std::string> cc_comp_name = {"Theta", "KE"};
+    const int nq = solverChoice.diffChoice.n_qstate_moist +
+                   solverChoice.diffChoice.n_qstate_nonmoist;
+    for (int q = 0; q < nq; ++q) {
+        if (solverChoice.moisture_type == MoistureType::SBM && q > 0) { continue; }
+        if (!solverChoice.diffChoice.implicit_q(RhoQ1_comp + q)) { continue; }
+        cc_comp_map.push_back(cons_bc_comp(RhoQ1_comp + q));
+        cc_comp_name.push_back("Q" + std::to_string(q + 1));
+    }
     for (int icomp(0); icomp < cc_comp_map.size(); ++icomp) {
         int bc_comp = cc_comp_map[icomp];
         bool foextrap_on_zlo = (bc_ptr[bc_comp].lo(2) == ERFBCType::foextrap);
@@ -761,10 +759,14 @@ void ERF::init_bcs ()
         bool neumann_on_zhi  = (bc_ptr[bc_comp].hi(2) == ERFBCType::neumann);
         if ( (!foextrap_on_zlo && !neumann_on_zlo && !use_surfacelayer) ||
              (!foextrap_on_zhi && !neumann_on_zhi) ) {
-            Print() << "WARNING: Selected BCs for " << cc_comp_name[icomp] << " are not supported with implicit diffusion. Turning off implicit diffusion for this component." << "\n";
+            Print() << "WARNING: Selected BCs for " << cc_comp_name[icomp]
+                    << " are not supported with implicit diffusion. "
+                    << (bc_comp >= BCVars::RhoQ1_bc_comp
+                        ? "All host-transported moisture species fall back to explicit diffusion."
+                        : "Turning off implicit diffusion for this component.") << "\n";
             if (bc_comp == BCVars::RhoTheta_bc_comp) { solverChoice.implicit_thermal_diffusion  = false; }
             if (bc_comp == BCVars::RhoKE_bc_comp)    { solverChoice.implicit_ke_diffusion       = false; }
-            if (bc_comp == BCVars::RhoQ1_bc_comp)    { solverChoice.implicit_moisture_diffusion = false; }
+            if (bc_comp >= BCVars::RhoQ1_bc_comp)    { solverChoice.implicit_moisture_diffusion = false; }
         }
     }
     Vector<int> vel_comp_map = {BCVars::xvel_bc, BCVars::yvel_bc};

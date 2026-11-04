@@ -137,11 +137,33 @@ ERF::timeStep (int lev, double time, int /*iteration*/)
             if (low_data_zlo[itime].size() == 0 && need_itime) {
                 read_from_wrflow(itime, nc_low_file, geom[lev].Domain(), low_data_zlo);
 
-                update_sst_tsk(itime, geom[lev], ba2d[lev],
+                update_sst_tsk(lev, itime, geom[lev], ba2d[lev],
                                sst_lev[lev], tsk_lev[lev],
                                m_SurfaceLayer[Orientation(Direction::z, Orientation::low)], low_data_zlo,
                                S_new, *mf_PSFC[lev],
                                solverChoice.rdOcp, lmask_lev[lev][0], use_moist);
+
+                // Give the finer levels this slice too, coarsest first, and point the surface
+                // layer at it: a level with a wrflow file of its own (erf.nc_low_file_<lev>)
+                // reads it from that file, and any other level -- made by refinement, or from
+                // an init file of its own -- takes it from its parent.
+                auto& SurfLayer = m_SurfaceLayer[Orientation(Direction::z, Orientation::low)];
+                for (int flev = 1; flev <= finest_level; ++flev) {
+                    if (has_own_low_file(flev)) {
+                        read_own_low_slice(flev, itime, SurfLayer);
+                        continue;
+                    }
+                    Interp2DTimeSlice(flev, itime, sst_lev, ba2d[flev], dmap[flev]);
+                    Interp2DTimeSlice(flev, itime, tsk_lev, ba2d[flev], dmap[flev]);
+                    if (SurfLayer) {
+                        if (itime < static_cast<int>(sst_lev[flev].size()) && sst_lev[flev][itime]) {
+                            SurfLayer->update_sst_ptr(flev, itime, sst_lev[flev][itime].get());
+                        }
+                        if (itime < static_cast<int>(tsk_lev[flev].size()) && tsk_lev[flev][itime]) {
+                            SurfLayer->update_tsk_ptr(flev, itime, tsk_lev[flev][itime].get());
+                        }
+                    }
+                }
             }
         } // itime
     } // have nc_low_file && lev == 0
@@ -154,8 +176,7 @@ ERF::timeStep (int lev, double time, int /*iteration*/)
         FillPatchCrseLevel(lev, time, {&S_new, &U_new, &V_new, &W_new});
     } else if (lev < finest_level) {
         FillPatchFineLevel(lev, time, {&S_new, &U_new, &V_new, &W_new},
-                           {&S_new, &rU_new[lev], &rV_new[lev], &rW_new[lev]},
-                           base_state[lev], base_state[lev]);
+                           {&S_new, &rU_new[lev], &rV_new[lev], &rW_new[lev]});
     }
 
     if (regrid_int > 0)  // We may need to regrid
@@ -232,6 +253,11 @@ ERF::timeStep (int lev, double time, int /*iteration*/)
                     // while clev = k-1 still holds the just-moved fines.
                     for (int k = old_finest; k >= 1; k--) {
                         pc->MergeParticlesAtDerefinement(k, old_pc_ba[k], refRatio(k-1));
+                    }
+                    if (solverChoice.diffChoice.n_qstate_nonmoist > 0) {
+                        for (int k = lev; k <= finest_level; ++k) {
+                            micro->Update_Diagnostic_State_Lev(k, vars_new[k][Vars::cons], *z_phys_nd[k]);
+                        }
                     }
                 }
 #endif

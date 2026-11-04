@@ -18,6 +18,19 @@
        that stop at stop_datetime; finer levels over the bodies abort; input checks
        (finite values, ranges, unused keys); start-up abort and restart-abort tests
 
+#26.11
+    -- Implicit diffusion for all moist scalars (#4936)
+
+    -- Anelastic interpolate omega/ (m_x * m_y) bug fix (#4922)
+
+    -- Include map factors in CFL estimate (#4880)
+
+    -- Variable beta implicit vertical solve (#4377)
+
+    -- Terrain diffusion rotation bug fix (#4231)
+
+    -- SLM model added (#4095)
+
 #26.09
     -- Surface Layer restart w/ input_sounding fix (#3956)
 

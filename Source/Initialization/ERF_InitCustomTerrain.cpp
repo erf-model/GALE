@@ -200,6 +200,7 @@ init_my_custom_terrain ( const Geometry& geom,
 
             Real Ampl        = zero;  pp_prob.queryAdd("Ampl", Ampl);
             Real wavelength  = Real(100.); pp_prob.queryAdd("wavelength", wavelength);
+            AMREX_ALWAYS_ASSERT_WITH_MESSAGE(wavelength > zero, "prob.wavelength must be > 0");
 
             Real kp          = two * PI / wavelength;
             Real g           = CONST_GRAV;
@@ -212,14 +213,15 @@ init_my_custom_terrain ( const Geometry& geom,
                 // Clip indices for ghost-cells
                 int ii = amrex::min(amrex::max(i,domlo_x),domhi_x);
 
-                // Location of nodes
-                Real x = ii  * dx[0];
+                // Location of nodes, measured from geometry.prob_lo as in the
+                // MovingTerrain initial velocities
+                Real x = ProbLoArr[0] + ii * dx[0];
 
                 // Wave height
                 Real height = Ampl * std::sin(kp * x - omega * time);
 
-                // Populate terrain height
-                z_arr(i,j,0) = height;
+                // Populate terrain height at the terrain plane, as every other option does
+                z_arr(i,j,k0) = height;
             });
 
         } else if (custom_terrain_type == "WindFarmTest") {
@@ -274,9 +276,11 @@ init_my_custom_terrain ( const Geometry& geom,
             });
 
         } else if (custom_terrain_type == "None") {
+            // A flat surface at the bottom of the domain
+            Real z_bot = ProbLoArr[2];
             ParallelFor(zbx, [=] AMREX_GPU_DEVICE (int i, int j, int)
             {
-                z_arr(i,j,k0) = zero;
+                z_arr(i,j,k0) = z_bot;
             });
         } else {
             Abort("Don't know this custom_terrain_type");
