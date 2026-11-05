@@ -2,6 +2,7 @@
 
 #include "ERF_ActuatorSampling.H"
 
+#include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <array>
@@ -555,18 +556,12 @@ Real cell_height (Array4<Real const> const& znd, int i, int j, int k, const Cell
     return (qs > Real(0.0)) ? (z1 - z0) / qs : big;
 }
 
-// Region b (nine values) as the reductions take it: false for one that keeps the nominal dz (empty,
-// with a non-finite value or a non-positive radius); else its heights and, per direction across, the
-// node index ranges of the cells it touches: one range, or two in a periodic direction whose range
-// crosses the seam
-bool
-region_ranges (const Real* b, const Geometry& geom, CellHeightRegion& g, std::array<std::vector<std::array<int,2>>,2>& ranges)
+// Per direction across, the node index ranges of the cells a region touches, from its low (b[0], b[1])
+// and high (b[3], b[4]) ends in metres: one range, or two in a periodic direction whose range crosses
+// the seam (the part beyond it wrapped to the other side)
+void
+horizontal_node_ranges (const Real* b, const Geometry& geom, std::array<std::vector<std::array<int,2>>,2>& ranges)
 {
-    // an empty region (low end above high end), one with a non-finite value (a diverged hub) or
-    // a non-positive radius keeps the nominal dz
-    bool finite = true;
-    for (int d = 0; d < 9; ++d) { finite = finite && std::isfinite(b[d]); }
-    if (!finite || b[0] > b[3] || b[1] > b[4] || b[2] > b[5] || !(b[7] > Real(0.0))) { return false; }
     const auto plo = geom.ProbLoArray();
     const auto dxi = geom.InvCellSizeArray();
     const Box& domain = geom.Domain();
@@ -599,6 +594,20 @@ region_ranges (const Real* b, const Geometry& geom, CellHeightRegion& g, std::ar
             if (a <= e) { ranges[d].push_back({{a, e}}); }
         }
     }
+}
+
+// Region b (nine values) as the reductions take it: false for one that keeps the nominal dz (empty,
+// with a non-finite value or a non-positive radius); else its heights and, per direction across, the
+// node index ranges of the cells it touches (horizontal_node_ranges)
+bool
+region_ranges (const Real* b, const Geometry& geom, CellHeightRegion& g, std::array<std::vector<std::array<int,2>>,2>& ranges)
+{
+    // an empty region (low end above high end), one with a non-finite value (a diverged hub) or
+    // a non-positive radius keeps the nominal dz
+    bool finite = true;
+    for (int d = 0; d < 9; ++d) { finite = finite && std::isfinite(b[d]); }
+    if (!finite || b[0] > b[3] || b[1] > b[4] || b[2] > b[5] || !(b[7] > Real(0.0))) { return false; }
+    horizontal_node_ranges(b, geom, ranges);
     g = {b[2], b[5], b[6], b[7], b[8]};
     return true;
 }
@@ -777,6 +786,114 @@ tip_cell_heights (const MultiFab* z_phys_nd, const Geometry& geom, const std::ve
     cell_heights(z_phys_nd, geom, rows, true, dz);
 }
 
+namespace {
+
+// one piece of the work of column_cell_ranges: point p over the node columns i0..i1 x j0..j1 of box b
+struct ColumnWork
+{
+    int p, b, i0, i1, j0, j1;
+};
+
+} // namespace
+
+void
+column_cell_ranges (const MultiFab& z_phys_nd, const Geometry& geom, const std::vector<Real>& pos,
+                    const std::vector<Real>& reach, ColumnCells& cells)
+{
+    BL_PROFILE("erf_actuator::column_cell_ranges()");
+    AMREX_ALWAYS_ASSERT_WITH_MESSAGE(pos.size() == 3 * reach.size(), "column_cell_ranges: one reach per point");
+    AMREX_ALWAYS_ASSERT_WITH_MESSAGE(!geom.isPeriodic(2), "column_cell_ranges: z must not be periodic");
+    const int npts = static_cast<int>(reach.size());
+    const Box& domain = geom.Domain();
+    const int dlo = domain.smallEnd(2), dhi = domain.bigEnd(2);
+    // nothing touched: an empty range (kb > kt), the domain's cells being dlo .. dhi
+    cells.kb.assign(npts, dhi + 1);
+    cells.kt.assign(npts, dlo - 1);
+    if (npts == 0) { return; }
+    // the pieces: for every point, the node columns its reach across touches in each of this rank's boxes
+    std::vector<ColumnWork> work;
+    std::vector<Box> boxes;
+    std::vector<int> grid;   // the box's index in z_phys_nd
+    for (MFIter mfi(z_phys_nd, false); mfi.isValid(); ++mfi) { boxes.push_back(mfi.validbox()); grid.push_back(mfi.index()); }
+    std::array<std::vector<std::array<int,2>>,2> ranges;
+    for (int p = 0; p < npts; ++p) {
+        AMREX_ALWAYS_ASSERT_WITH_MESSAGE(std::isfinite(pos[3*p]) && std::isfinite(pos[3*p+1]) && std::isfinite(pos[3*p+2]) &&
+                                         std::isfinite(reach[p]) && reach[p] >= Real(0.0),
+                                         "column_cell_ranges: the points and their reach must be finite, the reach not negative");
+        const Real b[6] = {pos[3*p] - reach[p], pos[3*p+1] - reach[p], Real(0.0), pos[3*p] + reach[p], pos[3*p+1] + reach[p], Real(0.0)};
+        horizontal_node_ranges(b, geom, ranges);
+        for (int ib = 0; ib < static_cast<int>(boxes.size()); ++ib) {
+            const Box& nbx = boxes[ib];
+            for (const auto& ri : ranges[0]) {
+                for (const auto& rj : ranges[1]) {
+                    const int i0 = std::max(ri[0], nbx.smallEnd(0)), i1 = std::min(ri[1], nbx.bigEnd(0));
+                    const int j0 = std::max(rj[0], nbx.smallEnd(1)), j1 = std::min(rj[1], nbx.bigEnd(1));
+                    if (i0 <= i1 && j0 <= j1) { work.push_back({p, ib, i0, i1, j0, j1}); }
+                }
+            }
+        }
+    }
+    if (!work.empty()) {
+        // the pieces sorted by box (one launch per box), with each box's first piece
+        std::stable_sort(work.begin(), work.end(), [] (const ColumnWork& a, const ColumnWork& c) { return a.b < c.b; });
+        std::vector<int> first_of(boxes.size() + 1, static_cast<int>(work.size()));
+        for (int w = static_cast<int>(work.size()) - 1; w >= 0; --w) { first_of[work[w].b] = w; }
+        for (int ib = static_cast<int>(boxes.size()) - 1; ib >= 0; --ib) { first_of[ib] = std::min(first_of[ib], first_of[ib+1]); }
+        // every device vector lives until the synchronisation after the last launch
+        Gpu::DeviceVector<ColumnWork> d_work(work.size());
+        Gpu::DeviceVector<Real> d_pos(pos.size()), d_reach(reach.size());
+        Gpu::DeviceVector<int> d_kb(npts, dhi + 1), d_kt(npts, dlo - 1);
+        Gpu::copy(Gpu::hostToDevice, work.begin(), work.end(), d_work.begin());
+        Gpu::copy(Gpu::hostToDevice, pos.begin(), pos.end(), d_pos.begin());
+        Gpu::copy(Gpu::hostToDevice, reach.begin(), reach.end(), d_reach.begin());
+        const ColumnWork* p_work = d_work.data();
+        const Real* p_pos = d_pos.data();
+        const Real* p_reach = d_reach.data();
+        int* p_kb = d_kb.data();
+        int* p_kt = d_kt.data();
+        // the pieces of one box in one launch: each over its node columns, every cell of the column
+        for (int ib = 0; ib < static_cast<int>(boxes.size()); ++ib) {
+            const int w0 = first_of[ib], nw = first_of[ib+1] - first_of[ib];
+            if (nw == 0) { continue; }
+            const Box nbx = boxes[ib];
+            const int kbot = nbx.smallEnd(2), ktop = nbx.bigEnd(2);
+            Array4<Real const> const& znd = z_phys_nd.const_array(grid[ib]);
+            ParallelFor(nw, [=] AMREX_GPU_DEVICE (int m) noexcept
+            {
+                const ColumnWork w = p_work[w0 + m];
+                const Real zl0 = p_pos[3*w.p+2] - p_reach[w.p], zh0 = p_pos[3*w.p+2] + p_reach[w.p];
+                // the slack of ZBounds::k_range: the heights are rounded sums
+                const Real slack = Real(1.0e-5) * amrex::max(amrex::Math::abs(zl0), amrex::max(amrex::Math::abs(zh0), zh0 - zl0));
+                const Real zl = zl0 - slack, zh = zh0 + slack;
+                int kb = p_kb[w.p], kt = p_kt[w.p];
+                for (int j = w.j0; j <= w.j1; ++j) {
+                    for (int i = w.i0; i <= w.i1; ++i) {
+                        // the cells of this column whose spacing the heights overlap
+                        for (int k = kbot; k < ktop; ++k) {
+                            if (znd(i,j,k) <= zh && znd(i,j,k+1) >= zl) { kb = amrex::min(kb, k); kt = amrex::max(kt, k); }
+                        }
+                        // below the box's bottom face (not the floor): the cell under it; above its top (not the domain's): the cell over it
+                        if (kbot > dlo && znd(i,j,kbot) > zl) { kb = amrex::min(kb, kbot - 1); }
+                        if (ktop < dhi + 1 && znd(i,j,ktop) < zh) { kt = amrex::max(kt, ktop); }
+                    }
+                }
+                Gpu::Atomic::Min(p_kb + w.p, kb);
+                Gpu::Atomic::Max(p_kt + w.p, kt);
+            });
+        }
+        Gpu::streamSynchronize();
+        Gpu::copy(Gpu::deviceToHost, d_kb.begin(), d_kb.end(), cells.kb.begin());
+        Gpu::copy(Gpu::deviceToHost, d_kt.begin(), d_kt.end(), cells.kt.begin());
+    }
+    ParallelDescriptor::ReduceIntMin(cells.kb.data(), npts);
+    ParallelDescriptor::ReduceIntMax(cells.kt.data(), npts);
+    // nothing overlapped (a reach wholly above the level's top or below its bottom, or beside it across): one
+    // empty range, whatever the boxes (a box's bottom or top face the heights lie beyond leaves its own cell)
+    for (int p = 0; p < npts; ++p) {
+        if (cells.kb[p] > cells.kt[p]) { cells.kb[p] = dhi + 1; cells.kt[p] = dlo - 1; }
+    }
+}
+
 CoverageGrids::CoverageGrids (const BoxArray& ba, const Geometry& geom)
     : cells(amrex::convert(ba, IntVect::TheZeroVector()))
 {
@@ -794,20 +911,22 @@ CoverageGrids::CoverageGrids (const BoxArray& ba, const Geometry& geom)
 
 bool
 points_covered_by (const BoxArray& ba, const Geometry& geom, const std::vector<Real>& pos, Real reach, std::string& first_outside,
-                   CoverZ z, const ZBounds* zb)
+                   CoverZ z, const ZBounds* zb, const ColumnCells* cells)
 {
     const CoverageGrids grids(ba, geom);
-    return points_covered_by(grids, geom, pos, reach, first_outside, z, zb);
+    return points_covered_by(grids, geom, pos, reach, first_outside, z, zb, cells);
 }
 
 bool
 points_covered_by (const CoverageGrids& grids, const Geometry& geom, const std::vector<Real>& pos, Real reach,
-                   std::string& first_outside, CoverZ z, const ZBounds* zb)
+                   std::string& first_outside, CoverZ z, const ZBounds* zb, const ColumnCells* cells)
 {
     BL_PROFILE("erf_actuator::points_covered_by()");
     AMREX_ALWAYS_ASSERT_WITH_MESSAGE(!geom.isPeriodic(2), "points_covered_by: z must not be periodic");
     AMREX_ALWAYS_ASSERT_WITH_MESSAGE(zb == nullptr || !zb->has_ground() || zb->dz_hi >= zb->dz_lo,
                                      "points_covered_by: the levels' spacing must be positive");
+    AMREX_ALWAYS_ASSERT_WITH_MESSAGE(cells == nullptr || (cells->kb.size() == pos.size() / 3 && cells->kt.size() == pos.size() / 3),
+                                     "points_covered_by: one cell range per point");
     first_outside.clear();
     const BoxArray& cc = grids.cells;
     const BoxArray& footprints = grids.footprints;
@@ -818,6 +937,7 @@ points_covered_by (const CoverageGrids& grids, const Geometry& geom, const std::
         // per direction, the index ranges of the cells needed: one range, or two in a periodic
         // direction whose range crosses the seam (the part beyond it wrapped to the other side)
         std::array<std::vector<std::array<int,2>>,3> ranges;
+        bool none = false;   // the point needs cells the level has nowhere
         for (int d = 0; d < 3; ++d) {
             int lo = static_cast<int>(std::floor((pos[3*p+d] - reach - plo[d]) * dxi[d]));
             int hi = static_cast<int>(std::floor((pos[3*p+d] + reach - plo[d]) * dxi[d]));
@@ -838,7 +958,11 @@ points_covered_by (const CoverageGrids& grids, const Geometry& geom, const std::
             } else if (d == 2 && z == CoverZ::Footprint) {
                 ranges[d].push_back({{dlo, dlo}});
             } else if (d == 2 && z == CoverZ::Column) {
-                if (zb == nullptr) {
+                if (cells != nullptr) {
+                    // the cells of the point's own columns (column_cell_ranges); none: not covered
+                    if (cells->kb[p] > cells->kt[p]) { none = true; }
+                    ranges[d].push_back({{std::max(cells->kb[p], dlo), std::min(cells->kt[p], dhi)}});
+                } else if (zb == nullptr) {
                     ranges[d].push_back({{dlo, dhi}});
                 } else {
                     // every cell a height within reach may lie in, whatever column it is in (the global
@@ -852,8 +976,9 @@ points_covered_by (const CoverageGrids& grids, const Geometry& geom, const std::
                 ranges[d].push_back({{std::max(lo, dlo), std::min(hi, dhi)}});
             }
         }
-        bool covered = true;
+        bool covered = !none;
         for (const auto& rx : ranges[0]) {
+            if (!covered) { break; }
             for (const auto& ry : ranges[1]) {
                 for (const auto& rz : ranges[2]) {
                     const Box needed(IntVect(rx[0], ry[0], rz[0]), IntVect(rx[1], ry[1], rz[1]));

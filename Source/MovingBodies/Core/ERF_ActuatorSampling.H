@@ -122,7 +122,9 @@ void terrain_heights (const amrex::MultiFab* z_phys_nd, const amrex::Geometry& g
  * for a flat, uniform mesh), Footprint (the reach across only, at any height: the sampler then finds
  * a point above or below the grids by itself), or Column (for the spreading, whose kernel would
  * otherwise be cut where the grids stop: the reach across over every cell the heights within reach
- * may lie in, from the mesh's bounds `zb` (mesh_z_bounds), or over the whole height without them).
+ * may lie in, over the point's own columns from `cells` (column_cell_ranges, one range per point),
+ * else whatever the column from the mesh's bounds `zb` (mesh_z_bounds), or over the whole height
+ * without either). With `cells` a point whose range is empty (kb > kt) is not covered.
  * Not with a periodic z.
  */
 enum class CoverZ { Reach, Footprint, Column };
@@ -240,9 +242,54 @@ void tip_cell_heights (const amrex::MultiFab* z_phys_nd, const amrex::Geometry& 
 void tip_cell_heights_batched (const amrex::MultiFab* z_phys_nd, const amrex::Geometry& geom,
                                const std::vector<amrex::Real>& rows, std::vector<amrex::Real>& dz);
 
+/**
+ * The cells of a terrain-following or stretched level that the heights within reach of each of a set of
+ * points may lie in, over the point's own columns (column_cell_ranges): point p needs the cells kb[p] to
+ * kt[p]; kb > kt when its reach touches no node of the level.
+ */
+struct ColumnCells {
+    std::vector<int> kb, kt;
+    /** The ranges of n points from point `begin` (as a copy). */
+    ColumnCells slice (std::size_t begin, std::size_t n) const
+    {
+        AMREX_ALWAYS_ASSERT_WITH_MESSAGE(begin + n <= kb.size() && kb.size() == kt.size(), "ColumnCells::slice: past the ranges");
+        ColumnCells c;
+        c.kb.assign(kb.begin() + static_cast<std::ptrdiff_t>(begin), kb.begin() + static_cast<std::ptrdiff_t>(begin + n));
+        c.kt.assign(kt.begin() + static_cast<std::ptrdiff_t>(begin), kt.begin() + static_cast<std::ptrdiff_t>(begin + n));
+        return c;
+    }
+};
+
+/**
+ * The cells a point's heights within reach may lie in, over the point's own columns: for point p
+ * (pos[3p .. 3p+2], reach[p] across and in height, in metres), the lowest and highest cell k such that,
+ * in some node column the reach across touches (a periodic x or y wrapping across the seam, as
+ * points_covered_by takes it), the cell's spacing [z(k), z(k+1)] overlaps [z - reach, z + reach] (to a
+ * relative 1e-5, as ZBounds::k_range), from every rank's boxes of z_phys_nd. Where those heights go below
+ * a box's lowest node in a column (the box's bottom face, unless it is the domain's floor), the cell under
+ * that box counts too, and where they go above a box's highest node (unless it is the domain's top), the
+ * cell above it: in a column split in z between boxes those cells are held by the next box, and where the
+ * level stops they are not, so a kernel the level cuts fails points_covered_by, whatever the boxes. The
+ * range is the hull [min k, max k] over the columns: points_covered_by never accepts a kernel some cell
+ * of which the level lacks, and accepts every kernel whose cells the level holds when, over the columns
+ * within reach, those cells form one run and no column has the heights below its ground under a box
+ * that starts above the floor. Elsewhere it is conservative: it also asks for the cells of a gap between
+ * two runs, or the cell under such a box (a cliff next to the point on a level aloft). The coverage
+ * answer is the same whatever the boxes; the hull itself may differ by cells the level holds in the same
+ * run. A reach partly below the floor or above the domain top needs nothing there, as with the mesh's
+ * bounds; one wholly beyond them touches no node and is not covered. kb > kt for a point whose reach
+ * touches no node of the level. A collective, the same on every rank: every rank passes the same points.
+ *
+ * @param[in] pos 3*n positions (m)
+ * @param[in] reach n reaches (m)
+ * @param[out] cells the ranges of the n points
+ */
+void column_cell_ranges (const amrex::MultiFab& z_phys_nd, const amrex::Geometry& geom,
+                         const std::vector<amrex::Real>& pos, const std::vector<amrex::Real>& reach, ColumnCells& cells);
+
 bool points_covered_by (const amrex::BoxArray& ba, const amrex::Geometry& geom,
                         const std::vector<amrex::Real>& pos, amrex::Real reach, std::string& first_outside,
-                        CoverZ z = CoverZ::Reach, const ZBounds* zb = nullptr);
+                        CoverZ z = CoverZ::Reach, const ZBounds* zb = nullptr, const ColumnCells* cells = nullptr);
 
 /**
  * A level's boxes as points_covered_by tests them, built once for every test of a check: the boxes
@@ -258,7 +305,7 @@ struct CoverageGrids
 /** points_covered_by on boxes built once (CoverageGrids of the same level and geometry). */
 bool points_covered_by (const CoverageGrids& grids, const amrex::Geometry& geom,
                         const std::vector<amrex::Real>& pos, amrex::Real reach, std::string& first_outside,
-                        CoverZ z = CoverZ::Reach, const ZBounds* zb = nullptr);
+                        CoverZ z = CoverZ::Reach, const ZBounds* zb = nullptr, const ColumnCells* cells = nullptr);
 
 } // namespace erf_actuator
 

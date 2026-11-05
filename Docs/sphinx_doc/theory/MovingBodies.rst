@@ -627,7 +627,22 @@ its grids: at the first step and whenever the level's grids change, every node
 with the kernel's reach, every disk point, and every wake sampling point is
 checked against the anchor level's box union (periodic directions wrap), and a
 point outside aborts naming it, since the sampler and spreader read only the
-level's own cells. Enlarge the refinement region or choose a
+level's own cells. On a terrain-fitted or stretched mesh a point's cell is not
+its height over the nominal spacing: the cells a kernel's heights may lie in
+are found in the point's own columns, from the node heights of every column
+the kernel reaches across (gathered from every rank in one collective, so the
+answer does not depend on the ranks or the boxes). The kernel then needs the
+cells of those columns whose heights it spans, and, where it crosses the
+bottom or the top of the level's boxes there, the cell beyond it too, which
+the level holds only where it goes on; a kernel the level cuts is refused. The
+cells are taken as one range per point, from the lowest to the highest over
+its columns, so a level with a gap in height between two of its boxes, or one
+aloft beside a cliff, may be asked for a few cells more than the kernel
+spreads into; it is never asked for fewer. A
+canyon floor elsewhere on the level, far below a rotor on a plateau, does not
+raise the cells the rotor needs, as a bound from the level's lowest ground and
+thinnest cell would. A sampled point is checked over its whole column, since
+the sampler finds its cell by itself. Enlarge the refinement region or choose a
 coarser anchor. The refinement region must also let the FFT solver run on
 the level, that is be a rectangular union of boxes, as for any anelastic run.
 

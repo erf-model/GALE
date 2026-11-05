@@ -152,7 +152,10 @@ line with FLLC, 10 m cells, kernel 2 cells               1.045               1.1
 - **Grids.** The rotor should span at least 8 cells (the audit notes fewer).
   On a run with refinement the bodies live on the anchor level
   (``amr.max_level`` by default), whose grids must cover every node with the
-  kernel's reach, and no finer level may cover them.
+  kernel's reach, and no finer level may cover them. On a terrain-fitted mesh
+  the cells the kernel's heights may lie in are those of the node's own
+  columns, so the level's top need only clear each rotor's kernel where the
+  rotor stands, whatever the terrain elsewhere on the level.
 - **Boundary conditions.** Inflow at ``xlo`` and outflow at ``xhi`` with a
   sounding or a precursor profile; a periodic box lets the wake feed the
   inflow. No sponge layer around a single turbine. CFL at or below 0.5.
