@@ -2523,12 +2523,16 @@ if(ERF_ENABLE_MOVING_BODIES AND ERF_ENABLE_FFT AND ERF_ENABLE_MPI AND NOT WIN32)
       "${_cov_level} \"erf.rotor.in_box_lo=400. 300. 0.\" erf.moving_bodies.wake.lines_xD=2 erf.moving_bodies.wake.num_points=21"
       "D1: owned by rank 1 .*erf[.]moving_bodies[.]wake: the sampling point [(]1230[.]0+, 240[.]0+, 150[.]0+[)] m of D1 is not covered by the grids of level 1"
       nonzero)
-  # the same for a turbine (OpenFAST_ADM_TwoLevel, T1 owned by rank 1 with 16-cell boxes), whose points only its owner knows
-  add_test_moving_bodies_owners(MovingBodies_TurbineCoverageOnOwner OpenFAST_ADM_TwoLevel 2
-      "amr.max_grid_size=16 \"erf.rotor.in_box_lo=500. 400. 0.\""
-      "T1: owned by rank 1 .*erf[.]moving_bodies[.]T1: node [(]750[.]0+, 574[.]5[0-9]*, 194[.]1[0-9]*[)] m [(]with the kernel reach 175[.]0+ m[)] is not covered by the grids of level 1"
-      nonzero)
-  set_tests_properties(MovingBodies_DiskCoverageOnOwner MovingBodies_WakeCoverageOnOwner MovingBodies_TurbineCoverageOnOwner PROPERTIES TIMEOUT 180)
+  set_tests_properties(MovingBodies_DiskCoverageOnOwner MovingBodies_WakeCoverageOnOwner PROPERTIES TIMEOUT 180)
+  # the same for a turbine (OpenFAST_ADM_TwoLevel, T1 owned by rank 1 with 16-cell boxes), whose points only its
+  # owner knows; the deck's stub_turbine.fst is read by the stub library only
+  if(ERF_ENABLE_OPENFAST AND ERF_OPENFAST_USE_STUB)
+    add_test_moving_bodies_owners(MovingBodies_TurbineCoverageOnOwner OpenFAST_ADM_TwoLevel 2
+        "amr.max_grid_size=16 \"erf.rotor.in_box_lo=500. 400. 0.\""
+        "T1: owned by rank 1 .*erf[.]moving_bodies[.]T1: node [(]750[.]0+, 574[.]5[0-9]*, 194[.]1[0-9]*[)] m [(]with the kernel reach 175[.]0+ m[)] is not covered by the grids of level 1"
+        nonzero)
+    set_tests_properties(MovingBodies_TurbineCoverageOnOwner PROPERTIES TIMEOUT 180)
+  endif()
   # The terrain under every rotor's wake lines is found in one collective at start-up: each line must still
   # start on the ground under its own centre. On the ridge of OpenFAST_ADM_Terrain two Ct disks stand 1 D
   # apart (D1 at x = 1060 m, owned by rank 0; D2 at 1300 m, on rank 1), so D1's line 1 D behind it is centred

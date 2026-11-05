@@ -1933,33 +1933,27 @@ MovingBodies::check_coverage (const BoxArray& level_grids, const MultiFab* z_phy
     // the cells under the rotors may have changed with the grids: the tip cell heights are searched again
     m_tip_cells_valid = false;
 #endif
-    // on a fitted or stretched mesh a point's cell is not its height over dz: the kernel must be on the
-    // grids over every height its reach may span (mesh_z_bounds), a sampled point anywhere in its column
-    erf_actuator::ZBounds zb;
-    if (z_phys_nd != nullptr) { zb = erf_actuator::mesh_z_bounds(*z_phys_nd, geom); }
     const bool fitted = (z_phys_nd != nullptr);
-    // a level with a box that does not reach the ground has no global height bounds: the whole column
-    // (the spreading bounds each rank's own boxes by their table instead)
-    const erf_actuator::ZBounds* zbp = (fitted && zb.all_ground) ? &zb : nullptr;
     const Real dx0 = static_cast<Real>(geom.CellSize(0));
     // the level's boxes as the coverage tests take them, built once for every body
     const erf_actuator::CoverageGrids cover(level_grids, geom);
-    // every body is checked by its owner (a turbine's points are known to it alone; every rank knows a disk's
-    // and a wake line's), each rank stopping at its first failure; one reduction tells every rank
-    std::string failed;
-    int key = 0;   // the failing body: turbine i, disk num_turbines() + k, the lines behind body b after all the bodies
+    const int nturb = num_turbines();
+    const int nbody = m_exchange.num_bodies();
+    // the points every kernel is spread from, with its reach, by body on its owner: a turbine's force nodes
+    // by kernel and its swept disk, a disk's points; the sampled points are tested apart (their footprint)
+    std::vector<std::vector<Real>> spread(nbody), spread_reach(nbody);
+    auto add_spread = [&spread, &spread_reach] (int b, const std::vector<Real>& pts, Real reach) {
+        spread[b].insert(spread[b].end(), pts.begin(), pts.end());
+        spread_reach[b].insert(spread_reach[b].end(), pts.size() / 3, reach);
+    };
 #ifdef ERF_USE_OPENFAST
-    // every node of every turbine, with the kernel's reach, must lie on the anchor level's grids, and the
-    // whole swept disk with it (the rings of a disk, the blades of a line as they turn and the rotor as
-    // it yaws, while the grids stay as they are): on a refined level those are not the whole domain, and
-    // the sampler and spreader read only the level's own cells
     const auto& turbs = m_driver->turbines();
-    for (int i = 0; i < static_cast<int>(turbs.size()) && failed.empty(); ++i) {
+    std::vector<std::vector<PointGroup>> groups(nturb);   // on the owner
+    std::vector<std::vector<Real>> swept(nturb);
+    for (int i = 0; i < nturb; ++i) {
         if (!m_driver->is_owner(i)) { continue; }
         const auto& t = turbs[i];
-        const Real reach = Real(3.0) * m_turbine_in[i].kernel_widths(dx0).rotor + dx0;
         // the swept disk: rings at half and the full tip radius in the plane normal to the shaft
-        std::vector<Real> disk;
         {
             const auto& a = t.hub_axis;
             // a unit vector normal to the axis, then the third by the cross product
@@ -1974,30 +1968,93 @@ MovingBodies::check_coverage (const BoxArray& level_grids, const MultiFab* z_phy
                 for (int k = 0; k < n; ++k) {
                     const Real th = Real(2.0 * 3.14159265358979323846) * Real(k) / Real(n);
                     for (int d = 0; d < 3; ++d) {
-                        disk.push_back(t.hub_pos[d] + f * R * (std::cos(th) * e1[d] + std::sin(th) * e2[d]));
+                        swept[i].push_back(t.hub_pos[d] + f * R * (std::cos(th) * e1[d] + std::sin(th) * e2[d]));
                     }
                 }
             }
         }
+        groups[i] = turbine_point_groups(i, dx0);
+        for (const auto& g : groups[i]) { add_spread(i, g.pos, Real(3.0) * g.eps + dx0); }
+        add_spread(i, swept[i], Real(3.0) * m_turbine_in[i].kernel_widths(dx0).rotor + dx0);
+    }
+#endif
+    for (std::size_t k = 0; k < m_disks.size(); ++k) {
+        const int b = nturb + static_cast<int>(k);
+        if (!m_exchange.owns(b)) { continue; }
+        add_spread(b, m_disks[k]->disk_points(), Real(3.0) * (m_disk_epsilon[k] * dx0) + dx0);
+    }
+    // on a fitted or stretched mesh a point's cell is not its height over dz: the cells the heights within
+    // its reach may lie in are found over the point's own columns (column_cell_ranges), in one collective
+    // for every body's points, which every rank must therefore know: the counts, then the points, each
+    // from its owner. The kernel must be on the grids in all of those cells; a sampled point anywhere in
+    // its column
+    erf_actuator::ColumnCells cols;
+    std::vector<std::size_t> first(static_cast<std::size_t>(nbody) + 1, 0);
+    if (fitted) {
+        auto owns = [this] (int b) { return m_exchange.owns(b); };
+        const std::vector<Real> counts = gather_rows(nbody, 1, false, owns, [&spread_reach] (int b, Real* row) {
+            row[0] = static_cast<Real>(spread_reach[b].size());
+        });
+        std::vector<int> body_of;
+        for (int b = 0; b < nbody; ++b) {
+            const auto n = static_cast<std::size_t>(counts[b] + Real(0.5));
+            first[b+1] = first[b] + n;
+            body_of.insert(body_of.end(), n, b);
+        }
+        const int total = static_cast<int>(first[nbody]);
+        const std::vector<Real> rows = gather_rows(total, 4, false, [&owns, &body_of] (int q) { return owns(body_of[q]); },
+                                                   [&] (int q, Real* row) {
+            const int b = body_of[q];
+            const std::size_t i = static_cast<std::size_t>(q) - first[b];
+            for (int d = 0; d < 3; ++d) { row[d] = spread[b][3*i+d]; }
+            row[3] = spread_reach[b][i];
+        });
+        std::vector<Real> pos(3 * static_cast<std::size_t>(total)), reach(total);
+        for (int q = 0; q < total; ++q) {
+            for (int d = 0; d < 3; ++d) { pos[3*q+d] = rows[4*q+d]; }
+            reach[q] = rows[4*q+3];
+        }
+        erf_actuator::column_cell_ranges(*z_phys_nd, geom, pos, reach, cols);
+    }
+    // the ranges of n points of body b from its point `at` (which the caller advances); none on a flat mesh
+    auto cells_of = [&cols, fitted] (std::size_t at, std::size_t n) {
+        return fitted ? cols.slice(at, n) : erf_actuator::ColumnCells{};
+    };
+    const erf_actuator::CoverZ spread_z = fitted ? erf_actuator::CoverZ::Column : erf_actuator::CoverZ::Reach;
+    const erf_actuator::CoverZ sample_z = fitted ? erf_actuator::CoverZ::Footprint : erf_actuator::CoverZ::Reach;
+    // every body is checked by its owner (a turbine's points are known to it alone; every rank knows a disk's
+    // and a wake line's), each rank stopping at its first failure; one reduction tells every rank
+    std::string failed;
+    int key = 0;   // the failing body: turbine i, disk num_turbines() + k, the lines behind body b after all the bodies
+#ifdef ERF_USE_OPENFAST
+    // every node of every turbine, with the kernel's reach, must lie on the anchor level's grids, and the
+    // whole swept disk with it (the rings of a disk, the blades of a line as they turn and the rotor as
+    // it yaws, while the grids stay as they are): on a refined level those are not the whole domain, and
+    // the sampler and spreader read only the level's own cells
+    for (int i = 0; i < nturb && failed.empty(); ++i) {
+        if (!m_driver->is_owner(i)) { continue; }
+        const auto& t = turbs[i];
+        const Real reach = Real(3.0) * m_turbine_in[i].kernel_widths(dx0).rotor + dx0;
         // every force node with the reach of the kernel it is spread with, then the swept disk with the rotor's
         std::string outside;
         Real missed = reach;
         bool covered = true;
-        for (const auto& g : turbine_point_groups(i, dx0)) {
+        std::size_t at = first[i];
+        for (const auto& g : groups[i]) {
             if (!covered) { break; }
             missed = Real(3.0) * g.eps + dx0;
-            covered = erf_actuator::points_covered_by(cover, geom, g.pos, missed, outside,
-                                                      fitted ? erf_actuator::CoverZ::Column : erf_actuator::CoverZ::Reach, zbp);
+            const erf_actuator::ColumnCells cells = cells_of(at, g.pos.size() / 3);
+            at += g.pos.size() / 3;
+            covered = erf_actuator::points_covered_by(cover, geom, g.pos, missed, outside, spread_z, nullptr, fitted ? &cells : nullptr);
         }
         if (covered) {
             missed = reach;
-            covered = erf_actuator::points_covered_by(cover, geom, disk, reach, outside,
-                                                      fitted ? erf_actuator::CoverZ::Column : erf_actuator::CoverZ::Reach, zbp);
+            const erf_actuator::ColumnCells cells = cells_of(at, swept[i].size() / 3);
+            covered = erf_actuator::points_covered_by(cover, geom, swept[i], reach, outside, spread_z, nullptr, fitted ? &cells : nullptr);
         }
         if (covered) {
             missed = static_cast<Real>(geom.CellSize(0));
-            covered = erf_actuator::points_covered_by(cover, geom, sampling_positions(i), geom.CellSize(0), outside,
-                                                      fitted ? erf_actuator::CoverZ::Footprint : erf_actuator::CoverZ::Reach);
+            covered = erf_actuator::points_covered_by(cover, geom, sampling_positions(i), geom.CellSize(0), outside, sample_z);
         }
         if (!covered) {
             key = i;
@@ -2009,15 +2066,15 @@ MovingBodies::check_coverage (const BoxArray& level_grids, const MultiFab* z_phy
     }
 #endif
     for (std::size_t k = 0; k < m_disks.size() && failed.empty(); ++k) {
-        if (!m_exchange.owns(num_turbines() + static_cast<int>(k))) { continue; }
+        const int b = nturb + static_cast<int>(k);
+        if (!m_exchange.owns(b)) { continue; }
         const auto& d = m_disks[k];
         const Real reach = Real(3.0) * (m_disk_epsilon[k] * dx0) + dx0;
         std::string outside;
-        if (!erf_actuator::points_covered_by(cover, geom, d->disk_points(), reach, outside,
-                                             fitted ? erf_actuator::CoverZ::Column : erf_actuator::CoverZ::Reach, zbp) ||
-            !erf_actuator::points_covered_by(cover, geom, d->sample_points(), geom.CellSize(0), outside,
-                                             fitted ? erf_actuator::CoverZ::Footprint : erf_actuator::CoverZ::Reach)) {
-            key = num_turbines() + static_cast<int>(k);
+        const erf_actuator::ColumnCells cells = cells_of(first[b], d->disk_points().size() / 3);
+        if (!erf_actuator::points_covered_by(cover, geom, d->disk_points(), reach, outside, spread_z, nullptr, fitted ? &cells : nullptr) ||
+            !erf_actuator::points_covered_by(cover, geom, d->sample_points(), geom.CellSize(0), outside, sample_z)) {
+            key = b;
             failed = "erf.moving_bodies." + d->name() + ": point " + outside + " (with the kernel reach) is not covered by the grids of level " +
                      std::to_string(m_anchor) + "; enlarge the refinement region around the disk";
         }
@@ -2027,8 +2084,7 @@ MovingBodies::check_coverage (const BoxArray& level_grids, const MultiFab* z_phy
         if (!m_exchange.owns(b)) { continue; }
         const auto& wl = m_wakes[b];
         std::string outside;
-        if (!erf_actuator::points_covered_by(cover, geom, wl->positions(), geom.CellSize(0), outside,
-                                             fitted ? erf_actuator::CoverZ::Footprint : erf_actuator::CoverZ::Reach)) {
+        if (!erf_actuator::points_covered_by(cover, geom, wl->positions(), geom.CellSize(0), outside, sample_z)) {
             key = m_exchange.num_bodies() + b;
             failed = "erf.moving_bodies.wake: the sampling point " + outside + " of " + wl->name() + " is not covered by the grids of level " +
                      std::to_string(m_anchor) + " after a regrid; enlarge the refinement region behind the rotor";

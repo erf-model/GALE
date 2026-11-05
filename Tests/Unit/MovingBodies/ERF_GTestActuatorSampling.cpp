@@ -11,8 +11,10 @@
 //   and terrain_heights alike).
 // - points_covered_by: the reach counts, and wraps across a periodic seam; on a terrain or stretched mesh
 //   (CoverZ::Footprint) the boxes' footprints must hold the reach across, at any height, and for the
-//   spreading (CoverZ::Column) the grids must hold it in every cell the heights within reach may lie in
-//   (from mesh_z_bounds, exact on a flat uniform mesh), or over the whole height without the bounds.
+//   spreading (CoverZ::Column) the grids must hold it in every cell the heights within reach may lie in,
+//   over the point's own columns (column_cell_ranges: exact on a level whose boxes span the same cells
+//   in every column within reach, never fewer cells elsewhere, the same whatever the boxes), else from
+//   mesh_z_bounds (whatever the column), or over the whole height without either.
 // - wrap_periodic: a point a few ulps below a non-zero prob_lo lands on prob_lo, not on prob_hi.
 // - terrain_heights: the bilinear k = 0 node surface.
 // - min_cell_heights: the shortest physical cell (z_phys_nd node spacing) under a region, over the
@@ -474,6 +476,200 @@ TEST(ActuatorSampling, CoverageWithoutTheZCheckNeedsTheFootprints)
     erf_actuator::ZBounds hilly;
     hilly.ground_lo = 0.0; hilly.ground_hi = 200.0; hilly.dz_lo = 30.0; hilly.dz_hi = 50.0;
     EXPECT_FALSE(erf_actuator::points_covered_by(ba, geom, {750.0, 600.0, 300.0}, 100.0, outside, CoverZ::Column, &hilly));
+}
+
+namespace {
+
+// z_phys_nd on the cells of a level (its nodes), from a node height function z(i, j, k)
+template <class F>
+amrex::MultiFab make_znd (const amrex::BoxArray& level_cells, const F& z)
+{
+    const amrex::DistributionMapping dm(level_cells);
+    amrex::MultiFab znd(amrex::convert(level_cells, amrex::IntVect(1, 1, 1)), dm, 1, 0);
+    for (amrex::MFIter mfi(znd, false); mfi.isValid(); ++mfi) {
+        auto za = znd.array(mfi);
+        amrex::LoopOnCpu(mfi.validbox(), [&](int i, int j, int k) { za(i,j,k) = z(i, j, k); });
+    }
+    return znd;
+}
+
+} // namespace
+
+// column_cell_ranges: the cells a kernel's heights may lie in, over the point's own columns. The layout of
+// the WFIP2 Biglow Canyon III case in brief: a level of 32 of the domain's 64 cells over a plateau 300 m
+// up and a canyon floor 40 m up, on a terrain-following mesh z = h + (H - h) k / nz. A rotor point on the
+// plateau at 700 m with a reach of 60 m needs the cells 22 to 30 of its column, which the level holds; the
+// mesh's bounds (the canyon's ground with the plateau's spacing) put the same heights in cells up to 47 and
+// refuse it. A point above its own column's top (790 m) is refused by both, as is one over the canyon,
+// whose column's top is 660 m; the per-column answer is sharp to the top node's height.
+TEST(ActuatorSampling, ColumnCellsAcceptAColumnBesideADeepCanyonAndRefuseOneAboveItsTop)
+{
+    using erf_actuator::CoverZ;
+    const int nx = 40, ny = 4, nz = 64;
+    const Real Lx = 4000.0, Ly = 400.0, H = 1280.0;
+    const amrex::Box domain(amrex::IntVect(0, 0, 0), amrex::IntVect(nx - 1, ny - 1, nz - 1));
+    const amrex::RealBox rb({0.0, 0.0, 0.0}, {Lx, Ly, H});
+    const amrex::Geometry geom(domain, rb, 0, {0, 0, 0});
+    amrex::BoxArray level(amrex::Box(amrex::IntVect(0, 0, 0), amrex::IntVect(nx - 1, ny - 1, 31)));
+    level.maxSize(amrex::IntVect(8, 8, 1024));   // columns whole, as ERF's levels keep them (amr.no_box_split_dir)
+    auto h = [&](Real x) { return (x <= 1500.0) ? Real(300.0) : (x >= 2500.0) ? Real(40.0) : Real(300.0) - Real(260.0) * (x - Real(1500.0)) / Real(1000.0); };
+    const Real dx = Lx / nx;
+    const amrex::MultiFab znd = make_znd(level, [&](int i, int, int k) { const Real hs = h(Real(i) * dx); return hs + (H - hs) * Real(k) / Real(nz); });
+    // the mesh's bounds over the level: the canyon's ground, the plateau's spacing
+    const erf_actuator::ZBounds old = erf_actuator::mesh_z_bounds(znd, geom);
+    ASSERT_TRUE(old.all_ground);
+    EXPECT_NEAR(old.ground_lo, 40.0, 1.0e-6);
+    EXPECT_NEAR(old.dz_lo, (H - 300.0) / nz, 1.0e-6);
+    const std::vector<Real> pos{500.0, 200.0, 700.0,    // on the plateau, within its column's top of 790 m
+                                500.0, 200.0, 800.0,    // on the plateau, above it
+                                3500.0, 200.0, 700.0};  // over the canyon, whose column tops at 660 m
+    const std::vector<Real> reach(3, 60.0);
+    erf_actuator::ColumnCells cells;
+    erf_actuator::column_cell_ranges(znd, geom, pos, reach, cells);
+    ASSERT_EQ(cells.kb.size(), 3u);
+    // 640 to 760 m in a column of 15.3125 m cells from 300 m: cells 22 to 30
+    EXPECT_EQ(cells.kb[0], 22);
+    EXPECT_EQ(cells.kt[0], 30);
+    // 740 to 860 m: cells 28 to 31, and the cell above the level's top node (790 m), which it crosses
+    EXPECT_EQ(cells.kb[1], 28);
+    EXPECT_EQ(cells.kt[1], 32);
+    // over the canyon (19.375 m cells from 40 m): 640 to 760 m is cells 30 and 31 and above the top
+    EXPECT_EQ(cells.kb[2], 30);
+    EXPECT_EQ(cells.kt[2], 32);
+    std::string outside;
+    for (int p = 0; p < 3; ++p) {
+        const std::vector<Real> one(pos.begin() + 3*p, pos.begin() + 3*p + 3);
+        const erf_actuator::ColumnCells c = cells.slice(p, 1);
+        const bool per_column = erf_actuator::points_covered_by(level, geom, one, 60.0, outside, CoverZ::Column, nullptr, &c);
+        const bool bounds = erf_actuator::points_covered_by(level, geom, one, 60.0, outside, CoverZ::Column, &old);
+        EXPECT_EQ(per_column, p == 0) << "point " << p;
+        EXPECT_FALSE(bounds) << "point " << p;
+    }
+    // sharp: a reach of 89 m from 700 m stays under the top node, 91 m crosses it
+    for (const Real r : {Real(89.0), Real(91.0)}) {
+        erf_actuator::ColumnCells c;
+        erf_actuator::column_cell_ranges(znd, geom, {500.0, 200.0, 700.0}, {r}, c);
+        EXPECT_EQ(erf_actuator::points_covered_by(level, geom, {500.0, 200.0, 700.0}, r, outside, CoverZ::Column, nullptr, &c), r < Real(90.0)) << r;
+    }
+    // the ranges do not depend on how the level is cut into boxes, in z too
+    for (const int ms : {4, 16, 1024}) {
+        amrex::BoxArray cut(level.minimalBox());
+        cut.maxSize(ms);
+        const amrex::MultiFab z2 = make_znd(cut, [&](int i, int, int k) { const Real hs = h(Real(i) * dx); return hs + (H - hs) * Real(k) / Real(nz); });
+        erf_actuator::ColumnCells c;
+        erf_actuator::column_cell_ranges(z2, geom, pos, reach, c);
+        EXPECT_EQ(c.kb, cells.kb) << "max box size " << ms;
+        EXPECT_EQ(c.kt, cells.kt) << "max box size " << ms;
+    }
+}
+
+// column_cell_ranges against the cells themselves: a point is covered when, at every node column its reach
+// across touches (a periodic x wrapping) and at every height within its reach between that column's floor
+// and top, the cell holding the height is on the level in every cell column next to the node column. On a
+// level whose boxes span the same cells in every column (at the ground, aloft, part of the domain across)
+// the per-column check gives exactly that, whatever the boxes; on one whose boxes stop at different
+// heights in neighbouring columns it never covers a point the cells do not.
+TEST(ActuatorSampling, ColumnCellsAreTheCellsThemselvesAndNeverFewer)
+{
+    using erf_actuator::CoverZ;
+    MeshSpec m;
+    m.stretch = 1.12;
+    m.hill = 120.0;
+    const amrex::Box domain(amrex::IntVect(0, 0, 0), amrex::IntVect(m.nx - 1, m.ny - 1, m.nz - 1));
+    const amrex::RealBox rb({0.0, 0.0, 0.0}, {m.Lx, m.Ly, m.H});
+    const amrex::Geometry geom(domain, rb, 0, {1, 0, 0});
+    auto znode = [&](int i, int j, int k) { return m.z_node(((i % m.nx) + m.nx) % m.nx, j, k); };
+    // the levels: the whole domain across to cell 5; aloft from cell 2 to 6; part of the domain across;
+    // boxes to cell 3 everywhere and to cell 6 over x >= 600 m only (the uneven one)
+    struct Level { const char* name; amrex::BoxList boxes; bool uniform; };
+    std::vector<Level> levels;
+    levels.push_back({"to cell 5", amrex::BoxList(amrex::Box(amrex::IntVect(0, 0, 0), amrex::IntVect(m.nx - 1, m.ny - 1, 5))), true});
+    levels.push_back({"aloft", amrex::BoxList(amrex::Box(amrex::IntVect(0, 0, 2), amrex::IntVect(m.nx - 1, m.ny - 1, 6))), true});
+    levels.push_back({"part across", amrex::BoxList(amrex::Box(amrex::IntVect(2, 1, 0), amrex::IntVect(8, m.ny - 2, 6))), true});
+    {
+        amrex::BoxList bl;
+        bl.push_back(amrex::Box(amrex::IntVect(0, 0, 0), amrex::IntVect(m.nx - 1, m.ny - 1, 3)));
+        bl.push_back(amrex::Box(amrex::IntVect(6, 0, 4), amrex::IntVect(m.nx - 1, m.ny - 1, 6)));
+        levels.push_back({"uneven", bl, false});
+    }
+    // the points: a fixed pseudo-random sweep across the domain (beyond it in x, which wraps), the whole
+    // height and below and above it, with reaches up to 1.5 cells across
+    std::vector<Real> pos, reach;
+    unsigned long long seed = 12345;
+    auto next = [&seed]() { seed = seed * 6364136223846793005ULL + 1442695040888963407ULL; return Real((seed >> 11) % 1000000) / Real(1.0e6); };
+    const int npts = 400;
+    for (int p = 0; p < npts; ++p) {
+        pos.push_back(-200.0 + (m.Lx + 400.0) * next());
+        pos.push_back(m.Ly * next());
+        pos.push_back(-30.0 + (m.H + 60.0) * next());
+        reach.push_back(1.5 * m.dx() * next());
+    }
+    const auto plo = geom.ProbLoArray();
+    const auto dxi = geom.InvCellSizeArray();
+    for (const auto& lv : levels) {
+        SCOPED_TRACE(lv.name);
+        const amrex::BoxArray level(lv.boxes);
+        // the reference, from the heights of every node column within reach
+        std::vector<char> ref(npts, 1);
+        for (int p = 0; p < npts; ++p) {
+            const Real zl = pos[3*p+2] - reach[p], zh = pos[3*p+2] + reach[p];
+            int clo[2], chi[2];
+            for (int d = 0; d < 2; ++d) {
+                clo[d] = static_cast<int>(std::floor((pos[3*p+d] - reach[p] - plo[d]) * dxi[d]));
+                chi[d] = static_cast<int>(std::floor((pos[3*p+d] + reach[p] - plo[d]) * dxi[d]));
+            }
+            clo[1] = std::max(clo[1], 0); chi[1] = std::min(chi[1], m.ny - 1);   // y is not periodic: clamped, as the check clamps it
+            bool covered = true, touched = false;
+            for (int ic = clo[0]; ic <= chi[0] && covered; ++ic) {
+                for (int jc = clo[1]; jc <= chi[1] && covered; ++jc) {
+                    const int i = ((ic % m.nx) + m.nx) % m.nx;   // the cell column, wrapped
+                    for (int ni = i; ni <= i + 1 && covered; ++ni) {
+                        for (int nj = jc; nj <= jc + 1 && covered; ++nj) {
+                            // every height within reach between this node column's floor and top lies in one of its cells
+                            for (int k = 0; k < m.nz && covered; ++k) {
+                                const Real z0 = znode(ni, nj, k), z1 = znode(ni, nj, k + 1);
+                                if (z0 <= zh && z1 >= zl) {
+                                    touched = true;
+                                    if (!level.contains(amrex::Box(amrex::IntVect(i, jc, k), amrex::IntVect(i, jc, k)))) { covered = false; }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            // a reach wholly above the domain's top or below its floor lies in no cell: not covered
+            ref[p] = (covered && touched) ? 1 : 0;
+        }
+        int covered_ref = 0;
+        for (const char c : ref) { covered_ref += c; }
+        EXPECT_GT(covered_ref, 20);
+        EXPECT_LT(covered_ref, npts - 20);
+        // the check, on the level cut into boxes three ways
+        std::vector<int> kb_first, kt_first;
+        for (const std::array<int,3> ms : {std::array<int,3>{{1024, 1024, 1024}}, std::array<int,3>{{4, 5, 3}}, std::array<int,3>{{3, 2, 2}}}) {
+            amrex::BoxArray cut(lv.boxes);
+            cut.maxSize(amrex::IntVect(ms[0], ms[1], ms[2]));
+            const amrex::MultiFab znd = make_znd(cut, znode);
+            erf_actuator::ColumnCells cells;
+            erf_actuator::column_cell_ranges(znd, geom, pos, reach, cells);
+            if (kb_first.empty()) { kb_first = cells.kb; kt_first = cells.kt; }
+            EXPECT_EQ(cells.kb, kb_first) << "boxes of " << ms[0] << " " << ms[1] << " " << ms[2];
+            EXPECT_EQ(cells.kt, kt_first) << "boxes of " << ms[0] << " " << ms[1] << " " << ms[2];
+            std::string outside;
+            for (int p = 0; p < npts; ++p) {
+                const std::vector<Real> one(pos.begin() + 3*p, pos.begin() + 3*p + 3);
+                const erf_actuator::ColumnCells c = cells.slice(p, 1);
+                const bool covered = erf_actuator::points_covered_by(level, geom, one, reach[p], outside, CoverZ::Column, nullptr, &c);
+                if (lv.uniform) {
+                    EXPECT_EQ(covered, ref[p] != 0) << "point " << p << " at (" << one[0] << ", " << one[1] << ", " << one[2]
+                                                    << ") reach " << reach[p] << " cells " << c.kb[0] << ".." << c.kt[0];
+                } else if (covered) {
+                    EXPECT_TRUE(ref[p] != 0) << "point " << p << " at (" << one[0] << ", " << one[1] << ", " << one[2]
+                                             << ") reach " << reach[p] << " covered, but not by the cells";
+                }
+            }
+        }
+    }
 }
 
 // mesh_z_bounds: the lowest and highest ground and the smallest and largest level spacing of a
