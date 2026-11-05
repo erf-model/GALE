@@ -12,9 +12,10 @@
 // - points_covered_by: the reach counts, and wraps across a periodic seam; on a terrain or stretched mesh
 //   (CoverZ::Footprint) the boxes' footprints must hold the reach across, at any height, and for the
 //   spreading (CoverZ::Column) the grids must hold it in every cell the heights within reach may lie in,
-//   over the point's own columns (column_cell_ranges: exact on a level whose boxes span the same cells
-//   in every column within reach, never fewer cells elsewhere, the same whatever the boxes), else from
-//   mesh_z_bounds (whatever the column), or over the whole height without either.
+//   over the point's own columns (column_cell_ranges: never accepting a kernel some cell of which the level
+//   lacks, exact on a level whose boxes span the same cells in every column within reach, the answer the
+//   same whatever the boxes), else from mesh_z_bounds (whatever the column), or over the whole height
+//   without either.
 // - wrap_periodic: a point a few ulps below a non-zero prob_lo lands on prob_lo, not on prob_hi.
 // - terrain_heights: the bilinear k = 0 node surface.
 // - min_cell_heights: the shortest physical cell (z_phys_nd node spacing) under a region, over the
@@ -566,9 +567,10 @@ TEST(ActuatorSampling, ColumnCellsAcceptAColumnBesideADeepCanyonAndRefuseOneAbov
 // column_cell_ranges against the cells themselves: a point is covered when, at every node column its reach
 // across touches (a periodic x wrapping) and at every height within its reach between that column's floor
 // and top, the cell holding the height is on the level in every cell column next to the node column. On a
-// level whose boxes span the same cells in every column (at the ground, aloft, part of the domain across)
-// the per-column check gives exactly that, whatever the boxes; on one whose boxes stop at different
-// heights in neighbouring columns it never covers a point the cells do not.
+// level whose boxes span the same cells in every column (at the ground, aloft, part of the domain across),
+// over this gentle hill, the per-column check gives exactly that; on one whose boxes stop at different
+// heights in neighbouring columns it never covers a point the cells do not. The answers do not depend on
+// how the level is cut into boxes.
 TEST(ActuatorSampling, ColumnCellsAreTheCellsThemselvesAndNeverFewer)
 {
     using erf_actuator::CoverZ;
@@ -645,16 +647,14 @@ TEST(ActuatorSampling, ColumnCellsAreTheCellsThemselvesAndNeverFewer)
         EXPECT_GT(covered_ref, 20);
         EXPECT_LT(covered_ref, npts - 20);
         // the check, on the level cut into boxes three ways
-        std::vector<int> kb_first, kt_first;
+        std::vector<char> answer_first;
         for (const std::array<int,3> ms : {std::array<int,3>{{1024, 1024, 1024}}, std::array<int,3>{{4, 5, 3}}, std::array<int,3>{{3, 2, 2}}}) {
             amrex::BoxArray cut(lv.boxes);
             cut.maxSize(amrex::IntVect(ms[0], ms[1], ms[2]));
             const amrex::MultiFab znd = make_znd(cut, znode);
             erf_actuator::ColumnCells cells;
             erf_actuator::column_cell_ranges(znd, geom, pos, reach, cells);
-            if (kb_first.empty()) { kb_first = cells.kb; kt_first = cells.kt; }
-            EXPECT_EQ(cells.kb, kb_first) << "boxes of " << ms[0] << " " << ms[1] << " " << ms[2];
-            EXPECT_EQ(cells.kt, kt_first) << "boxes of " << ms[0] << " " << ms[1] << " " << ms[2];
+            std::vector<char> answer(npts, 0);
             std::string outside;
             int covered_new = 0;
             for (int p = 0; p < npts; ++p) {
@@ -662,6 +662,7 @@ TEST(ActuatorSampling, ColumnCellsAreTheCellsThemselvesAndNeverFewer)
                 const erf_actuator::ColumnCells c = cells.slice(p, 1);
                 const bool covered = erf_actuator::points_covered_by(level, geom, one, reach[p], outside, CoverZ::Column, nullptr, &c);
                 covered_new += covered ? 1 : 0;
+                answer[p] = covered ? 1 : 0;
                 if (lv.uniform) {
                     EXPECT_EQ(covered, ref[p] != 0) << "point " << p << " at (" << one[0] << ", " << one[1] << ", " << one[2]
                                                     << ") reach " << reach[p] << " cells " << c.kb[0] << ".." << c.kt[0];
@@ -672,6 +673,9 @@ TEST(ActuatorSampling, ColumnCellsAreTheCellsThemselvesAndNeverFewer)
             }
             // never everything refused: the points low over the taller boxes are covered on every level
             EXPECT_GT(covered_new, 20);
+            // the same answers however the level is cut
+            if (answer_first.empty()) { answer_first = answer; }
+            EXPECT_EQ(answer, answer_first) << "boxes of " << ms[0] << " " << ms[1] << " " << ms[2];
         }
     }
 }

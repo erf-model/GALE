@@ -634,7 +634,11 @@ the kernel reaches across (gathered from every rank in one collective, so the
 answer does not depend on the ranks or the boxes). The kernel then needs the
 cells of those columns whose heights it spans, and, where it crosses the
 bottom or the top of the level's boxes there, the cell beyond it too, which
-the level holds only where it goes on; a kernel the level cuts is refused. A
+the level holds only where it goes on; a kernel the level cuts is refused. The
+cells are taken as one range per point, from the lowest to the highest over
+its columns, so a level with a gap in height between two of its boxes, or one
+aloft beside a cliff, may be asked for a few cells more than the kernel
+spreads into; it is never asked for fewer. A
 canyon floor elsewhere on the level, far below a rotor on a plateau, does not
 raise the cells the rotor needs, as a bound from the level's lowest ground and
 thinnest cell would. A sampled point is checked over its whole column, since

@@ -270,12 +270,15 @@ struct ColumnCells {
  * that box counts too, and where they go above a box's highest node (unless it is the domain's top), the
  * cell above it: in a column split in z between boxes those cells are held by the next box, and where the
  * level stops they are not, so a kernel the level cuts fails points_covered_by, whatever the boxes. The
- * cells needed, as points_covered_by tests them with CoverZ::Column, are then exactly the cells of the
- * columns within reach whose heights the reach spans, on a level whose boxes span the same cells k in
- * every column the reach touches; elsewhere the union over those columns, never fewer. A reach partly
- * below the floor or above the domain top needs nothing there, as with the mesh's bounds; one wholly
- * beyond them touches no node and is not covered. kb > kt for a point whose reach touches no node of
- * the level. A collective, the same on every rank: every rank passes the same points.
+ * range is the hull [min k, max k] over the columns: points_covered_by never accepts a kernel some cell
+ * of which the level lacks, and accepts every kernel whose cells the level holds when, over the columns
+ * within reach, those cells form one run and no column has the heights below its ground under a box
+ * that starts above the floor. Elsewhere it is conservative: it also asks for the cells of a gap between
+ * two runs, or the cell under such a box (a cliff next to the point on a level aloft). The coverage
+ * answer is the same whatever the boxes; the hull itself may differ by cells the level holds in the same
+ * run. A reach partly below the floor or above the domain top needs nothing there, as with the mesh's
+ * bounds; one wholly beyond them touches no node and is not covered. kb > kt for a point whose reach
+ * touches no node of the level. A collective, the same on every rank: every rank passes the same points.
  *
  * @param[in] pos 3*n positions (m)
  * @param[in] reach n reaches (m)
