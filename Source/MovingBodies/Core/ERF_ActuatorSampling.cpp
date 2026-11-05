@@ -2,6 +2,7 @@
 
 #include "ERF_ActuatorSampling.H"
 
+#include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <array>
@@ -833,6 +834,12 @@ column_cell_ranges (const MultiFab& z_phys_nd, const Geometry& geom, const std::
         }
     }
     if (!work.empty()) {
+        // the pieces sorted by box (one launch per box), with each box's first piece
+        std::stable_sort(work.begin(), work.end(), [] (const ColumnWork& a, const ColumnWork& c) { return a.b < c.b; });
+        std::vector<int> first_of(boxes.size() + 1, static_cast<int>(work.size()));
+        for (int w = static_cast<int>(work.size()) - 1; w >= 0; --w) { first_of[work[w].b] = w; }
+        for (int ib = static_cast<int>(boxes.size()) - 1; ib >= 0; --ib) { first_of[ib] = std::min(first_of[ib], first_of[ib+1]); }
+        // every device vector lives until the synchronisation after the last launch
         Gpu::DeviceVector<ColumnWork> d_work(work.size());
         Gpu::DeviceVector<Real> d_pos(pos.size()), d_reach(reach.size());
         Gpu::DeviceVector<int> d_kb(npts, dhi + 1), d_kt(npts, dlo - 1);
@@ -846,21 +853,17 @@ column_cell_ranges (const MultiFab& z_phys_nd, const Geometry& geom, const std::
         int* p_kt = d_kt.data();
         // the pieces of one box in one launch: each over its node columns, every cell of the column
         for (int ib = 0; ib < static_cast<int>(boxes.size()); ++ib) {
-            std::vector<int> mine;
-            for (int w = 0; w < static_cast<int>(work.size()); ++w) { if (work[w].b == ib) { mine.push_back(w); } }
-            if (mine.empty()) { continue; }
-            Gpu::DeviceVector<int> d_mine(mine.size());
-            Gpu::copy(Gpu::hostToDevice, mine.begin(), mine.end(), d_mine.begin());
-            const int* p_mine = d_mine.data();
+            const int w0 = first_of[ib], nw = first_of[ib+1] - first_of[ib];
+            if (nw == 0) { continue; }
             const Box nbx = boxes[ib];
             const int kbot = nbx.smallEnd(2), ktop = nbx.bigEnd(2);
             Array4<Real const> const& znd = z_phys_nd.const_array(grid[ib]);
-            ParallelFor(static_cast<int>(mine.size()), [=] AMREX_GPU_DEVICE (int m) noexcept
+            ParallelFor(nw, [=] AMREX_GPU_DEVICE (int m) noexcept
             {
-                const ColumnWork w = p_work[p_mine[m]];
+                const ColumnWork w = p_work[w0 + m];
                 const Real zl0 = p_pos[3*w.p+2] - p_reach[w.p], zh0 = p_pos[3*w.p+2] + p_reach[w.p];
                 // the slack of ZBounds::k_range: the heights are rounded sums
-                const Real slack = Real(1.0e-5) * amrex::max(std::abs(zl0), amrex::max(std::abs(zh0), zh0 - zl0));
+                const Real slack = Real(1.0e-5) * amrex::max(amrex::Math::abs(zl0), amrex::max(amrex::Math::abs(zh0), zh0 - zl0));
                 const Real zl = zl0 - slack, zh = zh0 + slack;
                 int kb = p_kb[w.p], kt = p_kt[w.p];
                 for (int j = w.j0; j <= w.j1; ++j) {

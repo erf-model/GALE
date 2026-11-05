@@ -656,10 +656,12 @@ TEST(ActuatorSampling, ColumnCellsAreTheCellsThemselvesAndNeverFewer)
             EXPECT_EQ(cells.kb, kb_first) << "boxes of " << ms[0] << " " << ms[1] << " " << ms[2];
             EXPECT_EQ(cells.kt, kt_first) << "boxes of " << ms[0] << " " << ms[1] << " " << ms[2];
             std::string outside;
+            int covered_new = 0;
             for (int p = 0; p < npts; ++p) {
                 const std::vector<Real> one(pos.begin() + 3*p, pos.begin() + 3*p + 3);
                 const erf_actuator::ColumnCells c = cells.slice(p, 1);
                 const bool covered = erf_actuator::points_covered_by(level, geom, one, reach[p], outside, CoverZ::Column, nullptr, &c);
+                covered_new += covered ? 1 : 0;
                 if (lv.uniform) {
                     EXPECT_EQ(covered, ref[p] != 0) << "point " << p << " at (" << one[0] << ", " << one[1] << ", " << one[2]
                                                     << ") reach " << reach[p] << " cells " << c.kb[0] << ".." << c.kt[0];
@@ -668,6 +670,8 @@ TEST(ActuatorSampling, ColumnCellsAreTheCellsThemselvesAndNeverFewer)
                                              << ") reach " << reach[p] << " covered, but not by the cells";
                 }
             }
+            // never everything refused: the points low over the taller boxes are covered on every level
+            EXPECT_GT(covered_new, 20);
         }
     }
 }

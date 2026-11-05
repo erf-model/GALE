@@ -1949,7 +1949,8 @@ MovingBodies::check_coverage (const BoxArray& level_grids, const MultiFab* z_phy
 #ifdef ERF_USE_OPENFAST
     const auto& turbs = m_driver->turbines();
     std::vector<std::vector<PointGroup>> groups(nturb);   // on the owner
-    std::vector<std::vector<Real>> swept(nturb);
+    std::vector<std::vector<Real>> swept(nturb), group_reach(nturb);   // the swept disk, and each group's reach
+    std::vector<Real> swept_reach(nturb, Real(0.0));
     for (int i = 0; i < nturb; ++i) {
         if (!m_driver->is_owner(i)) { continue; }
         const auto& t = turbs[i];
@@ -1973,15 +1974,22 @@ MovingBodies::check_coverage (const BoxArray& level_grids, const MultiFab* z_phy
                 }
             }
         }
+        // the reach of each kernel, used for the cells in z and for the cells across alike
         groups[i] = turbine_point_groups(i, dx0);
-        for (const auto& g : groups[i]) { add_spread(i, g.pos, Real(3.0) * g.eps + dx0); }
-        add_spread(i, swept[i], Real(3.0) * m_turbine_in[i].kernel_widths(dx0).rotor + dx0);
+        for (const auto& g : groups[i]) {
+            group_reach[i].push_back(Real(3.0) * g.eps + dx0);
+            add_spread(i, g.pos, group_reach[i].back());
+        }
+        swept_reach[i] = Real(3.0) * m_turbine_in[i].kernel_widths(dx0).rotor + dx0;
+        add_spread(i, swept[i], swept_reach[i]);
     }
 #endif
+    std::vector<Real> disk_reach(m_disks.size(), Real(0.0));
     for (std::size_t k = 0; k < m_disks.size(); ++k) {
         const int b = nturb + static_cast<int>(k);
         if (!m_exchange.owns(b)) { continue; }
-        add_spread(b, m_disks[k]->disk_points(), Real(3.0) * (m_disk_epsilon[k] * dx0) + dx0);
+        disk_reach[k] = Real(3.0) * (m_disk_epsilon[k] * dx0) + dx0;
+        add_spread(b, m_disks[k]->disk_points(), disk_reach[k]);
     }
     // on a fitted or stretched mesh a point's cell is not its height over dz: the cells the heights within
     // its reach may lie in are found over the point's own columns (column_cell_ranges), in one collective
@@ -2034,15 +2042,16 @@ MovingBodies::check_coverage (const BoxArray& level_grids, const MultiFab* z_phy
     for (int i = 0; i < nturb && failed.empty(); ++i) {
         if (!m_driver->is_owner(i)) { continue; }
         const auto& t = turbs[i];
-        const Real reach = Real(3.0) * m_turbine_in[i].kernel_widths(dx0).rotor + dx0;
+        const Real reach = swept_reach[i];
         // every force node with the reach of the kernel it is spread with, then the swept disk with the rotor's
         std::string outside;
         Real missed = reach;
         bool covered = true;
         std::size_t at = first[i];
-        for (const auto& g : groups[i]) {
+        for (std::size_t q = 0; q < groups[i].size(); ++q) {
             if (!covered) { break; }
-            missed = Real(3.0) * g.eps + dx0;
+            const auto& g = groups[i][q];
+            missed = group_reach[i][q];
             const erf_actuator::ColumnCells cells = cells_of(at, g.pos.size() / 3);
             at += g.pos.size() / 3;
             covered = erf_actuator::points_covered_by(cover, geom, g.pos, missed, outside, spread_z, nullptr, fitted ? &cells : nullptr);
@@ -2050,8 +2059,12 @@ MovingBodies::check_coverage (const BoxArray& level_grids, const MultiFab* z_phy
         if (covered) {
             missed = reach;
             const erf_actuator::ColumnCells cells = cells_of(at, swept[i].size() / 3);
+            at += swept[i].size() / 3;
             covered = erf_actuator::points_covered_by(cover, geom, swept[i], reach, outside, spread_z, nullptr, fitted ? &cells : nullptr);
         }
+        // the slices, when all were walked, covered exactly this turbine's gathered rows
+        AMREX_ALWAYS_ASSERT_WITH_MESSAGE(!fitted || !covered || at == first[static_cast<std::size_t>(i) + 1],
+                                         "check_coverage: the turbine's points and its gathered rows differ");
         if (covered) {
             missed = static_cast<Real>(geom.CellSize(0));
             covered = erf_actuator::points_covered_by(cover, geom, sampling_positions(i), geom.CellSize(0), outside, sample_z);
@@ -2069,8 +2082,10 @@ MovingBodies::check_coverage (const BoxArray& level_grids, const MultiFab* z_phy
         const int b = nturb + static_cast<int>(k);
         if (!m_exchange.owns(b)) { continue; }
         const auto& d = m_disks[k];
-        const Real reach = Real(3.0) * (m_disk_epsilon[k] * dx0) + dx0;
+        const Real reach = disk_reach[k];
         std::string outside;
+        AMREX_ALWAYS_ASSERT_WITH_MESSAGE(!fitted || first[b] + d->disk_points().size() / 3 == first[static_cast<std::size_t>(b) + 1],
+                                         "check_coverage: the disk's points and its gathered rows differ");
         const erf_actuator::ColumnCells cells = cells_of(first[b], d->disk_points().size() / 3);
         if (!erf_actuator::points_covered_by(cover, geom, d->disk_points(), reach, outside, spread_z, nullptr, fitted ? &cells : nullptr) ||
             !erf_actuator::points_covered_by(cover, geom, d->sample_points(), geom.CellSize(0), outside, sample_z)) {

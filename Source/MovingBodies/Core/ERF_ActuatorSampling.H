@@ -252,6 +252,7 @@ struct ColumnCells {
     /** The ranges of n points from point `begin` (as a copy). */
     ColumnCells slice (std::size_t begin, std::size_t n) const
     {
+        AMREX_ALWAYS_ASSERT_WITH_MESSAGE(begin + n <= kb.size() && kb.size() == kt.size(), "ColumnCells::slice: past the ranges");
         ColumnCells c;
         c.kb.assign(kb.begin() + static_cast<std::ptrdiff_t>(begin), kb.begin() + static_cast<std::ptrdiff_t>(begin + n));
         c.kt.assign(kt.begin() + static_cast<std::ptrdiff_t>(begin), kt.begin() + static_cast<std::ptrdiff_t>(begin + n));
@@ -271,9 +272,10 @@ struct ColumnCells {
  * level stops they are not, so a kernel the level cuts fails points_covered_by, whatever the boxes. The
  * cells needed, as points_covered_by tests them with CoverZ::Column, are then exactly the cells of the
  * columns within reach whose heights the reach spans, on a level whose boxes span the same cells k in
- * every column the reach touches; elsewhere the union over those columns, never fewer. Below the floor
- * and above the domain top nothing is needed, as with the mesh's bounds. kb > kt for a point whose reach
- * touches no node of the level. A collective, the same on every rank: every rank passes the same points.
+ * every column the reach touches; elsewhere the union over those columns, never fewer. A reach partly
+ * below the floor or above the domain top needs nothing there, as with the mesh's bounds; one wholly
+ * beyond them touches no node and is not covered. kb > kt for a point whose reach touches no node of
+ * the level. A collective, the same on every rank: every rank passes the same points.
  *
  * @param[in] pos 3*n positions (m)
  * @param[in] reach n reaches (m)
