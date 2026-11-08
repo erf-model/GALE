@@ -2817,8 +2817,9 @@ The run aborts at start-up, naming the input, unless it has:
   date); the span from the start to the stop time must be a whole number of ``erf.fixed_dt``
   steps, since ERF would cut the last one, unless ``max_step`` ends the run first;
 - the bodies on one level, the anchor level (``erf.moving_bodies.anchor_level``), whose grids
-  cover every body point with its kernel's reach; no finer level may cover any of them, since
-  the average-down would overwrite the force there;
+  cover every body point with its kernel's reach; the coarser levels carry the anchor level's
+  force summed onto their faces; no finer level may cover any of them, since the average-down
+  would overwrite the force there;
 - with an ``openfast_turbine``, no floating-point traps (``amrex.fpe_trap_invalid``,
   ``amrex.fpe_trap_zero`` and ``amrex.fpe_trap_overflow`` all off), since OpenFAST raises
   exceptions of its own; runs with ``ct_disk`` bodies only may trap.
@@ -3029,8 +3030,8 @@ written without bodies (a precursor) starts the bodies afresh at the checkpoint'
 |                                                        | started)                                                 |                          |                          |
 +--------------------------------------------------------+----------------------------------------------------------+--------------------------+--------------------------+
 | **erf.moving_bodies.anchor_level**                     | the level the bodies are sampled and forced on; coarser  | 0 .. amr.max_level, or   | -1 (amr.max_level)       |
-|                                                        | levels see them through the average-down of the state,   | -1                       |                          |
-|                                                        | and no finer level may cover them                        |                          |                          |
+|                                                        | levels carry the anchor level's force summed onto their  | -1                       |                          |
+|                                                        | faces, and no finer level may cover them                 |                          |                          |
 +--------------------------------------------------------+----------------------------------------------------------+--------------------------+--------------------------+
 | **erf.moving_bodies.density_tolerance**                | relative difference allowed between ERF's density at a   | Real >= 0                | 0.05                     |
 |                                                        | hub and the OpenFAST model's AirDens, and at a ct_disk   |                          |                          |

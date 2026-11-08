@@ -1,6 +1,7 @@
 #ifndef ERF_MOVING_BODIES_H
 #define ERF_MOVING_BODIES_H
 
+#include <array>
 #include <functional>
 #include <map>
 #include <memory>
@@ -104,10 +105,11 @@ public:
     bool ground_set () const { return m_ground_set; }
 
     /**
-     * Advance the bodies by one ERF step of the anchor level; a no-op on every other level. The
-     * momentum sources live on the anchor level's grids; coarser levels see the bodies through
-     * ERF's average-down of the state, finer levels are not supported (the anchor is the finest
-     * unless asked otherwise).
+     * Advance the bodies by one ERF step of the anchor level. The forces are spread on the anchor
+     * level's grids; on a coarser level the call sums the anchor level's latest face forces onto that
+     * level's faces (restrict_face_forces), so that every level up to the anchor carries the bodies'
+     * whole force and solves for its pressure with it. Finer levels are not supported (the anchor is
+     * the finest unless asked otherwise).
      * @param cons the level's conserved state at the start of the step (its density is audited at the hubs on the first step)
      * @param U,V,W the level's face-centred velocities at the start of the step, ghost cells filled
      * @param z_phys_nd nodal heights, or nullptr on a uniform-dz mesh
@@ -121,8 +123,9 @@ public:
 
     /**
      * Add the bodies' momentum sources (N/m^3, held fixed over the step) to ERF's face-centred
-     * momentum right-hand sides; a no-op unless lev is the anchor level and a body carries a
-     * force.
+     * momentum right-hand sides: on the anchor level the spread forces, on a coarser level the
+     * anchor level's forces summed onto its faces by advance(); a no-op on a finer level, and
+     * until the bodies carry a force.
      */
     void add_momentum_sources (int lev, amrex::MultiFab& xmom_src, amrex::MultiFab& ymom_src,
                                amrex::MultiFab& zmom_src) const;
@@ -132,7 +135,7 @@ public:
     /**
      * Called by ERF at every coarse step: abort when the anchor level has no grids, or when a level
      * finer than the anchor covers part of a rotor or disk with the kernel's reach (the force lives on
-     * the anchor level only, and ERF's average-down would overwrite it there).
+     * the anchor level and those below it only, and ERF's average-down would overwrite it there).
      */
     void check_levels (int finest_level, const amrex::Vector<amrex::BoxArray>& grids,
                        const amrex::Vector<amrex::Geometry>& geoms) const;
@@ -194,6 +197,19 @@ private:
     std::vector<amrex::Real> m_disk_epsilon;                           //!< per prescribed-Ct disk: its spreading width (dx units)
     bool m_src_defined{false};
     amrex::MultiFab m_src_x, m_src_y, m_src_z;                         //!< anchor-level momentum sources
+    // the anchor level's face forces (N, src dV) after its latest step, which the coarser levels' sources
+    // are summed from; checkpointed, so that a restart gives the coarser levels the same sources
+    bool m_force_defined{false};
+    amrex::MultiFab m_force_x, m_force_y, m_force_z;
+    amrex::Geometry m_anchor_geom;                                     //!< set by set_ground()
+    std::vector<std::array<amrex::MultiFab,3>> m_crse_src;             //!< per level below the anchor: its sources for this step
+    std::vector<int> m_crse_src_defined;                               //!< per level below the anchor: m_crse_src set for this step
+
+    /** The anchor level's face forces from its sources just spread (m_force_*). */
+    void store_face_forces (const amrex::MultiFab* detJ_cc, const amrex::Geometry& geom);
+    /** Level lev's sources (lev below the anchor) for its step: the anchor level's face forces summed onto its faces. */
+    void restrict_sources (int lev, const amrex::MultiFab& U, const amrex::MultiFab& V, const amrex::MultiFab& W,
+                           const amrex::MultiFab* detJ_cc, const amrex::Geometry& geom);
 
     /** Spread the bodies' forces onto the momentum sources (defined on first use). */
     void spread_sources (const amrex::MultiFab& U, const amrex::MultiFab* z_phys_nd,

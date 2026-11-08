@@ -18,6 +18,7 @@
 #include <AMReX_ParmParse.H>
 #include <AMReX_Print.H>
 #include <AMReX_Utility.H>
+#include <AMReX_VisMF.H>
 
 #include "ERF_ActuatorSampling.H"
 #ifdef ERF_USE_OPENFAST
@@ -25,6 +26,7 @@
 #endif
 #include "ERF_DiagnosticsLog.H"
 #include "ERF_ActuatorSpreading.H"
+#include "ERF_ActuatorRestriction.H"
 #include "ERF_DataStruct.H"
 #include "ERF_Constants.H"
 #include "ERF_IndexDefines.H"
@@ -297,6 +299,12 @@ MovingBodies::write_checkpoint (const std::string& chkdir)
 #endif
     }
     ParallelDescriptor::Barrier();
+    // the anchor level's face forces, which the coarser levels' sources of the next steps are summed from
+    if (m_anchor > 0 && m_force_defined) {
+        VisMF::Write(m_force_x, dir + "/force_x");
+        VisMF::Write(m_force_y, dir + "/force_y");
+        VisMF::Write(m_force_z, dir + "/force_z");
+    }
     for (const auto& w : m_wakes) { w->write_state(dir); }
     for (const auto& st : m_turbine_stats) { st.write_state(dir); }
     for (const auto& st : m_disk_stats) { st.write_state(dir); }
@@ -338,6 +346,7 @@ MovingBodies::set_ground (const MultiFab* z_phys_nd, const Geometry& geom, const
               " only; refine the region around the bodies from the start, or set erf.moving_bodies.anchor_level to an existing level");
     }
     m_ground_set = true;
+    m_anchor_geom = geom;
     m_fitted = (z_phys_nd != nullptr);
     std::vector<Real> pos;
     for (const auto& m : m_motion) { const auto b = m->position(0.0); pos.insert(pos.end(), {b[0], b[1], b[2]}); }
@@ -715,6 +724,19 @@ MovingBodies::read_checkpoint (const std::string& chkdir, double time)
 #ifdef ERF_USE_OPENFAST
     m_fllc_state_dir = dir;
 #endif
+    // the anchor level's face forces at the checkpoint: the coarser levels' sources until the anchor level steps
+    if (m_anchor > 0) {
+        if (erf_actuator::file_exists_everywhere(dir + "/force_x_H")) {
+            VisMF::Read(m_force_x, dir + "/force_x");
+            VisMF::Read(m_force_y, dir + "/force_y");
+            VisMF::Read(m_force_z, dir + "/force_z");
+            m_force_defined = true;
+        } else {
+            Print() << "Moving bodies: the checkpoint " << chkdir << " holds no anchor-level face forces; the levels below the "
+                    << "anchor get the bodies' force from the anchor level's first step on (so their first step after the restart "
+                    << "differs from a straight run's)\n";
+        }
+    }
     // each body's statistics, read by its owner alone (which alone keeps them); a malformed file stops every
     // rank with its owner's message, the first in body order as when every rank read every file
     {
@@ -971,6 +993,11 @@ MovingBodies::advance (int lev, double time, double dt,
                        const MultiFab& U, const MultiFab& V, const MultiFab& W,
                        const MultiFab* z_phys_nd, const MultiFab* detJ_cc, const Geometry& geom)
 {
+    if (lev < anchor_level()) {
+        erf_actuator::ScopedPhase timed(m_timers, erf_actuator::PhaseTimers::Spread);
+        restrict_sources(lev, U, V, W, detJ_cc, geom);
+        return;
+    }
     if (lev != anchor_level()) { return; }
     BL_PROFILE("MovingBodies::advance()");
     if (m_timing_from < 0) { m_timing_from = m_step + 1; }
@@ -1115,7 +1142,12 @@ MovingBodies::advance_step (double time, double dt, const MultiFab& cons,
     // OpenFAST step just taken (the turbines), so the source is fixed over the step ERF is
     // about to take
     if (any_forcing()) {
-        { erf_actuator::ScopedPhase timed(m_timers, P::Spread); spread_sources(U, z_phys_nd, detJ_cc, geom); }
+        {
+            erf_actuator::ScopedPhase timed(m_timers, P::Spread);
+            spread_sources(U, z_phys_nd, detJ_cc, geom);
+            // what the coarser levels' sources are summed from in their next steps
+            if (m_anchor > 0) { store_face_forces(detJ_cc, geom); }
+        }
         if (first || m_step % m_in.diagnostics_int == 0) {
             erf_actuator::ScopedPhase timed(m_timers, P::Diagnostics);
             write_source_diagnostics(time, detJ_cc, geom, first);
@@ -1722,6 +1754,18 @@ void
 MovingBodies::add_momentum_sources (int lev, MultiFab& xmom_src, MultiFab& ymom_src, MultiFab& zmom_src) const
 {
     BL_PROFILE("MovingBodies::add_momentum_sources()");
+    if (lev < anchor_level()) {
+        if (lev >= static_cast<int>(m_crse_src_defined.size()) || m_crse_src_defined[lev] == 0) { return; }
+        erf_actuator::ScopedPhase timed(m_timers, erf_actuator::PhaseTimers::AddSources);
+        const auto& src = m_crse_src[lev];
+        AMREX_ALWAYS_ASSERT_WITH_MESSAGE(xmom_src.boxArray() == src[0].boxArray() && ymom_src.boxArray() == src[1].boxArray() &&
+                                         zmom_src.boxArray() == src[2].boxArray(),
+                                         "MovingBodies: the coarse-level momentum sources were built on a different grid than ERF's");
+        MultiFab::Add(xmom_src, src[0], 0, 0, 1, 0);
+        MultiFab::Add(ymom_src, src[1], 0, 0, 1, 0);
+        MultiFab::Add(zmom_src, src[2], 0, 0, 1, 0);
+        return;
+    }
     if (lev != anchor_level() || !m_src_defined) { return; }
     erf_actuator::ScopedPhase timed(m_timers, erf_actuator::PhaseTimers::AddSources);
     AMREX_ALWAYS_ASSERT_WITH_MESSAGE(xmom_src.boxArray() == m_src_x.boxArray(),
@@ -1729,6 +1773,58 @@ MovingBodies::add_momentum_sources (int lev, MultiFab& xmom_src, MultiFab& ymom_
     MultiFab::Add(xmom_src, m_src_x, 0, 0, 1, 0);
     MultiFab::Add(ymom_src, m_src_y, 0, 0, 1, 0);
     MultiFab::Add(zmom_src, m_src_z, 0, 0, 1, 0);
+}
+
+void
+MovingBodies::store_face_forces (const MultiFab* detJ_cc, const Geometry& geom)
+{
+    BL_PROFILE("MovingBodies::store_face_forces()");
+    MultiFab* force[3] = {&m_force_x, &m_force_y, &m_force_z};
+    const MultiFab* src[3] = {&m_src_x, &m_src_y, &m_src_z};
+    for (int d = 0; d < 3; ++d) {
+        if (!m_force_defined || force[d]->boxArray() != src[d]->boxArray() || force[d]->DistributionMap() != src[d]->DistributionMap()) {
+            force[d]->define(src[d]->boxArray(), src[d]->DistributionMap(), 1, 0);
+        }
+        erf_actuator::source_to_face_forces(d, *src[d], detJ_cc, geom, *force[d]);
+    }
+    m_force_defined = true;
+}
+
+void
+MovingBodies::restrict_sources (int lev, const MultiFab& U, const MultiFab& V, const MultiFab& W,
+                                const MultiFab* detJ_cc, const Geometry& geom)
+{
+    BL_PROFILE("MovingBodies::restrict_sources()");
+    if (static_cast<int>(m_crse_src.size()) < m_anchor) {
+        m_crse_src.resize(m_anchor);
+        m_crse_src_defined.resize(m_anchor, 0);
+    }
+    m_crse_src_defined[lev] = 0;
+    // before the anchor level's first step (or a restart from a checkpoint without its forces) the
+    // bodies carry no force yet
+    if (!m_force_defined) { return; }
+    AMREX_ALWAYS_ASSERT_WITH_MESSAGE(m_ground_set, "MovingBodies::restrict_sources: set_ground() must come first");
+    // the refinement ratio from this level to the anchor level, a whole number in each direction
+    IntVect ratio;
+    for (int d = 0; d < 3; ++d) {
+        const Real r = static_cast<Real>(geom.CellSize(d) / m_anchor_geom.CellSize(d));
+        ratio[d] = static_cast<int>(std::lround(r));
+        if (ratio[d] < 1 || std::abs(r - static_cast<Real>(ratio[d])) > Real(1.e-6) * r) {
+            Abort("MovingBodies: level " + std::to_string(lev) + "'s cells are not a whole number of anchor-level cells across");
+        }
+    }
+    const MultiFab* face[3] = {&U, &V, &W};
+    const MultiFab* force[3] = {&m_force_x, &m_force_y, &m_force_z};
+    for (int d = 0; d < 3; ++d) {
+        MultiFab& src = m_crse_src[lev][d];
+        const BoxArray& ba = face[d]->boxArray();
+        const DistributionMapping& dm = face[d]->DistributionMap();
+        if (src.boxArray() != ba || src.DistributionMap() != dm) { src.define(ba, dm, 1, 0); }
+        MultiFab f(ba, dm, 1, 0);
+        erf_actuator::restrict_face_forces(d, *force[d], m_anchor_geom, ratio, f);
+        erf_actuator::face_forces_to_source(d, f, detJ_cc, geom, src);
+    }
+    m_crse_src_defined[lev] = 1;
 }
 
 #ifdef ERF_USE_OPENFAST
@@ -1916,7 +2012,7 @@ MovingBodies::check_levels (int finest_level, const Vector<BoxArray>& grids, con
                 if (b.ok() && grids[lev].intersects(b)) {
                     Abort("erf.moving_bodies." + e.first + ": level " + std::to_string(lev) + ", finer than the bodies' level " +
                           std::to_string(m_anchor) + ", covers part of it with the kernel's reach; the force lives on level " +
-                          std::to_string(m_anchor) + " only, and ERF's average-down would overwrite it there. Put the bodies on the "
+                          std::to_string(m_anchor) + " and the levels below it only, and ERF's average-down would overwrite it there. Put the bodies on the "
                           "finest level over them (erf.moving_bodies.anchor_level) or keep finer levels away from them");
                 }
             }

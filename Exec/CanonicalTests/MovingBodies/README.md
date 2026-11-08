@@ -39,6 +39,7 @@ terrain file of `../Real_Terrain/Askervein`, both copied next to the deck by the
 | `OpenFAST_ADM_DiskAndTurbine` | stub turbine (disk, 2 cells) and a prescribed-Ct disk (1 cell) | `RunOpenFASTADM.cmake` | the disk's log, `fx == -load_x` of both bodies; with the two swapped, ownership parity with the disk on rank 1 (`total_load.csv` gathered from it) |
 | `OpenFAST_ADM_TwoLevel` | stub turbine, disk, on level 1 of two | `RunOpenFASTADM.cmake` | the anchor level: sampled and forced on the fine patch, stepped with its step |
 | `OpenFAST_ADM_TwoLevel_Restart` | as above | `RunRestartParity.cmake` | restart parity with the fine level, every log |
+| `Actuator_CtDisk_TwoLevel` | prescribed-Ct disk on one level and on level 1 of two, the fine box tight around it | `RunDiskLevels.cmake` | the coarse level carries the disk's force: the two runs' induction (disk-averaged and upstream velocity deficits) agree within 10 % |
 | `OpenFAST_ALM_Uniform` | stub turbine, line | `RunOpenFASTADM.cmake` | the rotating line; tip-travel limit |
 | `OpenFAST_ALM_Tower` | stub turbine, line, tower, nacelle | `RunOpenFASTADM.cmake` | `fx == -load_x` with the tower and nacelle |
 | `OpenFAST_ALM_ComponentWidths` | stub turbine, line, tower, nacelle, each with its own kernel width | `RunOpenFASTADM.cmake`, `RunRestartParity.cmake`, `RunRestartAbort.cmake` | plotfile, flow log, `fx == -load_x`; restart parity; a changed `epsilon_tower` stops a restart (`OpenFAST_ALM_Tower_ExplicitWidths`, `RunOptionParity.cmake`: widths given equal to `epsilon` change nothing) |
