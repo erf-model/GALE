@@ -57,6 +57,13 @@ struct adiabatic_eb
         q_star_arr(i,j,k) = zero;
     }
 
+    /**
+     * Take the similarity functions of the surface layer (most.stable_functions).
+     *
+     * @param[in] sf similarity functions
+     */
+    void set_similarity_funs (const similarity_funs& sf) { sfuns = sf; }
+
 private:
     most_data mdata;
     similarity_funs sfuns;
@@ -201,6 +208,13 @@ struct surface_temp_eb
         }
     }
 
+    /**
+     * Take the similarity functions of the surface layer (most.stable_functions).
+     *
+     * @param[in] sf similarity functions
+     */
+    void set_similarity_funs (const similarity_funs& sf) { sfuns = sf; }
+
 private:
     most_data mdata;
     bool spec_qflux;
@@ -303,7 +317,8 @@ struct surface_flux_eb
             u_star_arr(i,j,k) = accel.update(u_star_arr(i,j,k), iter);
         } while ((accel.extrapolated || std::abs(u_star_arr(i,j,k) - ustar) > tol) &&
                  iter <= max_iters);
-        AMREX_ALWAYS_ASSERT_WITH_MESSAGE(iter <= max_iters,
+        AMREX_ALWAYS_ASSERT_WITH_MESSAGE(!accel.extrapolated &&
+                                         std::abs(u_star_arr(i,j,k) - ustar) <= tol,
                                          "Maximum number of MOST iterations reached.");
 
         // Populate the stored MOST arrays; below the fold, apply the flux the wind can carry
@@ -312,6 +327,13 @@ struct surface_flux_eb
                           t_surf_arr(i,j,k), t_star_arr(i,j,k), q_surf_arr(i,j,k), q_star_arr(i,j,k));
         olen_arr(i,j,k)   = Olen;
     }
+
+    /**
+     * Take the similarity functions of the surface layer (most.stable_functions).
+     *
+     * @param[in] sf similarity functions
+     */
+    void set_similarity_funs (const similarity_funs& sf) { sfuns = sf; }
 
 private:
     most_data mdata;

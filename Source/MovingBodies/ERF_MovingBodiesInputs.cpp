@@ -390,7 +390,7 @@ MovingBodiesInputs::validate_solver (bool all_levels_anelastic, bool fixed_dt, i
                                      int anchor_level, bool fpe_traps)
 {
     if (!all_levels_anelastic) {
-        return "erf.moving_bodies: this version supports the anelastic solver only; set erf.anelastic = 1";
+        return "erf.moving_bodies: this version supports the anelastic solver only; set erf.compressibility_type = Anelastic (or PseudoIncompressible) on every level";
     }
     if (!fixed_dt) {
         return "erf.moving_bodies: OpenFAST needs a fixed time step; set erf.fixed_dt to a whole multiple of the OpenFAST dt";

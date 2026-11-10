@@ -122,6 +122,8 @@ option(ERF_ENABLE_DOCUMENTATION "Build documentation" OFF)
 option(ERF_ENABLE_ALL_WARNINGS "Enable all compiler warnings" OFF)
 option(ERF_ENABLE_TESTS "Enable regression and unit tests" OFF)
 option(ERF_ENABLE_REGRESSION_TESTS_ONLY "Enable only regression tests" OFF)
+option(ERF_ENABLE_SBM_AMR_QUALIFICATION
+  "Build an isolated internal executable for fixed two-level periodic SBM qualification" OFF)
 set(_erf_enable_unit_tests_default OFF)
 if(ERF_ENABLE_TESTS AND NOT ERF_ENABLE_REGRESSION_TESTS_ONLY)
   set(_erf_enable_unit_tests_default ON)
@@ -193,12 +195,13 @@ option(ERF_ENABLE_NOAHMP "Enable Noah-MP" OFF)
 
 #Other parameterizations
 option(ERF_ENABLE_WINDFARM "Enable wind farm parameterizations" OFF)
-option(ERF_ENABLE_MOVING_BODIES "Enable the moving-bodies actuator framework (erf.moving_bodies.*)" OFF)
+option(ERF_ENABLE_MOVING_BODIES "Enable the moving-bodies framework (erf.moving_bodies.*), the actuator core and the structure coupling (Source/MovingBodies)" OFF)
 option(ERF_ENABLE_OPENFAST "Enable the OpenFAST turbine coupling (implies ERF_ENABLE_MOVING_BODIES)" OFF)
 option(ERF_OPENFAST_USE_STUB "Build the OpenFAST coupling against the bundled stub library instead of OpenFAST (for testing)" OFF)
 
 option(ERF_ENABLE_FIRE "Enable the fire coupling (the atmosphere side; fire engines plug into it)" OFF)
 set(ERF_FIRE_ENGINE_DIRS "" CACHE STRING "Fire engine directories (each with ERFFireEngine.cmake) to compile in; needs ERF_ENABLE_FIRE")
+set(ERF_STRUCTURE_MODEL_DIRS "" CACHE STRING "Structure model directories (each with ERFStructureModel.cmake) to compile in; needs ERF_ENABLE_MOVING_BODIES")
 option(ERF_ENABLE_WSM6_FORT "Enable WSM6 Fortran bridge calls" OFF)
 option(ERF_ENABLE_WDM6_FORT "Enable WDM6 Fortran bridge calls" OFF)
 

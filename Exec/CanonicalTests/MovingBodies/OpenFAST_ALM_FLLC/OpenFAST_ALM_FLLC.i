@@ -19,9 +19,9 @@ xhi.type     = "Outflow"
 zlo.type = "SlipWall"
 zhi.type = "SlipWall"
 
-erf.anelastic = 1
+erf.compressibility_type = Anelastic
 erf.vert_implicit = true
-erf.anelastic_type = MidPoint   # RK2 ignores the implicit vertical solve; MidPoint honours it
+erf.timestepping_type = MidPoint   # honours the implicit vertical solve (RK2 does not)
 erf.use_fft   = true
 erf.molec_diff_type = "None"
 erf.les_type        = "None"

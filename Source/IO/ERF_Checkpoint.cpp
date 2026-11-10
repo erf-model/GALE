@@ -425,7 +425,7 @@ ERF::WriteCheckpointFile () const
         MultiFab::Copy(zvel,vars_new[lev][Vars::zvel],0,0,1,0);
         VisMF::Write(zvel, MultiFabFileFullPrefix(lev, checkpointname, "Level_", "ZFace"));
 
-        if (solverChoice.anelastic[lev] == 1) {
+        if (solverChoice.compressibility_type[lev] != CompressibilityType::FullyCompressible) {
             MultiFab ppinc(grids[lev],dmap[lev],1,0);
             MultiFab::Copy(ppinc,pp_inc[lev],0,0,1,0);
             VisMF::Write(ppinc, MultiFabFileFullPrefix(lev, checkpointname, "Level_", "PP_Inc"));
@@ -808,6 +808,13 @@ ERF::WriteCheckpointFile () const
     // coupling's lagged fluxes, on the level the fire grid refines
     if (m_fire_coupler) {
         m_fire_coupler->write_checkpoint(checkpointname);
+    }
+#endif
+
+#ifdef ERF_USE_MOVING_BODIES
+    // The structure model's own state, under checkpointname/<model name>
+    if (m_structure_model) {
+        m_structure_model->write_checkpoint(checkpointname);
     }
 #endif
 
@@ -1530,7 +1537,7 @@ ERF::ReadCheckpointFile ()
         vars_new[lev][Vars::zvel].ParallelCopy(zvel,0,0,1,IntVect(0),IntVect(0));
         vars_new[lev][Vars::zvel].setBndry(bogus_large_value);
 
-        if (solverChoice.anelastic[lev] == 1) {
+        if (solverChoice.compressibility_type[lev] != CompressibilityType::FullyCompressible) {
             MultiFab ppinc(ba_chkfile[lev],dm_chkfile[lev],1,0);
             VisMF::Read(ppinc, MultiFabFileFullPrefix(lev, restart_chkfile, "Level_", "PP_Inc"));
             pp_inc[lev].ParallelCopy(ppinc,0,0,1,IntVect(0),IntVect(0));
@@ -2277,7 +2284,7 @@ ERF::ReadCheckpointFile ()
             bdy_data_yhi.resize(ntimes_erfbdy);
 
             // Determine which times we need based on current simulation time.
-            double time_since_start_bdy = t_new[0] + start_time - start_bdy_time;
+            double time_since_start_bdy = t_new[0] + (start_time - start_bdy_time);
             int n_time_old = std::min(static_cast<int>(time_since_start_bdy / bdy_time_interval), ntimes_erfbdy-1);
             int n_time_new = n_time_old + 1;
 

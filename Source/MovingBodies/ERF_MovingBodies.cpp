@@ -71,8 +71,10 @@ MovingBodies::create (const SolverChoice& sc, int max_level, const Vector<double
     if (!in.active) { return nullptr; }
 
     bool all_anelastic = true;
-    for (int lev = 0; lev <= max_level && lev < static_cast<int>(sc.anelastic.size()); ++lev) {
-        all_anelastic = all_anelastic && (sc.anelastic[lev] != 0);
+    // every level steps without acoustic substeps: Anelastic, or PseudoIncompressible, which
+    // takes the anelastic path (erf.compressibility_type, erf-model/ERF#4996)
+    for (int lev = 0; lev <= max_level && lev < static_cast<int>(sc.compressibility_type.size()); ++lev) {
+        all_anelastic = all_anelastic && (sc.compressibility_type[lev] != CompressibilityType::FullyCompressible);
     }
 
     // the step and stop time live in ERF's own inputs; kept in double, as ERF keeps them, so a

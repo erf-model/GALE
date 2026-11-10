@@ -1227,3 +1227,54 @@ TEST(ActuatorSampling, TheHeightTableHoldsEveryCellAHeightMayLieIn)
     zb.k_range(m.H + Real(10.0), m.H + Real(50.0), klo, khi, kb, kt);
     EXPECT_GT(kb, kt);
 }
+
+// from erf-model/ERF#5002: a cell-centred scalar over terrain, and the collective point-count check
+TEST(ActuatorSampling, CellScalarIsExactForALinearFieldOverTerrain)
+{
+    MeshSpec m;
+    m.hill = 60.0;
+    Fields f(m, false);
+    const std::array<Real,4> c{{ 300.0, 0.004, -0.003, 0.0098 }};
+    amrex::MultiFab s(f.ba, f.dm, 2, 2);
+    for (amrex::MFIter mfi(s, false); mfi.isValid(); ++mfi) {
+        auto a = s.array(mfi);
+        amrex::LoopOnCpu(amrex::grow(mfi.validbox(), 2), [&](int i, int j, int k) {
+            const Real x = (i + 0.5) * m.dx(), y = (j + 0.5) * m.dy();
+            Real z = 0.0;
+            for (int dk = 0; dk < 2; ++dk) { for (int dj = 0; dj < 2; ++dj) { for (int di = 0; di < 2; ++di) {
+                z += 0.125 * m.z_node(i + di, j + dj, k + dk);
+            } } }
+            a(i,j,k,0) = -7.0;                               // another component, never read
+            a(i,j,k,1) = LinearField::eval(c, x, y, z);
+        });
+    }
+    std::vector<Real> pos = test_points(m);
+    pos.push_back(0.3 * m.Lx); pos.push_back(0.7 * m.Ly); pos.push_back(0.9995 * m.H);   // above the last centre
+    std::vector<Real> val;
+    erf_actuator::sample_cell_scalar(s, 1, f.znd.get(), f.geom, pos, val);
+    ASSERT_EQ(val.size(), pos.size() / 3);
+    for (std::size_t p = 0; p < val.size(); ++p) {
+        const Real e = LinearField::eval(c, pos[3*p], pos[3*p+1], pos[3*p+2]);
+        EXPECT_NEAR(val[p], e, tol * std::max(Real(1.0), std::abs(e))) << "point " << p;
+    }
+}
+
+TEST(ActuatorSampling, EveryRankMustPassTheSamePoints)
+{
+    MeshSpec m;
+    Fields f(m, true);
+    std::vector<Real> pos = test_points(m);
+    std::vector<Real> vel;
+    erf_gtest::ThrowOnAbort guard;
+    if (amrex::ParallelDescriptor::NProcs() == 1) {
+        EXPECT_NO_THROW(erf_actuator::sample_velocity(f.u, f.v, f.w, f.znd.get(), f.geom, pos, vel));
+        return;
+    }
+    if (amrex::ParallelDescriptor::MyProc() != 0) { pos.resize(pos.size() - 3); }
+    try {
+        erf_actuator::sample_velocity(f.u, f.v, f.w, f.znd.get(), f.geom, pos, vel);
+        ADD_FAILURE() << "a rank-dependent point list was accepted";
+    } catch (const std::runtime_error& e) {
+        EXPECT_NE(std::string(e.what()).find("ranks disagree on the number of points"), std::string::npos) << e.what();
+    }
+}

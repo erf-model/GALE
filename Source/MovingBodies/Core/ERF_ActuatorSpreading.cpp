@@ -629,6 +629,7 @@ add_spread_forces (const std::vector<Real>& pos, const std::vector<Real>& force,
     check_spread_points(pos, force, epsilon);
     check_spread_layout(z_phys_nd, detJ_cc, src_x, src_y, src_z);
     const int npts = static_cast<int>(pos.size() / 3);
+    check_same_points_everywhere(npts, "spread_forces");
     if (npts == 0) { return; }
 
     // pass 1: S_p, this rank's part, summed across ranks (this rank's bounds of a fitted mesh, once for both passes)

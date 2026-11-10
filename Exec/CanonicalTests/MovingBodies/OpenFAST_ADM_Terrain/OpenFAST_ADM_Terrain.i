@@ -27,9 +27,9 @@ prob.dir                 = 0
 prob.hmax                = 100.0
 prob.L                   = 400.0
 
-erf.anelastic = 1
+erf.compressibility_type = Anelastic
 erf.vert_implicit = true
-erf.anelastic_type = MidPoint   # RK2 ignores the implicit vertical solve; MidPoint honours it
+erf.timestepping_type = MidPoint   # honours the implicit vertical solve (RK2 does not)
 erf.use_fft   = true
 erf.molec_diff_type = "None"
 erf.les_type        = "None"

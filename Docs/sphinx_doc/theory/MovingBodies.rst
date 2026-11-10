@@ -566,6 +566,7 @@ thrust is computed with one density and put into a flow of another.
 Wake diagnostics
 ----------------
 
+The lines are the actuator core's ``WakeLines`` (:ref:`sec:ActuatorCore`).
 ``erf.moving_bodies.wake.lines_xD`` puts sampling lines behind every rotor:
 at each listed distance in rotor diameters along the horizontal projection
 of the rotor axis through the hub (the shaft axis of an OpenFAST turbine,
@@ -854,7 +855,8 @@ where the ring's force breaks into separate blobs.
 Solver requirements
 -------------------
 
-This version supports the anelastic solver only, with a fixed time step, on
+This version supports the anelastic solver only (``erf.compressibility_type =
+Anelastic``, or ``PseudoIncompressible``, on every level), with a fixed time step, on
 one anchor level of a possibly refined grid, and with an OpenFAST turbine the
 AMReX floating-point traps must be off: OpenFAST raises exceptions of its own,
 and a trapped run dies inside the library. The requirements are checked at start-up; the actuator line's tip

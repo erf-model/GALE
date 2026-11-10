@@ -72,6 +72,13 @@ struct adiabatic
         q_star_arr(i,j,k) = zero;
     }
 
+    /**
+     * Take the similarity functions of the surface layer (most.stable_functions).
+     *
+     * @param[in] sf similarity functions
+     */
+    void set_similarity_funs (const similarity_funs& sf) { sfuns = sf; }
+
 private:
     most_data mdata;
     similarity_funs sfuns;
@@ -166,7 +173,7 @@ struct adiabatic_charnock
 
             ++iter_z;
         } while ( (std::abs(z0 - z0_old) > tol_z) && (iter_z <= max_iters) );
-        AMREX_ALWAYS_ASSERT_WITH_MESSAGE(iter_z < max_iters,
+        AMREX_ALWAYS_ASSERT_WITH_MESSAGE(std::abs(z0 - z0_old) <= tol_z,
                                          "Maximum number of MOST roughness iterations reached.");
         C = std::log(zref / z0);
 
@@ -177,6 +184,13 @@ struct adiabatic_charnock
         t_star_arr(i,j,k) = zero;
         q_star_arr(i,j,k) = zero;
     }
+
+    /**
+     * Take the similarity functions of the surface layer (most.stable_functions).
+     *
+     * @param[in] sf similarity functions
+     */
+    void set_similarity_funs (const similarity_funs& sf) { sfuns = sf; }
 
 private:
     most_data mdata;
@@ -268,7 +282,7 @@ struct adiabatic_mod_charnock
             z0    = Mod_Charnock_roughness(ustar, mdata.Cnk_b);
             ++iter_z;
         } while ( (std::abs(z0 - z0_old) > tol_z) && (iter_z <= max_iters) );
-        AMREX_ALWAYS_ASSERT_WITH_MESSAGE(iter_z < max_iters,
+        AMREX_ALWAYS_ASSERT_WITH_MESSAGE(std::abs(z0 - z0_old) <= tol_z,
                                          "Maximum number of MOST roughness iterations reached.");
         C = std::log(zref / z0);
 
@@ -279,6 +293,13 @@ struct adiabatic_mod_charnock
         t_star_arr(i,j,k) = zero;
         q_star_arr(i,j,k) = zero;
     }
+
+    /**
+     * Take the similarity functions of the surface layer (most.stable_functions).
+     *
+     * @param[in] sf similarity functions
+     */
+    void set_similarity_funs (const similarity_funs& sf) { sfuns = sf; }
 
 private:
     most_data mdata;
@@ -367,7 +388,7 @@ struct adiabatic_donelan
             z0    = Donelan_roughness(ustar, air_viscosity(tm_arr(i,j,k)), mdata.visc);
             ++iter_z;
         } while ( (std::abs(z0 - z0_old) > tol_z) && (iter_z <= max_iters) );
-        AMREX_ALWAYS_ASSERT_WITH_MESSAGE(iter_z < max_iters,
+        AMREX_ALWAYS_ASSERT_WITH_MESSAGE(std::abs(z0 - z0_old) <= tol_z,
                                          "Maximum number of MOST roughness iterations reached.");
         C = std::log(zref / z0);
 
@@ -378,6 +399,13 @@ struct adiabatic_donelan
         t_star_arr(i,j,k) = zero;
         q_star_arr(i,j,k) = zero;
     }
+
+    /**
+     * Take the similarity functions of the surface layer (most.stable_functions).
+     *
+     * @param[in] sf similarity functions
+     */
+    void set_similarity_funs (const similarity_funs& sf) { sfuns = sf; }
 
 private:
     most_data mdata;
@@ -467,7 +495,7 @@ struct adiabatic_wave_coupled
                                           air_viscosity(tm_arr(i,j,k)), mdata.visc);
             ++iter_z;
         } while ( (std::abs(z0 - z0_old) > tol_z) && (iter_z <= max_iters) );
-        AMREX_ALWAYS_ASSERT_WITH_MESSAGE(iter_z < max_iters,
+        AMREX_ALWAYS_ASSERT_WITH_MESSAGE(std::abs(z0 - z0_old) <= tol_z,
                                          "Maximum number of MOST roughness iterations reached.");
         C = std::log(zref / z0);
 
@@ -478,6 +506,13 @@ struct adiabatic_wave_coupled
         t_star_arr(i,j,k) = zero;
         q_star_arr(i,j,k) = zero;
     }
+
+    /**
+     * Take the similarity functions of the surface layer (most.stable_functions).
+     *
+     * @param[in] sf similarity functions
+     */
+    void set_similarity_funs (const similarity_funs& sf) { sfuns = sf; }
 
 private:
     most_data mdata;
@@ -603,7 +638,8 @@ struct surface_flux
             u_star_arr(i,j,k) = accel.update(u_star_arr(i,j,k), iter);
         } while ((accel.extrapolated || std::abs(u_star_arr(i,j,k) - ustar) > tol) &&
                  iter <= max_iters);
-        AMREX_ALWAYS_ASSERT_WITH_MESSAGE(iter <= max_iters,
+        AMREX_ALWAYS_ASSERT_WITH_MESSAGE(!accel.extrapolated &&
+                                         std::abs(u_star_arr(i,j,k) - ustar) <= tol,
                                          "Maximum number of MOST iterations reached.");
 
         // Populate the stored MOST arrays; below the fold, apply the flux the wind can carry
@@ -612,6 +648,13 @@ struct surface_flux
                           t_surf_arr(i,j,k), t_star_arr(i,j,k), q_surf_arr(i,j,k), q_star_arr(i,j,k));
         olen_arr(i,j,k)   = Olen;
     }
+
+    /**
+     * Take the similarity functions of the surface layer (most.stable_functions).
+     *
+     * @param[in] sf similarity functions
+     */
+    void set_similarity_funs (const similarity_funs& sf) { sfuns = sf; }
 
 private:
     most_data mdata;
@@ -746,7 +789,8 @@ struct surface_flux_charnock
             u_star_arr(i,j,k) = accel.update(u_star_arr(i,j,k), iter);
         } while ((accel.extrapolated || std::abs(u_star_arr(i,j,k) - ustar) > tol) &&
                  iter <= max_iters);
-        AMREX_ALWAYS_ASSERT_WITH_MESSAGE(iter <= max_iters,
+        AMREX_ALWAYS_ASSERT_WITH_MESSAGE(!accel.extrapolated &&
+                                         std::abs(u_star_arr(i,j,k) - ustar) <= tol,
                                          "Maximum number of MOST iterations reached.");
 
         // Populate the stored MOST arrays; below the fold, apply the flux the wind can carry
@@ -756,6 +800,13 @@ struct surface_flux_charnock
                           t_surf_arr(i,j,k), t_star_arr(i,j,k), q_surf_arr(i,j,k), q_star_arr(i,j,k));
         olen_arr(i,j,k)   = Olen;
     }
+
+    /**
+     * Take the similarity functions of the surface layer (most.stable_functions).
+     *
+     * @param[in] sf similarity functions
+     */
+    void set_similarity_funs (const similarity_funs& sf) { sfuns = sf; }
 
 private:
     most_data mdata;
@@ -881,7 +932,8 @@ struct surface_flux_mod_charnock
             u_star_arr(i,j,k) = accel.update(u_star_arr(i,j,k), iter);
         } while ((accel.extrapolated || std::abs(u_star_arr(i,j,k) - ustar) > tol) &&
                  iter <= max_iters);
-        AMREX_ALWAYS_ASSERT_WITH_MESSAGE(iter <= max_iters,
+        AMREX_ALWAYS_ASSERT_WITH_MESSAGE(!accel.extrapolated &&
+                                         std::abs(u_star_arr(i,j,k) - ustar) <= tol,
                                          "Maximum number of MOST iterations reached.");
 
         // Populate the stored MOST arrays; below the fold, apply the flux the wind can carry
@@ -891,6 +943,13 @@ struct surface_flux_mod_charnock
                           t_surf_arr(i,j,k), t_star_arr(i,j,k), q_surf_arr(i,j,k), q_star_arr(i,j,k));
         olen_arr(i,j,k)   = Olen;
     }
+
+    /**
+     * Take the similarity functions of the surface layer (most.stable_functions).
+     *
+     * @param[in] sf similarity functions
+     */
+    void set_similarity_funs (const similarity_funs& sf) { sfuns = sf; }
 
 private:
     most_data mdata;
@@ -1013,7 +1072,8 @@ struct surface_flux_donelan
             u_star_arr(i,j,k) = accel.update(u_star_arr(i,j,k), iter);
         } while ((accel.extrapolated || std::abs(u_star_arr(i,j,k) - ustar) > tol) &&
                  iter <= max_iters);
-        AMREX_ALWAYS_ASSERT_WITH_MESSAGE(iter <= max_iters,
+        AMREX_ALWAYS_ASSERT_WITH_MESSAGE(!accel.extrapolated &&
+                                         std::abs(u_star_arr(i,j,k) - ustar) <= tol,
                                          "Maximum number of MOST iterations reached.");
 
         // Populate the stored MOST arrays; below the fold, apply the flux the wind can carry
@@ -1023,6 +1083,13 @@ struct surface_flux_donelan
                           t_surf_arr(i,j,k), t_star_arr(i,j,k), q_surf_arr(i,j,k), q_star_arr(i,j,k));
         olen_arr(i,j,k)   = Olen;
     }
+
+    /**
+     * Take the similarity functions of the surface layer (most.stable_functions).
+     *
+     * @param[in] sf similarity functions
+     */
+    void set_similarity_funs (const similarity_funs& sf) { sfuns = sf; }
 
 private:
     most_data mdata;
@@ -1146,7 +1213,8 @@ struct surface_flux_wave_coupled
             u_star_arr(i,j,k) = accel.update(u_star_arr(i,j,k), iter);
         } while ((accel.extrapolated || std::abs(u_star_arr(i,j,k) - ustar) > tol) &&
                  iter <= max_iters);
-        AMREX_ALWAYS_ASSERT_WITH_MESSAGE(iter <= max_iters,
+        AMREX_ALWAYS_ASSERT_WITH_MESSAGE(!accel.extrapolated &&
+                                         std::abs(u_star_arr(i,j,k) - ustar) <= tol,
                                          "Maximum number of MOST iterations reached.");
 
         // Populate the stored MOST arrays; below the fold, apply the flux the wind can carry
@@ -1156,6 +1224,13 @@ struct surface_flux_wave_coupled
                           t_surf_arr(i,j,k), t_star_arr(i,j,k), q_surf_arr(i,j,k), q_star_arr(i,j,k));
         olen_arr(i,j,k)   = Olen;
     }
+
+    /**
+     * Take the similarity functions of the surface layer (most.stable_functions).
+     *
+     * @param[in] sf similarity functions
+     */
+    void set_similarity_funs (const similarity_funs& sf) { sfuns = sf; }
 
 private:
     most_data mdata;
@@ -1348,6 +1423,13 @@ struct surface_temp
         }
     }
 
+    /**
+     * Take the similarity functions of the surface layer (most.stable_functions).
+     *
+     * @param[in] sf similarity functions
+     */
+    void set_similarity_funs (const similarity_funs& sf) { sfuns = sf; }
+
 private:
     most_data mdata;
     bool spec_qflux{false};
@@ -1508,7 +1590,7 @@ struct surface_temp_charnock
 
                 ++iter_z;
             } while ( (std::abs(z0 - z0_old) > tol_z) && (iter_z <= max_iters) );
-            AMREX_ALWAYS_ASSERT_WITH_MESSAGE(iter_z < max_iters,
+            AMREX_ALWAYS_ASSERT_WITH_MESSAGE(std::abs(z0 - z0_old) <= tol_z,
                                              "Maximum number of MOST roughness iterations reached.");
             C = std::log(zref / z0);
 
@@ -1521,7 +1603,7 @@ struct surface_temp_charnock
 
             ++iter;
         } while ( (std::abs(zeta - zeta_old) > tol) && (iter <= max_iters) );
-        AMREX_ALWAYS_ASSERT_WITH_MESSAGE(iter <= max_iters,
+        AMREX_ALWAYS_ASSERT_WITH_MESSAGE(std::abs(zeta - zeta_old) <= tol,
                                          "Maximum number of MOST iterations reached.");
 
         // Populate the stored MOST arrays
@@ -1537,6 +1619,13 @@ struct surface_temp_charnock
             q_star_arr(i,j,k) = mdata.kappa * (qvm_arr(i,j,k) - q_surf_arr(i,j,k)) / CmPsih;
         }
     }
+
+    /**
+     * Take the similarity functions of the surface layer (most.stable_functions).
+     *
+     * @param[in] sf similarity functions
+     */
+    void set_similarity_funs (const similarity_funs& sf) { sfuns = sf; }
 
 private:
     most_data mdata;
@@ -1692,7 +1781,7 @@ struct surface_temp_mod_charnock
 
                 ++iter_z;
             } while ( (std::abs(z0 - z0_old) > tol_z) && (iter_z <= max_iters) );
-            AMREX_ALWAYS_ASSERT_WITH_MESSAGE(iter_z < max_iters,
+            AMREX_ALWAYS_ASSERT_WITH_MESSAGE(std::abs(z0 - z0_old) <= tol_z,
                                              "Maximum number of MOST roughness iterations reached.");
             C = std::log(zref / z0);
 
@@ -1705,7 +1794,7 @@ struct surface_temp_mod_charnock
 
             ++iter;
         } while ( (std::abs(zeta - zeta_old) > tol) && (iter <= max_iters) );
-        AMREX_ALWAYS_ASSERT_WITH_MESSAGE(iter <= max_iters,
+        AMREX_ALWAYS_ASSERT_WITH_MESSAGE(std::abs(zeta - zeta_old) <= tol,
                                          "Maximum number of MOST iterations reached.");
 
         // Populate the stored MOST arrays
@@ -1721,6 +1810,13 @@ struct surface_temp_mod_charnock
             q_star_arr(i,j,k) = mdata.kappa * (qvm_arr(i,j,k) - q_surf_arr(i,j,k)) / CmPsih;
         }
     }
+
+    /**
+     * Take the similarity functions of the surface layer (most.stable_functions).
+     *
+     * @param[in] sf similarity functions
+     */
+    void set_similarity_funs (const similarity_funs& sf) { sfuns = sf; }
 
 private:
     most_data mdata;
@@ -1873,7 +1969,7 @@ struct surface_temp_donelan
 
                 ++iter_z;
             } while ( (std::abs(z0 - z0_old) > tol_z) && (iter_z <= max_iters) );
-            AMREX_ALWAYS_ASSERT_WITH_MESSAGE(iter_z < max_iters,
+            AMREX_ALWAYS_ASSERT_WITH_MESSAGE(std::abs(z0 - z0_old) <= tol_z,
                                              "Maximum number of MOST roughness iterations reached.");
             C = std::log(zref / z0);
 
@@ -1886,7 +1982,7 @@ struct surface_temp_donelan
 
             ++iter;
         } while ( (std::abs(zeta - zeta_old) > tol) && (iter <= max_iters) );
-        AMREX_ALWAYS_ASSERT_WITH_MESSAGE(iter <= max_iters,
+        AMREX_ALWAYS_ASSERT_WITH_MESSAGE(std::abs(zeta - zeta_old) <= tol,
                                          "Maximum number of MOST iterations reached.");
 
         // Populate the stored MOST arrays
@@ -1902,6 +1998,13 @@ struct surface_temp_donelan
             q_star_arr(i,j,k) = mdata.kappa * (qvm_arr(i,j,k) - q_surf_arr(i,j,k)) / CmPsih;
         }
     }
+
+    /**
+     * Take the similarity functions of the surface layer (most.stable_functions).
+     *
+     * @param[in] sf similarity functions
+     */
+    void set_similarity_funs (const similarity_funs& sf) { sfuns = sf; }
 
 private:
     most_data mdata;
@@ -2055,7 +2158,7 @@ struct surface_temp_wave_coupled
 
                 ++iter_z;
             } while ( (std::abs(z0 - z0_old) > tol_z) && (iter_z <= max_iters) );
-            AMREX_ALWAYS_ASSERT_WITH_MESSAGE(iter_z < max_iters,
+            AMREX_ALWAYS_ASSERT_WITH_MESSAGE(std::abs(z0 - z0_old) <= tol_z,
                                              "Maximum number of MOST roughness iterations reached.");
             C = std::log(zref / z0);
 
@@ -2068,7 +2171,7 @@ struct surface_temp_wave_coupled
 
             ++iter;
         } while ( (std::abs(zeta - zeta_old) > tol) && (iter <= max_iters) );
-        AMREX_ALWAYS_ASSERT_WITH_MESSAGE(iter <= max_iters,
+        AMREX_ALWAYS_ASSERT_WITH_MESSAGE(std::abs(zeta - zeta_old) <= tol,
                                          "Maximum number of MOST iterations reached.");
 
         // Populate the stored MOST arrays
@@ -2084,6 +2187,13 @@ struct surface_temp_wave_coupled
             q_star_arr(i,j,k) = mdata.kappa * (qvm_arr(i,j,k) - q_surf_arr(i,j,k)) / CmPsih;
         }
     }
+
+    /**
+     * Take the similarity functions of the surface layer (most.stable_functions).
+     *
+     * @param[in] sf similarity functions
+     */
+    void set_similarity_funs (const similarity_funs& sf) { sfuns = sf; }
 
 private:
     most_data mdata;
@@ -2538,8 +2648,8 @@ struct custom_flux
         amrex::Real ustar   = myhalf * ( u_star_arr(i-1,j,0) + u_star_arr(i,j,0) );
         amrex::Real wsp     = std::sqrt(velx*velx+vely*vely);
 
-        // NOTE: this is rho*<u'w'> = -K dudz
-        amrex::Real stressx = -rho * ustar * ustar * velx / wsp;
+        // NOTE: this is rho*<u'w'> = -K dudz; still air has no stress direction, so no stress
+        amrex::Real stressx = (wsp > zero) ? -rho * ustar * ustar * velx / wsp : zero;
 
         return stressx;
     }
@@ -2576,8 +2686,8 @@ struct custom_flux
         amrex::Real ustar   = myhalf * ( u_star_arr(i,j-1,0) + u_star_arr(i,j,0) );
         amrex::Real wsp     = std::sqrt(velx*velx+vely*vely);
 
-        // NOTE: this is rho*<v'w'> = -K dvdz
-        amrex::Real stressy = -rho * ustar * ustar * vely / wsp;
+        // NOTE: this is rho*<v'w'> = -K dvdz; still air has no stress direction, so no stress
+        amrex::Real stressy = (wsp > zero) ? -rho * ustar * ustar * vely / wsp : zero;
 
         return stressy;
     }

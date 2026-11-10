@@ -259,3 +259,30 @@ TEST(WakeLines, AMalformedCheckpointOrInputIsRefusedNamingIt)
     EXPECT_NE(msg.find("point 1 (0-based)"), std::string::npos) << msg;
     EXPECT_EQ(a.num_samples(), 1) << "a refused sample is not counted";
 }
+
+// from erf-model/ERF#5002
+TEST(WakeLines, EachVerticalLineIsClippedAtItsOwnGround)
+{
+    // terrain rising downstream: 100 m under the 2 D line, 200 m under the 4 D line; each vertical
+    // line starts at its own ground, the lateral lines are untouched, and a hub-height ground
+    // (the scalar form) would have put the 4 D line's lowest points inside the hill
+    const std::array<Real,3> hub{{500.0, 500.0, 250.0}};
+    const std::array<Real,3> axis{{1.0, 0.0, 0.0}};
+    const int npts = 7;
+    WakeLines w("T1", "out/T1", hub, axis, 240.0, {2.0, 4.0}, 1.5, npts, std::vector<Real>{100.0, 200.0});
+    const auto& pos = w.positions();
+    ASSERT_EQ(pos.size(), std::size_t(3 * 4 * npts));
+    EXPECT_NEAR(pos[3*npts + 2], 100.0, tol() * 240.0);                           // 2 D vertical start
+    EXPECT_NEAR(pos[3*(3*npts) + 2], 200.0, tol() * 240.0);                       // 4 D vertical start
+    EXPECT_NEAR(pos[3*(2*npts) + 1], 500.0 - 1.5 * 240.0, tol() * 240.0);         // 4 D lateral start, full span
+    EXPECT_NEAR(pos[3*(4*npts-1) + 2], 250.0 + 1.5 * 240.0, tol() * 240.0);       // 4 D vertical end
+    for (int i = 0; i < 4 * npts; ++i) {
+        const Real ground = (i < 2 * npts) ? Real(100.0) : Real(200.0);
+        if ((i / npts) % 2 == 1) { EXPECT_GE(pos[3*i + 2], ground - tol()) << "point " << i << " below its ground"; }
+    }
+    WakeLines s("T1", "out/T1", hub, axis, 240.0, {2.0, 4.0}, 1.5, npts, Real(100.0));
+    EXPECT_NEAR(s.positions()[3*(3*npts) + 2], 100.0, tol() * 240.0);             // the scalar form: the hub's ground
+    erf_gtest::ThrowOnAbort guard;                                                           // one ground per distance
+    EXPECT_THROW(WakeLines("T1", "out/T1", hub, axis, 240.0, {2.0, 4.0}, 1.5, npts, std::vector<Real>{100.0}),
+                 std::runtime_error);
+}

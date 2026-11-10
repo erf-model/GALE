@@ -28,11 +28,14 @@ WakeLines::WakeLines (std::string name, std::string output_root,
       m_hub(hub), m_axis(axis), m_diameter(diameter), m_xD(lines_xD),
       m_half_width(half_width), m_npts(num_points)
 {
-    AMREX_ALWAYS_ASSERT_WITH_MESSAGE(m_diameter > 0.0, "WakeLines: the rotor diameter must be positive");
-    AMREX_ALWAYS_ASSERT_WITH_MESSAGE(m_npts >= 2, "WakeLines: at least two points per line");
-    AMREX_ALWAYS_ASSERT_WITH_MESSAGE(m_half_width > 0.0, "WakeLines: half_width must be positive");
+    if (!(m_diameter > 0.0)) { Abort("WakeLines " + m_name + ": the diameter " + std::to_string(m_diameter) + " m must be positive"); }
+    if (m_npts < 2) { Abort("WakeLines " + m_name + ": num_points = " + std::to_string(m_npts) + "; at least two points per line"); }
+    if (!(m_half_width > 0.0)) { Abort("WakeLines " + m_name + ": half_width = " + std::to_string(m_half_width) + " diameters must be positive"); }
     if (m_xD.empty()) { Abort("WakeLines " + m_name + ": no downstream distances (x/D) are given"); }
-    if (z_min.size() != m_xD.size()) { Abort("WakeLines " + m_name + ": one ground height per downstream distance is needed"); }
+    if (z_min.size() != m_xD.size()) {
+        Abort("WakeLines " + m_name + ": " + std::to_string(z_min.size()) + " ground heights for " +
+              std::to_string(m_xD.size()) + " downstream distances; one per distance");
+    }
     for (const Real z : z_min) {
         if (!std::isfinite(z)) { Abort("WakeLines " + m_name + ": the ground height z_min must be finite (m)"); }
     }
@@ -40,7 +43,10 @@ WakeLines::WakeLines (std::string name, std::string output_root,
     // tilt of a few degrees would otherwise put the far lines into the ground or the sky
     m_axis[2] = 0.0;
     const Real la = std::sqrt(m_axis[0]*m_axis[0] + m_axis[1]*m_axis[1]);
-    AMREX_ALWAYS_ASSERT_WITH_MESSAGE(la > 1.0e-6, "WakeLines: the rotor axis must not be vertical");
+    if (!(la > 1.0e-6)) {
+        Abort("WakeLines " + m_name + ": the axis (" + std::to_string(axis[0]) + ", " + std::to_string(axis[1]) + ", " +
+              std::to_string(axis[2]) + ") must not be vertical");
+    }
     for (auto& a : m_axis) { a /= la; }
     // the lateral direction: horizontal and normal to the downstream direction
     m_lateral = {{-m_axis[1], m_axis[0], 0.0}};
@@ -79,7 +85,7 @@ WakeLines::accumulate (const std::vector<Real>& vel)
             Abort("WakeLines " + m_name + ": the sampled velocity at point " + std::to_string(i / 3) + " (0-based) is not finite");
         }
     }
-    for (std::size_t i = 0; i < vel.size(); ++i) { m_sum[i] += vel[i]; }
+    for (std::size_t i = 0; i < vel.size(); ++i) { m_sum[i] += static_cast<double>(vel[i]); }
     ++m_count;
 }
 
@@ -178,7 +184,10 @@ WakeLines::read_state (const std::string& dir, std::string* error)
         *error = msg;
         return false;
     };
-    if (!FileExists(fname)) { return false; }
+    if (!FileExists(fname)) {
+        AllPrint() << "WakeLines " << m_name << ": no " << fname << " in the checkpoint; the wake average starts afresh\n";
+        return false;
+    }
     std::ifstream in(fname);
     if (!in) { return fail("cannot read the wake-average checkpoint '" + fname + "' on rank " +
                            std::to_string(ParallelDescriptor::MyProc()) + ", the rotor's owner"); }
