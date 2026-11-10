@@ -412,3 +412,90 @@ TEST(MovingBodiesInputs, TheAdmSpreadingDefaultsToRingsAndIsInTheRestartRecord)
     EXPECT_TRUE(MovingBodiesInputs::changed_record_entry(chk, MovingBodiesInputs::restart_record(b), key, was, now));
     EXPECT_EQ(key, "adm_spreading"); EXPECT_EQ(was, "merged_rings"); EXPECT_EQ(now, "rings");
 }
+
+TEST(MovingBodiesInputs, FllcAutomaticSetsTheStudySettingsAndLeavesEpsilonToTheRotor)
+{
+    static int run = 0;
+    const std::string name = "Tauto" + std::to_string(++run);
+    set_turbine(name, "alm", "");
+    { amrex::ParmParse pb("erf.moving_bodies." + name); pb.add("fllc", std::string("automatic")); pb.add("fllc_relax", 0.3); }
+    const MovingBodiesInputs in = MovingBodiesInputs::read();
+    const MovingBodyInputs& b = only_body(in);
+    EXPECT_TRUE(b.fllc);
+    EXPECT_TRUE(b.fllc_automatic);
+    EXPECT_DOUBLE_EQ(b.epsilon_diameters, 0.035);
+    EXPECT_DOUBLE_EQ(b.fllc_eps_chord, 0.15);
+    EXPECT_DOUBLE_EQ(b.fllc_eps_dr, 3.0);
+    EXPECT_DOUBLE_EQ(b.fllc_start_time, 5.0);
+    EXPECT_EQ(b.num_force_points_blade, 300);
+    EXPECT_DOUBLE_EQ(b.fllc_relax, 0.3);   // a key automatic does not set stays the user's
+    // epsilon waits for the rotor: a width asked for before then aborts, naming the body
+    EXPECT_LT(b.epsilon, 0.0);
+    EXPECT_NE(erf_gtest::abort_message([&] { (void)b.kernel_widths(1.0); }).find(name), std::string::npos);
+    // true and false still read as before, in any case
+    for (const auto& [value, on] : std::vector<std::pair<std::string,bool>>{{"TRUE", true}, {"0", false}, {"False", false}, {"T", true}, {"f", false}, {"1.0", true}, {"2", true}}) {
+        set_turbine(name + value, "alm", "");
+        { amrex::ParmParse pb("erf.moving_bodies." + name + value); pb.add("fllc", value); }
+        const MovingBodiesInputs in_c = MovingBodiesInputs::read();
+        const MovingBodyInputs& c = only_body(in_c);
+        EXPECT_EQ(c.fllc, on) << value;
+        EXPECT_FALSE(c.fllc_automatic) << value;
+    }
+}
+
+TEST(MovingBodiesInputs, FllcAutomaticWithAKeyItSetsOrAnUnknownValueAborts)
+{
+    static int run = 0;
+    for (const char* k : AutomaticFLLC::keys) {
+        const std::string name = "Tautok" + std::to_string(++run);
+        set_turbine(name, "alm", "");
+        amrex::ParmParse pb("erf.moving_bodies." + name);
+        pb.add("fllc", std::string("automatic"));
+        pb.add(k, std::string((std::string(k) == "num_force_points_blade") ? "100" : "0.2"));
+        const std::string msg = erf_gtest::abort_message([] { MovingBodiesInputs::read(); });
+        EXPECT_NE(msg.find(std::string(".") + k + " cannot be given with"), std::string::npos) << k << ": " << msg;
+    }
+    {
+        const std::string name = "Tautou" + std::to_string(++run);
+        set_turbine(name, "alm", "");
+        { amrex::ParmParse pb("erf.moving_bodies." + name); pb.add("fllc", std::string("auto")); }
+        EXPECT_NE(erf_gtest::abort_message([] { MovingBodiesInputs::read(); }).find("'auto' is not known"), std::string::npos);
+    }
+    {
+        // the correction is for an actuator line
+        const std::string name = "Tautoa" + std::to_string(++run);
+        set_turbine(name, "adm", "");
+        { amrex::ParmParse pb("erf.moving_bodies." + name); pb.add("fllc", std::string("automatic")); }
+        EXPECT_NE(erf_gtest::abort_message([] { MovingBodiesInputs::read(); }).find("fllc = automatic needs mode = alm"),
+                  std::string::npos);
+    }
+}
+
+TEST(MovingBodiesInputs, TheRestartRecordKeepsFllcAutomaticAsAutomatic)
+{
+    MovingBodyInputs b;
+    b.type = "openfast_turbine";
+    b.mode = "alm";
+    b.fllc = true;
+    b.fllc_automatic = true;
+    b.epsilon_diameters = 0.035;
+    b.epsilon = -1.0;
+    b.num_force_points_tower = 10;
+    b.nacelle_cd = 1.0;
+    b.nacelle_area = 60.0;
+    b.epsilon_nacelle = 1.5;
+    const auto r = MovingBodiesInputs::restart_record(b);   // must not ask for the unset width
+    EXPECT_EQ(record_value(r, "fllc"), "automatic");
+    EXPECT_EQ(record_value(r, "epsilon"), "automatic:0.035");
+    EXPECT_EQ(record_value(r, "epsilon_tower"), "automatic:0.035");   // taken from epsilon
+    EXPECT_EQ(record_value(r, "epsilon_nacelle"), "1.5");       // its own
+    // a checkpoint written with fllc = true and the same numbers is a different run
+    MovingBodyInputs t = b;
+    t.fllc_automatic = false;
+    t.epsilon = 0.168;
+    std::map<std::string,std::string> chk;
+    for (const auto& kv : MovingBodiesInputs::restart_record(t)) { chk[kv.first] = kv.second; }
+    std::string key, was, now;
+    EXPECT_TRUE(MovingBodiesInputs::changed_record_entry(chk, r, key, was, now));
+    EXPECT_EQ(key, "epsilon"); EXPECT_EQ(now, "automatic:0.035");
+}

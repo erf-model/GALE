@@ -7,7 +7,26 @@
 #include <utility>
 #include <vector>
 
+#include <AMReX.H>
 #include <AMReX_REAL.H>
+
+/**
+ * The actuator-line settings fllc = automatic applies. They come from the IEA 15 MW comparison with
+ * stand-alone OpenFAST 5 + ROSCO at 5 to 14 m/s, which held within 5 % in power and thrust on 10 m and
+ * 5 m meshes, except the 11 m/s thrust on the 10 m mesh (+6.6 %).
+ */
+struct AutomaticFLLC
+{
+    static constexpr amrex::Real epsilon_diameters = amrex::Real(0.035);   //!< rotor kernel width over the rotor diameter (Sandia SAND2021-15447C)
+    static constexpr amrex::Real eps_chord = amrex::Real(0.15);            //!< fllc_eps_chord
+    static constexpr amrex::Real eps_dr = amrex::Real(3.0);                //!< fllc_eps_dr
+    static constexpr amrex::Real start_time = amrex::Real(5.0);            //!< fllc_start_time (s)
+    static constexpr int num_force_points_blade = 300;        //!< num_force_points_blade
+    static constexpr amrex::Real min_cells = amrex::Real(0.75);            //!< the smallest epsilon (cells) it accepts: below, the spread
+                                                              //!< kernel's width depends on the node's place in its cell
+    /** The keys automatic sets; giving any of them with it aborts. */
+    static constexpr const char* keys[] = {"epsilon", "fllc_eps_chord", "fllc_eps_dr", "fllc_start_time", "num_force_points_blade"};
+};
 
 /** The Gaussian widths (m) a body's points are spread with, one per kind of point. */
 struct KernelWidths
@@ -43,6 +62,9 @@ struct MovingBodyInputs
     amrex::Real nacelle_cd{0.0};             //!< nacelle drag coefficient (0: no nacelle drag)
     amrex::Real nacelle_area{0.0};           //!< nacelle frontal area (m^2), needed when nacelle_cd > 0
     bool fllc{false};                        //!< filtered lifting-line correction of the sampled blade velocities (alm only; on by default for alm)
+    bool fllc_automatic{false};              //!< fllc = automatic: the correction on, with the AutomaticFLLC settings
+    amrex::Real epsilon_diameters{0.0};      //!< > 0 (fllc = automatic): epsilon is this many rotor diameters, set in cells by
+                                             //!< MovingBodies once the anchor level's spacing is known (epsilon is -1 until then)
     amrex::Real fllc_relax{0.1};             //!< relaxation factor of the correction, in (0, 1]
     amrex::Real fllc_start_time{0.0};        //!< the correction starts at this time (s)
     amrex::Real fllc_eps_chord{0.25};        //!< optimal kernel width in chords
@@ -62,6 +84,10 @@ struct MovingBodyInputs
     /** The widths (m) on a level of x spacing dx: epsilon_tower and epsilon_nacelle fall back to epsilon when not given. */
     KernelWidths kernel_widths (amrex::Real dx) const
     {
+        if (!(epsilon > 0.0)) {
+            amrex::Abort("erf.moving_bodies." + name + ": the kernel width is used before fllc = automatic has set it "
+                         "from the rotor diameter (MovingBodies::resolve_automatic_widths)");
+        }
         return {epsilon * dx, ((epsilon_tower > 0.0) ? epsilon_tower : epsilon) * dx,
                 ((epsilon_nacelle > 0.0) ? epsilon_nacelle : epsilon) * dx};
     }
@@ -81,10 +107,11 @@ struct MovingBodyInputs
  *   erf.moving_bodies.T1.num_force_points_tower = 10   (> 0: the tower's loads from OpenFAST forced too; default 0)
  *   erf.moving_bodies.T1.nacelle_cd  = 1.0              (> 0 with nacelle_area: a drag point at the hub; default 0)
  *   erf.moving_bodies.T1.nacelle_area = 60.0            (m^2; default 0)
- *   erf.moving_bodies.T1.fllc        = true               (alm: filtered lifting-line correction; the alm default, set false to run without it)
+ *   erf.moving_bodies.T1.fllc        = true               (alm: filtered lifting-line correction; the alm default, set false to run without it;
+ *                                                          automatic: on, with epsilon = 0.035 D and the other AutomaticFLLC settings)
  *   erf.moving_bodies.T1.fllc_relax  = 0.1                fllc_start_time = 0, fllc_eps_chord = 0.25, fllc_eps_dr = 1
  *   erf.moving_bodies.T1.output_root = moving_bodies/T1
- *   erf.moving_bodies.T1.epsilon     = 2.0                (spreading width of the rotor's points, dx units)
+ *   erf.moving_bodies.T1.epsilon     = 2.0                (spreading width of the rotor's points, dx units; not with fllc = automatic)
  *   erf.moving_bodies.T1.epsilon_tower   = 2.0            (tower force nodes, needs num_force_points_tower > 0; default epsilon)
  *   erf.moving_bodies.T1.epsilon_nacelle = 2.0            (nacelle drag point, needs nacelle_cd > 0; default epsilon)
  *   erf.moving_bodies.D1.type        = ct_disk

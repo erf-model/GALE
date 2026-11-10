@@ -840,14 +840,26 @@ plotfile and the correction log must equal the straight run's exactly. With
 three 20-cell boxes in x (``amr.max_grid_size_x = 24``) the turbine is owned by
 rank 1, which writes the correction's and
 the node loads' checkpoint files and reads them back.
+``OpenFAST_ALM_FLLC_Automatic`` runs the same line for 20 steps with
+``fllc = automatic`` and again with ``fllc = true`` and the values automatic
+sets given by hand (``epsilon`` at the value it prints, ``fllc_eps_chord`` 0.15,
+``fllc_eps_dr`` 3, ``fllc_start_time`` 5 s, 300 points per blade): the plotfiles
+must be identical, so automatic only sets inputs, and the correction acts on the
+last 10 steps. ``OpenFAST_ALM_FLLC_Automatic_Restart`` checkpoints it at step 12
+on two ranks, the turbine owned by rank 1, and restarts to step 20: the width is
+set again from the restored rotor and the run must equal the straight one.
+``MovingBodies_Restart_FllcAutomaticToTrue`` restarts it with the same numbers
+given by hand, which must abort, and ``MovingBodies_FllcAutomaticWithEpsilon``
+gives ``epsilon`` with automatic, which must abort naming the key.
 
-Test Location: `Exec/CanonicalTests/MovingBodies/OpenFAST_ALM_Uniform`_, `Exec/CanonicalTests/MovingBodies/OpenFAST_ALM_Tower`_, `Exec/CanonicalTests/MovingBodies/OpenFAST_ALM_ComponentWidths`_, `Exec/CanonicalTests/MovingBodies/OpenFAST_ALM_FLLC`_ and `Exec/CanonicalTests/MovingBodies/OpenFAST_ALM_FLLC_Restart`_
+Test Location: `Exec/CanonicalTests/MovingBodies/OpenFAST_ALM_Uniform`_, `Exec/CanonicalTests/MovingBodies/OpenFAST_ALM_Tower`_, `Exec/CanonicalTests/MovingBodies/OpenFAST_ALM_ComponentWidths`_, `Exec/CanonicalTests/MovingBodies/OpenFAST_ALM_FLLC`_, `Exec/CanonicalTests/MovingBodies/OpenFAST_ALM_FLLC_Restart`_ and `Exec/CanonicalTests/MovingBodies/OpenFAST_ALM_FLLC_Automatic`_
 
 .. _`Exec/CanonicalTests/MovingBodies/OpenFAST_ALM_Uniform`: https://github.com/erf-model/ERF/tree/development/Exec/CanonicalTests/MovingBodies/OpenFAST_ALM_Uniform
 .. _`Exec/CanonicalTests/MovingBodies/OpenFAST_ALM_Tower`: https://github.com/erf-model/ERF/tree/development/Exec/CanonicalTests/MovingBodies/OpenFAST_ALM_Tower
 .. _`Exec/CanonicalTests/MovingBodies/OpenFAST_ALM_ComponentWidths`: https://github.com/erf-model/ERF/tree/development/Exec/CanonicalTests/MovingBodies/OpenFAST_ALM_ComponentWidths
 .. _`Exec/CanonicalTests/MovingBodies/OpenFAST_ALM_FLLC`: https://github.com/erf-model/ERF/tree/development/Exec/CanonicalTests/MovingBodies/OpenFAST_ALM_FLLC
 .. _`Exec/CanonicalTests/MovingBodies/OpenFAST_ALM_FLLC_Restart`: https://github.com/erf-model/ERF/tree/development/Exec/CanonicalTests/MovingBodies/OpenFAST_ALM_FLLC_Restart
+.. _`Exec/CanonicalTests/MovingBodies/OpenFAST_ALM_FLLC_Automatic`: https://github.com/erf-model/ERF/tree/development/Exec/CanonicalTests/MovingBodies/OpenFAST_ALM_FLLC_Automatic
 
 Anchor level on two levels
 --------------------------

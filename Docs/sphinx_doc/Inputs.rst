@@ -2863,7 +2863,9 @@ written without bodies (a precursor) starts the bodies afresh at the checkpoint'
 |                                                        | blade and hub nodes of an actuator line, the rings of a  |                          |                          |
 |                                                        | disk, a ct_disk's points), and of the tower and nacelle  |                          |                          |
 |                                                        | points unless their own widths are given; each body has  |                          |                          |
-|                                                        | its own                                                  |                          |                          |
+|                                                        | its own. For an actuator line hold it at a fixed length, |                          |                          |
+|                                                        | about 0.035 rotor diameters, not a fixed number of       |                          |                          |
+|                                                        | cells. Not with fllc = automatic, which sets it          |                          |                          |
 +--------------------------------------------------------+----------------------------------------------------------+--------------------------+--------------------------+
 | **erf.moving_bodies.<name>.epsilon_tower**             | openfast_turbine, mode adm or alm, with                  | Real > 0                 | epsilon                  |
 |                                                        | num_force_points_tower > 0: width of the tower force     |                          |                          |
@@ -2893,7 +2895,8 @@ written without bodies (a precursor) starts the bodies afresh at the checkpoint'
 |                                                        | without forcing it                                       |                          |                          |
 +--------------------------------------------------------+----------------------------------------------------------+--------------------------+--------------------------+
 | **erf.moving_bodies.<name>.num_force_points_blade**    | openfast_turbine: actuator force points per blade        | Int > 0 (>= 2 with fllc) | 50                       |
-|                                                        | requested from OpenFAST                                  |                          |                          |
+|                                                        | requested from OpenFAST; fllc = automatic sets 300       |                          |                          |
+|                                                        | (giving it with automatic aborts)                        |                          |                          |
 +--------------------------------------------------------+----------------------------------------------------------+--------------------------+--------------------------+
 | **erf.moving_bodies.<name>.num_force_points_tower**    | openfast_turbine: actuator force points on the tower     | Int >= 0                 | 0                        |
 |                                                        | requested from OpenFAST, whose tower loads are then      |                          |                          |
@@ -2934,21 +2937,30 @@ written without bodies (a precursor) starts the bodies afresh at the checkpoint'
 |                                                        | thrust; -1 is the rotor radius over the free stream, 0   |                          |                          |
 |                                                        | none                                                     |                          |                          |
 +--------------------------------------------------------+----------------------------------------------------------+--------------------------+--------------------------+
-| **erf.moving_bodies.<name>.fllc**                      | openfast_turbine, mode alm: filtered lifting-line        | true, false              | true (alm), false (adm)  |
-|                                                        | correction of the velocities the blades are given        |                          |                          |
+| **erf.moving_bodies.<name>.fllc**                      | openfast_turbine, mode alm: filtered lifting-line        | true, false, automatic   | true (alm), false (adm)  |
+|                                                        | correction of the velocities the blades are given.       |                          |                          |
+|                                                        | automatic: on, with epsilon = 0.035 rotor diameters      |                          |                          |
+|                                                        | (twice the model's TipRad; the anchor level's cells must |                          |                          |
+|                                                        | then be at most 0.047 diameters), fllc_eps_chord = 0.15, |                          |                          |
+|                                                        | fllc_eps_dr = 3, fllc_start_time = 5 and                 |                          |                          |
+|                                                        | num_force_points_blade = 300; giving any of those keys   |                          |                          |
+|                                                        | with it aborts                                           |                          |                          |
 +--------------------------------------------------------+----------------------------------------------------------+--------------------------+--------------------------+
 | **erf.moving_bodies.<name>.fllc_relax**                | relaxation factor of the correction                      | 0 < Real <= 1            | 0.1                      |
 +--------------------------------------------------------+----------------------------------------------------------+--------------------------+--------------------------+
 | **erf.moving_bodies.<name>.fllc_start_time**           | ERF's simulation time (s) from which the correction is   | Real >= 0                | 0                        |
-|                                                        | applied: the time a restart or a precursor start         |                          |                          |
-|                                                        | carries on (7200 s, say), not the time since the         |                          |                          |
-|                                                        | bodies started                                           |                          |                          |
+|                                                        | applied: the time a restart or a precursor start carries |                          |                          |
+|                                                        | on (7200 s, say), not the time since the bodies started; |                          |                          |
+|                                                        | fllc = automatic sets 5 (giving it with automatic        |                          |                          |
+|                                                        | aborts)                                                  |                          |                          |
 +--------------------------------------------------------+----------------------------------------------------------+--------------------------+--------------------------+
 | **erf.moving_bodies.<name>.fllc_eps_chord**            | optimal kernel width in chords (OpenFAST's chord at each | Real > 0                 | 0.25                     |
-|                                                        | force node)                                              |                          |                          |
+|                                                        | force node); fllc = automatic sets 0.15 (giving it with  |                          |                          |
+|                                                        | automatic aborts)                                        |                          |                          |
 +--------------------------------------------------------+----------------------------------------------------------+--------------------------+--------------------------+
-| **erf.moving_bodies.<name>.fllc_eps_dr**               | fine span grid of the correction: spacing =              | Real > 0                 | 1.0                      |
-|                                                        | optimal kernel width / fllc_eps_dr                       |                          |                          |
+| **erf.moving_bodies.<name>.fllc_eps_dr**               | fine span grid of the correction: spacing = optimal      | Real > 0                 | 1.0                      |
+|                                                        | kernel width / fllc_eps_dr; fllc = automatic sets 3      |                          |                          |
+|                                                        | (giving it with automatic aborts)                        |                          |                          |
 +--------------------------------------------------------+----------------------------------------------------------+--------------------------+--------------------------+
 | **erf.moving_bodies.<name>.rotor_radius**              | ct_disk: disk radius (m)                                 | Real > 0                 | must be set              |
 +--------------------------------------------------------+----------------------------------------------------------+--------------------------+--------------------------+
@@ -2980,9 +2992,11 @@ written without bodies (a precursor) starts the bodies afresh at the checkpoint'
 |                                                        | where the free stream is sampled, in diameters ahead     |                          | 2.0 (turbine)            |
 |                                                        | along the normal / shaft axis                            |                          |                          |
 +--------------------------------------------------------+----------------------------------------------------------+--------------------------+--------------------------+
-| **erf.moving_bodies.<name>.air_density**               | density in the ct_disk thrust and in the nacelle drag    | Real > 0                 | 1.225                    |
-|                                                        | (kg/m^3); for a ct_disk the run aborts when it differs   |                          |                          |
-|                                                        | from ERF's density at the disk centre by more than       |                          |                          |
+| **erf.moving_bodies.<name>.air_density**               | density (kg/m^3) in the ct_disk thrust, the nacelle      | Real > 0                 | 1.225                    |
+|                                                        | drag, the lifting-line correction and the disk_corrected |                          |                          |
+|                                                        | momentum theory; must equal the turbine model's AirDens. |                          |                          |
+|                                                        | For a ct_disk the run aborts when it differs from ERF's  |                          |                          |
+|                                                        | density at the disk centre by more than                  |                          |                          |
 |                                                        | density_tolerance                                        |                          |                          |
 +--------------------------------------------------------+----------------------------------------------------------+--------------------------+--------------------------+
 | **erf.moving_bodies.diagnostics_int**                  | write a diagnostics row every this many steps            | Int > 0                  | 1                        |
@@ -3056,7 +3070,7 @@ written without bodies (a precursor) starts the bodies afresh at the checkpoint'
 |                                                        | run aborts above it, naming the largest ``erf.fixed_dt`` |                          |                          |
 |                                                        | that passes                                              |                          |                          |
 +--------------------------------------------------------+----------------------------------------------------------+--------------------------+--------------------------+
-| **erf.moving_bodies.verify_tip_cells**                 | actuator line, debugging: check every step the limiting  | 0 or 1                   | 0                        |
+| **erf.moving_bodies.verify_tip_cells**                 | actuator line, debugging: check every step the limiting  | true, false (or 1, 0)    | 0                        |
 |                                                        | cell heights kept from step to step (searched again only |                          |                          |
 |                                                        | after a regrid or when a rotor's box moves) against a    |                          |                          |
 |                                                        | fresh search of each rotor's box; the run aborts if they |                          |                          |

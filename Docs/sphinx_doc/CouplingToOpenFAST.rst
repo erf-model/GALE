@@ -19,7 +19,7 @@ this page is the how-to.
 Building
 --------
 
-Build OpenFAST 5.0 (4.x also works) with its C++ API, which produces the
+Build OpenFAST 5.0 (4.2 also works) with its C++ API, which produces the
 shared library and ``FAST_Library.h``. ``Build/setup_openfast.sh`` does this
 in one command (``--force`` rebuilds an existing install); by hand:
 
@@ -70,8 +70,12 @@ ServoDyn or a fixed rotor speed). Four settings matter for the coupling:
 - Tower shadow off (``TwrShadow = 0``) when tower force points are used: the
   tower's wake reaches the blades through the flow.
 
-ERF's fixed time step must be a whole multiple of OpenFAST's ``DT``; the
-coupling sub-steps OpenFAST accordingly.
+The bodies' step, ``erf.fixed_dt`` divided by the time refinement down to the
+anchor level (``erf.fixed_dt`` itself on one level), must be a whole multiple of
+OpenFAST's ``DT``; the coupling sub-steps OpenFAST accordingly. With
+``DT = 0.005`` s, ``erf.fixed_dt = 0.15`` works on two levels (0.075 s) but not
+on three (0.0375 s); 0.16 works on three (0.04 s). The start-up aborts
+otherwise.
 
 A minimal case
 --------------
@@ -87,7 +91,7 @@ solution. Its AeroDyn file sets ``Wake_Mod = 1``, as the default
    erf.anelastic_type = MidPoint     # the implicit vertical solve is honoured
    erf.vert_implicit  = true
    erf.use_fft        = true
-   erf.fixed_dt       = 0.2          # a whole multiple of OpenFAST's DT
+   erf.fixed_dt       = 0.2          # on the anchor level: a whole multiple of OpenFAST's DT
    amrex.fpe_trap_invalid = 0
 
    erf.moving_bodies.bodies                     = T1
@@ -97,7 +101,9 @@ solution. Its AeroDyn file sets ``Wake_Mod = 1``, as the default
    erf.moving_bodies.T1.base_pos                = 750. 600. 0. # z above the terrain surface
    erf.moving_bodies.T1.num_force_points_blade  = 50
    erf.moving_bodies.T1.num_points_t            = 24
-   erf.moving_bodies.T1.epsilon                 = 2.0          # kernel width in cells
+   erf.moving_bodies.T1.epsilon                 = 2.0          # disk: kernel width in cells
+   # for an actuator line (mode = alm) leave out epsilon and num_force_points_blade and set
+   # erf.moving_bodies.T1.fllc = automatic (see "Choosing the model and its settings")
    erf.moving_bodies.T1.output_root             = T1
    erf.moving_bodies.diagnostics_dir            = moving_bodies
 
@@ -110,8 +116,9 @@ turbulent inflow, two levels, terrain, restart).
 Choosing the model and its settings
 -----------------------------------
 
-The table below shows how close each set-up came to the standalone OpenFAST
-(BEM) loads of the IEA 15 MW in a uniform 10.59 m/s inflow.
+The first table shows how close each disk set-up came to the standalone
+OpenFAST (BEM) loads of the IEA 15 MW in a uniform 10.59 m/s inflow, with the
+rotor speed held fixed.
 
 ======================================================  ==================  ==================
 Set-up                                                  thrust / BEM        power / BEM
@@ -119,14 +126,33 @@ Set-up                                                  thrust / BEM        powe
 disk, ``disk_corrected`` (default), 20 m or 10 m cells  0.997 to 1.001      0.993 to 1.000
 disk, ``upstream`` sampling two diameters ahead          0.993               0.999
 disk, plain ``disk`` sampling, 20 m cells                1.093               1.328
-line with FLLC, 2.5 m cells, kernel 2 m (0.8 cells)      0.989               0.983
-line with FLLC, 10 m cells, kernel 2 cells               1.045               1.146
 ======================================================  ==================  ==================
+
+The second table compares the disk and the line with the standalone OpenFAST 5
+solution of the IEA 15 MW land-based turbine under the ROSCO controller, at five
+uniform wind speeds. The ERF runs are averaged over 300 to 360 s and OpenFAST
+over 120 to 700 s, following the Kynema-SGF actuator-line calibration
+(G. R. Yalla, ``gyalla/ALM_Calibrations``). Each entry is the error in power /
+thrust. The line uses ``fllc = automatic``: a kernel of 0.035 rotor diameters
+(8.4 m), ``fllc_eps_chord = 0.15`` and 300 points per blade. Above rated
+(10.6 m/s) the controller holds power and rotor speed, so thrust is the test.
+The ROSCO model is not in the repository.
+
+======  =====================  =====================  =====================
+U       disk, 20 m (1 level)   line, 10 m (2 levels)  line, 5 m (3 levels)
+======  =====================  =====================  =====================
+5.0     -0.2 % / -0.1 %        +1.4 % / +0.6 %        +3.8 % / +1.6 %
+6.5     -0.2 % / -0.1 %        -1.1 % / -0.4 %        +1.3 % / +0.7 %
+9.0     -0.2 % / -0.1 %        -3.8 % / -1.9 %        -1.1 % / -0.4 %
+11.0    0.0 % / +0.1 %         0.0 % / +6.6 %         0.0 % / +4.3 %
+14.0    0.0 % / 0.0 %          0.0 % / +2.5 %         0.0 % / +2.0 %
+======  =====================  =====================  =====================
 
 - **Disk or line.** The corrected disk is the default and matches BEM on
   every grid tried; use it for farms and RANS or ABL studies. The actuator
-  line, with the FLLC, is the choice for LES that resolves the blades; it needs
-  cells of a few metres at the rotor.
+  line, with the FLLC, is the choice for LES that resolves the blades. With
+  ``fllc = automatic`` it stays within 5 % of OpenFAST on 10 m and 5 m cells
+  for the IEA 15 MW, except the 11 m/s thrust on 10 m cells (+6.6 %).
 - **The corrected disk's update.** The recovered free stream is updated each
   step from the last one, through the induction the thrust implies. Above a
   thrust coefficient of about 0.75 that update overshoots and grows step by
@@ -141,18 +167,50 @@ line with FLLC, 10 m cells, kernel 2 cells               1.045               1.1
 - **Kernel width.** For the corrected disk keep the filter width
   :math:`\sqrt{6}\,\epsilon` within 1.25 rotor radii (a 1.5-cell kernel on
   40 m cells for a 120 m rotor); the start-up log warns otherwise. For the
-  line the kernel is an absolute length set by the blade, about 2 m for the
-  IEA 15 MW, not a cell count: a kernel of two 2.5 m cells (5 m)
-  over-predicted power by 44 %. With the FLLC the kernel may be narrower than a
-  cell: the spreading still puts exactly the force into the flow, but below
-  about 0.75 cells the kernel's shape depends on where the point sits in its
-  cell (see the theory chapter).
+  line, hold the kernel at a fixed length as the mesh is refined, not at a fixed
+  number of cells: 0.035 rotor diameters (8.4 m for the IEA 15 MW), the bound of
+  Sandia report SAND2021-15447C. ``epsilon`` is given in cells of the anchor
+  level's x spacing, so 8.4 m is 0.84 on 10 m cells and 1.68 on 5 m cells;
+  ``fllc = automatic`` does this conversion. Held at 0.8 cells instead, the
+  kernel is 2 m on 2.5 m cells, and the line gives 15 % less power than
+  OpenFAST at 5 m/s. At a fixed kernel length the 5 m mesh reads 2.4 to
+  2.7 points above the 10 m mesh in power below rated, and 0.5 to 2.3 points
+  below it in thrust above rated; at 5 m/s the upwinding, the FLLC correction,
+  the tip treatment and the size of the refined box each change the gap by
+  0.1 points or less. A kernel below about 0.75 cells still puts
+  exactly the force into the flow, but its shape depends on where the point
+  sits in its cell (see the theory chapter).
 - **FLLC** is on by default for the line (``fllc = false`` switches it off)
-  and is the generalized variable-chord form.
+  and is the generalized variable-chord form. ``fllc = automatic`` sets the
+  kernel to 0.035 rotor diameters (twice the tip radius of the model's files,
+  ElastoDyn ``TipRad``),
+  ``fllc_eps_chord = 0.15`` (the lower end of the optimal range 0.1 to 0.25),
+  ``fllc_eps_dr = 3``, ``fllc_start_time = 5`` s and
+  ``num_force_points_blade = 300``, and prints the values. Giving any of those
+  keys with it aborts; use ``fllc = true`` to set them by hand (an
+  ``fllc = true`` on the command line overrides an ``automatic`` in the deck,
+  and the defaults then apply). The kernel must be at least 0.75 cells, so the
+  anchor level's cells at most 0.047 rotor diameters (11.2 m for the
+  IEA 15 MW); below that the spread kernel's width depends on where a node sits
+  in its cell, and automatic aborts. With 50 points per blade instead of 300
+  the line gives about 2.5 points less power on every mesh tried. These
+  settings were tested on cells with ``dx = dy = dz``; on an anchor level with
+  other proportions the start-up prints a note.
+- **Time step for the line.** The blade tip may sweep at most
+  ``erf.moving_bodies.alm_max_tip_cells`` cells per step (1 by default); the
+  start-up names the largest ``erf.fixed_dt`` that passes. For the IEA 15 MW
+  ``erf.fixed_dt = 0.2`` sweeps 0.95 cells at the rated 7.56 rpm on the 10 m
+  mesh (and the same on 5 m: half the cell, half the step), a 5 % margin that
+  the rotor's speed early in the run used up (1.006 cells at t = 4 s, about
+  8 rpm), so
+  0.15 (10 m) and 0.16 (5 m) were used at 11 and
+  14 m/s, keeping the anchor step a whole multiple of OpenFAST's ``DT``.
 - **Grids.** The rotor should span at least 8 cells (the audit notes fewer).
   On a run with refinement the bodies live on the anchor level
   (``amr.max_level`` by default), whose grids must cover every node with the
-  kernel's reach, and no finer level may cover them. On a terrain-fitted mesh
+  kernel's reach, and no finer level may cover them. Every coarser level carries
+  the same force, summed onto its own faces, so the induction reaches beyond
+  the refined box. On a terrain-fitted mesh
   the cells the kernel's heights may lie in are those of the node's own
   columns, so the level's top need only clear each rotor's kernel where the
   rotor stands, whatever the terrain elsewhere on the level.
@@ -325,16 +383,41 @@ Known limits
   in an anelastic run: the inflow theta is scaled by the density ratio.
 - The k-equation length-scale cap from the PBL height reads each level's own
   diagnosis; pin ``erf.max_geom_lscale`` on multi-level ABL runs.
-- On a terrain-fitted mesh, refined levels are not usable yet for turbines. In
-  the Askervein runs that led to the single-level real-OpenFAST cases, the
-  anelastic projection (an FFT-preconditioned GMRES solve) left a maximum
-  divergence of 1e-10 to 1e-9 on level 0, but on level 1 and finer 1e3 to 1e7
-  times the constant a refined level keeps by design (the mean it subtracts
-  from its right-hand side, printed as "Subtracting ... from rhs" with
-  ``erf.mg_v = 1``); a three-level actuator-line run blew up in its first step.
-  ERF prints no warning when this happens: compare the "divergence after" lines
-  with that constant. A refined level on a terrain-fitted mesh must also span
-  the full height, or the FFT preconditioner aborts.
+- Refined levels on a terrain-fitted mesh with turbines: a 100 m Gaussian hill
+  with four levels (160, 80, 40 and 20 m across, refinement ``2 2 1``, the
+  refined levels stopping at 800, 720 and 640 m of the 960 m domain,
+  ``erf.coupling_type = OneWay``, the default ``gmres_fft`` solver) ran 600 s
+  with the IEA 15 MW as a disk (kEqn RANS) and as a line (LES) on a build of
+  2026-11-04. In two-level Askervein runs on a build of 2026-10-11, the anelastic
+  projection with the FFT-preconditioned GMRES solver did not converge on the
+  refined level (divergence 6e-5 to 2.4 there, against 1e-10 on level 0) and the
+  temperature and kinetic energy grew on that level, ``mlmg`` stalled on the
+  refined level, and a three-level actuator-line run blew up in its first step;
+  a refined level also had to span the full height. The terrain projection has changed since: zero flux through
+  Neumann faces (erf-model/ERF#4279), the ``mlmg`` and ``gmres_mlmg`` choices of
+  ``erf.terrain_poisson_solver`` (#4280), refined levels that stop inside the
+  domain in z (#4337), and the coarse/fine fluxes over terrain (#4879, #4902,
+  #4925); and the coarser levels now carry the bodies' force. The same
+  two-level Askervein case (60 coarse steps, Deardorff LES, refinement
+  ``2 2 1``, the refined level spanning the full height of 18 cells) was rerun
+  on a build of 2026-11-09 with each solver:
+
+  ===========================  =============  ==============  =============
+  Refined level, after step 1  ``gmres_fft``  ``gmres_mlmg``  ``mlmg``
+  ===========================  =============  ==============  =============
+  Largest divergence after     7e-10          3e-10           1e-8
+  Temperature range (K)        299.95-300.05  299.95-300.05   299.95-300.05
+  Wall time, 4 ranks (s)       116            201             127
+  ===========================  =============  ==============  =============
+
+  The first projection at start-up leaves 1.4e-5 on the refined level with
+  every solver; the next solve brings it to 1e-10. The IEA 15 MW on the hill top
+  as a disk and as a line (``gmres_mlmg``, 300 steps of 0.2 s) ran stably on the
+  same build, with the temperature within 0.02 K of 300 K on both levels. These
+  60 s runs cover only the controller's start-up, so they show stability, not
+  performance. Three levels and a refined level that stops inside the domain
+  in z were not rerun on Askervein; check the "divergence after" lines
+  (``erf.mg_v = 1``) on every level of such a run.
 
 Release notes
 -------------
