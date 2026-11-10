@@ -2102,8 +2102,8 @@ if(ERF_ENABLE_OPENFAST AND ERF_OPENFAST_USE_STUB AND ERF_ENABLE_FFT AND ERF_ENAB
       DATALOG_SIGDIGITS 10 OVERRUN)
 
   # The disk on two levels: level 1 (25 m) over a box around the rotor is the anchor, sampled and
-  # forced with the fine level's step, level 0 sees it through the average-down. Plotfile and
-  # flow-log golds, and the source still integrates to minus the thrust.
+  # forced with the fine level's step, level 0 carries its force summed onto its faces from level 1.
+  # Plotfile and flow-log golds, and the source still integrates to minus the thrust.
   add_test_openfast_adm(OpenFAST_ADM_TwoLevel OpenFAST_ADM_TwoLevel "plt00010")
 
   # The two-level case in one box per level against the fine level split unevenly on two ranks.
@@ -2479,6 +2479,37 @@ if(ERF_ENABLE_MOVING_BODIES AND ERF_ENABLE_FFT AND ERF_ENABLE_MPI AND NOT WIN32)
           ATTACHED_FILES_ON_FAIL "${CURRENT_TEST_BINARY_DIR}/simulation.log")
   endfunction()
   add_test_ct_disk(Actuator_UniformCtDisk Actuator_UniformCtDisk "plt00010")
+
+  # A disk on the fine level of two, its fine box tight around it (0.8 R up and down stream), must
+  # induce what the same disk induces on one level: the coarse level carries the disk's force too
+  # (summed onto its faces from the fine level), so its pressure feels the disk and the induction
+  # reaches beyond the fine box. Without that the two-level disk saw 9.15 instead of 8.48 m/s.
+  if(ERF_TEST_PYTHON)
+      function(add_test_disk_levels TEST_NAME TEST_FILES_DIR)
+          setup_test()
+          resolve_test_exe("" "erf_exec" TEST_EXE)
+          add_test(NAME ${TEST_NAME} COMMAND ${CMAKE_COMMAND}
+              "-DMPIEXEC=${MPIEXEC_EXECUTABLE}"
+              "-DMPIEXEC_NUMPROC_FLAG=${MPIEXEC_NUMPROC_FLAG}"
+              "-DMPIEXEC_PREFLAGS=${MPIEXEC_PREFLAGS}"
+              "-DNRANKS=2"
+              "-DTEST_EXE=${TEST_EXE}"
+              "-DCONFIG=$<CONFIG>"
+              "-DPYTHON=${ERF_TEST_PYTHON}"
+              "-DWORKING_DIRECTORY=${CURRENT_TEST_BINARY_DIR}"
+              "-DINPUT_ONE=${CURRENT_TEST_BINARY_DIR}/Actuator_CtDisk_OneLevel.i"
+              "-DINPUT_TWO=${CURRENT_TEST_BINARY_DIR}/Actuator_CtDisk_TwoLevel.i"
+              "-DCHECKER=${CURRENT_TEST_BINARY_DIR}/check_levels.py"
+              "-DU_FREE=10.0"
+              "-DTOL=0.1"
+              -P ${PROJECT_SOURCE_DIR}/Tests/RunDiskLevels.cmake)
+          set_tests_properties(${TEST_NAME} PROPERTIES
+              TIMEOUT 900 PROCESSORS 2 WORKING_DIRECTORY "${CURRENT_TEST_BINARY_DIR}/"
+              LABELS "regression;moving-bodies"
+              ATTACHED_FILES_ON_FAIL "${CURRENT_TEST_BINARY_DIR}/one/simulation.log;${CURRENT_TEST_BINARY_DIR}/two/simulation.log")
+      endfunction()
+      add_test_disk_levels(Actuator_CtDisk_TwoLevel Actuator_CtDisk_TwoLevel)
+  endif()
 
   # The same disk with the domain in one box and split unevenly in x and y: plotfile and disk
   # log must agree, so the spreading is independent of the decomposition.

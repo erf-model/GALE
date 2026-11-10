@@ -616,10 +616,41 @@ spread onto that level's faces with the kernel width in that level's cells,
 and OpenFAST is stepped with that level's fixed step (``erf.fixed_dt`` divided
 by the sub-cycling ratios down to it), so a fine patch around the rotor gives
 an actuator line its few-metre cells without refining the whole domain.
-Coarser levels carry no source of their own: they see the rotor through ERF's
-average-down of the state after every coarse step, as any fine-level physics
-does (with ``erf.coupling_type = TwoWay``, the default; with ``OneWay`` the
-coarser levels do not see the bodies at all). A finer level than the anchor may exist elsewhere, but not over the
+Every coarser level carries the bodies' force too. At the start of each of its
+steps, the anchor level's face forces after its latest step,
+:math:`F_f = s_f\,\Delta V_f`, are summed onto the coarser level's faces,
+
+.. math::
+
+   F_C = \sum_f w_f F_f, \qquad s_C = F_C / \Delta V_C ,
+
+over the fine faces about each coarse face: in the face's own direction those
+from :math:`rI - (r-1)` to :math:`rI + (r-1)` (:math:`r` the refinement ratio
+from that level to the anchor) with the linear weights
+:math:`w_f = 1 - |i_f - rI|/r`, and across it the fine faces that tile the
+coarse face. Here
+:math:`s` is a momentum source (N/m\ :sup:`3`) and :math:`\Delta V` a face
+volume (with the cell Jacobians on a fitted mesh). Each fine face's weights add
+to one, so every level carries the same total force, however narrow the kernel
+is against the coarse cells, and the linear weights keep the force's centroid
+in the face's own direction (across it the centroid may move by up to
+:math:`(r-1)/2` fine cells). Without this, a coarser level advanced and solved
+for its pressure as if the bodies were not there; with sub-cycling, the anchor
+level then took its boundary values from a flow that did not feel them, and the
+induction could not reach beyond the anchor level's boxes (a two-level disk
+with its fine box 0.8 R upstream saw 9.9 instead of 9.3 m/s a quarter of a
+diameter ahead of it, and 12 % more thrust). The coarser level uses the anchor
+level's forces of the previous step of that coarser level, from the anchor
+level's last step within it: about half a coarse step behind the coarse step's
+middle (for the IEA 15 MW rotor at 7.5 rpm with 0.2 s coarse steps, under 6
+degrees of rotation and 0.6 coarse cells of tip travel, in a region the
+average-down overwrites anyway); the first coarse step of a run carries none.
+A checkpoint keeps the anchor level's forces, so a restart gives the coarser
+levels the same sources. ERF's average-down of the state after every coarse step still
+replaces the covered coarse cells with the anchor level's
+(``erf.coupling_type = TwoWay``, the default); with ``OneWay`` the coarser
+levels carry the summed force but are not averaged down. Only the anchor level's
+source is written to ``moving_bodies/momentum_source.csv``. A finer level than the anchor may exist elsewhere, but not over the
 bodies: the average-down would overwrite their force there, so before every
 coarse step the run aborts if a finer level reaches a rotor, with its kernel's
 reach, or a disk. Everything the bodies read or write on the level must lie on

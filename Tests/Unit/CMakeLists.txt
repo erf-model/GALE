@@ -467,6 +467,11 @@ if(ERF_ENABLE_MOVING_BODIES)
   target_sources(${erf_exe_name} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/MovingBodies/ERF_GTestActuatorSpreading.cpp
   )
+  # Motivation: the levels coarser than the bodies' anchor level must carry the bodies' whole force,
+  # summed face by face from the anchor level, for even and odd ratios, any box layout, and terrain.
+  target_sources(${erf_exe_name} PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/MovingBodies/ERF_GTestActuatorRestriction.cpp
+  )
   # Motivation: a turbine's owner must be a rank whose boxes overlap it, and its points, sampled and
   # spread through messages to the ranks whose boxes they touch only, must give what the global
   # sampler and spreader give over all the points; a rank no kernel reaches must receive nothing.

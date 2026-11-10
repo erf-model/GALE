@@ -854,8 +854,8 @@ Anchor level on two levels
 ``OpenFAST_ADM_TwoLevel`` (same build requirements) runs the actuator-disk
 deck with a level 1 of 25 m cells over a box around the rotor and its near
 wake: the turbine lives on level 1 (the default anchor), is sampled and forced
-there with the fine level's step, and level 0 sees it through the
-average-down. The two-level plotfile and ``T1_flow.csv`` match their golds and
+there with the fine level's step, and level 0 carries the turbine's force
+summed onto its faces from level 1. The two-level plotfile and ``T1_flow.csv`` match their golds and
 the integrated source equals minus the thrust in every row.
 ``OpenFASTADM_TwoLevel_BoxParity`` splits the fine level unevenly over two
 ranks and requires the plotfiles and the flow log to agree, and
@@ -866,6 +866,21 @@ Test Location: `Exec/CanonicalTests/MovingBodies/OpenFAST_ADM_TwoLevel`_ and `Ex
 
 .. _`Exec/CanonicalTests/MovingBodies/OpenFAST_ADM_TwoLevel`: https://github.com/erf-model/ERF/tree/development/Exec/CanonicalTests/MovingBodies/OpenFAST_ADM_TwoLevel
 .. _`Exec/CanonicalTests/MovingBodies/OpenFAST_ADM_TwoLevel_Restart`: https://github.com/erf-model/ERF/tree/development/Exec/CanonicalTests/MovingBodies/OpenFAST_ADM_TwoLevel_Restart
+
+Force on the levels below the anchor
+------------------------------------
+``Actuator_CtDisk_TwoLevel`` runs a prescribed-Ct disk (R = 120 m, Ct = 0.75,
+10 m/s) on one level of 25 m cells and again on two, with the disk on a level 1
+of 12.5 m cells whose box ends 0.8 R up and down stream of it, the kernel 25 m
+wide in both. The coarse level carries the disk's force summed onto its faces
+from level 1, so after 60 s the velocity deficits of the disk-averaged velocity
+and of the velocity a quarter of a diameter upstream agree with the one-level
+run's within 10 %. Without the coarse-level force the deficits were 44 % and
+81 % smaller and the thrust 12 % larger.
+
+Test Location: `Exec/CanonicalTests/MovingBodies/Actuator_CtDisk_TwoLevel`_
+
+.. _`Exec/CanonicalTests/MovingBodies/Actuator_CtDisk_TwoLevel`: https://github.com/erf-model/ERF/tree/development/Exec/CanonicalTests/MovingBodies/Actuator_CtDisk_TwoLevel
 
 Farms
 -----
