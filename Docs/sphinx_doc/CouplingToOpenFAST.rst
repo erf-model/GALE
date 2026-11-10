@@ -390,16 +390,34 @@ Known limits
   with the IEA 15 MW as a disk (kEqn RANS) and as a line (LES) on a build of
   2026-11-04. In two-level Askervein runs on a build of 2026-10-11, the anelastic
   projection with the FFT-preconditioned GMRES solver did not converge on the
-  refined level (divergence 6e-5 to 2.4 there, against 1e-10 on level 0), the
-  temperature and kinetic energy grew on that level, and a three-level
-  actuator-line run blew up in its first step; a refined level also had to span
-  the full height. The terrain projection has changed since: zero flux through
+  refined level (divergence 6e-5 to 2.4 there, against 1e-10 on level 0) and the
+  temperature and kinetic energy grew on that level, ``mlmg`` stalled on the
+  refined level, and a three-level actuator-line run blew up in its first step;
+  a refined level also had to span the full height. The terrain projection has changed since: zero flux through
   Neumann faces (erf-model/ERF#4279), the ``mlmg`` and ``gmres_mlmg`` choices of
   ``erf.terrain_poisson_solver`` (#4280), refined levels that stop inside the
   domain in z (#4337), and the coarse/fine fluxes over terrain (#4879, #4902,
-  #4925); and the coarser levels now carry the bodies' force. Askervein has not
-  been rerun with turbines on a refined level since; until it is, check the
-  "divergence after" lines (``erf.mg_v = 1``) on every level of such a run.
+  #4925); and the coarser levels now carry the bodies' force. The same
+  two-level Askervein case (60 coarse steps, Deardorff LES, refinement
+  ``2 2 1``, the refined level spanning the full height of 18 cells) was rerun
+  on a build of 2026-11-09 with each solver:
+
+  ===========================  =============  ==============  =============
+  Refined level, after step 1  ``gmres_fft``  ``gmres_mlmg``  ``mlmg``
+  ===========================  =============  ==============  =============
+  Largest divergence after     7e-10          3e-10           1e-8
+  Temperature range (K)        299.95-300.05  299.95-300.05   299.95-300.05
+  Wall time, 4 ranks (s)       116            201             127
+  ===========================  =============  ==============  =============
+
+  The first projection at start-up leaves 1.4e-5 on the refined level with
+  every solver; the next solve brings it to 1e-10. The IEA 15 MW on the hill top
+  as a disk and as a line (``gmres_mlmg``, 300 steps of 0.2 s) ran stably on the
+  same build, with the temperature within 0.02 K of 300 K on both levels. These
+  60 s runs cover only the controller's start-up, so they show stability, not
+  performance. Three levels and a refined level that stops inside the domain
+  in z were not rerun on Askervein; check the "divergence after" lines
+  (``erf.mg_v = 1``) on every level of such a run.
 
 Release notes
 -------------
