@@ -13,7 +13,8 @@ inputs are in `Docs/sphinx_doc/theory/MovingBodies.rst` and
 
 Every case builds with `ERF_ENABLE_OPENFAST=ON`, `ERF_OPENFAST_USE_STUB=ON`,
 `ERF_ENABLE_FFT=ON` and MPI (`Actuator_UniformCtDisk` needs only
-`ERF_ENABLE_MOVING_BODIES=ON`), runs the anelastic solver on a small uniform
+`ERF_ENABLE_MOVING_BODIES=ON`, and `Actuator_CtDisk_TwoLevel` needs
+`ERF_ENABLE_MOVING_BODIES=ON`, FFT, MPI and Python 3), runs the anelastic solver on a small uniform
 box for ten steps or so, and is checked by the runner named below. The two
 Askervein cases are the exception: a 6 km x 3 km terrain-fitted domain, and the real OpenFAST library
 (`ERF_OPENFAST_USE_STUB=OFF`, label `openfast-real`) on the IEA 15 MW model in
@@ -37,7 +38,7 @@ terrain file of `../Real_Terrain/Askervein`, both copied next to the deck by the
 | `OpenFAST_ADM_TwoTurbines` | two stub turbines, disks | `RunOpenFASTADM.cmake`, `RunRestartParity.cmake` | a farm: `fx == -load_x` of `total_load.csv`; ownership parity (one rank against two, with T2 owned by rank 1); restart parity on two ranks, with T1's logs and checkpoint files written by rank 1; restart on one rank from a two-rank checkpoint |
 | `OpenFAST_ADM_TwoWidths` | two stub turbines, disks, a kernel width each | `RunOpenFASTADM.cmake` | plotfile, T2's flow log, `fx == -load_x` |
 | `OpenFAST_ADM_DiskAndTurbine` | stub turbine (disk, 2 cells) and a prescribed-Ct disk (1 cell) | `RunOpenFASTADM.cmake` | the disk's log, `fx == -load_x` of both bodies; with the two swapped, ownership parity with the disk on rank 1 (`total_load.csv` gathered from it) |
-| `OpenFAST_ADM_TwoLevel` | stub turbine, disk, on level 1 of two | `RunOpenFASTADM.cmake` | the anchor level: sampled and forced on the fine patch, stepped with its step |
+| `OpenFAST_ADM_TwoLevel` | stub turbine, disk, on level 1 of two | `RunOpenFASTADM.cmake` | the anchor level: sampled and forced on the fine patch, stepped with its step; level 0 carries the force summed onto its faces |
 | `OpenFAST_ADM_TwoLevel_Restart` | as above | `RunRestartParity.cmake` | restart parity with the fine level, every log |
 | `Actuator_CtDisk_TwoLevel` | prescribed-Ct disk on one level and on level 1 of two, the fine box tight around it | `RunDiskLevels.cmake` | the coarse level carries the disk's force: the two runs' induction (disk-averaged and upstream velocity deficits) agree within 10 % |
 | `OpenFAST_ALM_Uniform` | stub turbine, line | `RunOpenFASTADM.cmake` | the rotating line; tip-travel limit |
@@ -45,6 +46,7 @@ terrain file of `../Real_Terrain/Askervein`, both copied next to the deck by the
 | `OpenFAST_ALM_ComponentWidths` | stub turbine, line, tower, nacelle, each with its own kernel width | `RunOpenFASTADM.cmake`, `RunRestartParity.cmake`, `RunRestartAbort.cmake` | plotfile, flow log, `fx == -load_x`; restart parity; a changed `epsilon_tower` stops a restart (`OpenFAST_ALM_Tower_ExplicitWidths`, `RunOptionParity.cmake`: widths given equal to `epsilon` change nothing) |
 | `OpenFAST_ALM_FLLC` | stub turbine, line, lifting-line correction | `RunOpenFASTADM.cmake` | the correction log |
 | `OpenFAST_ALM_FLLC_Restart` | as above | `RunRestartParity.cmake` | restart parity of the correction and every log |
+| `OpenFAST_ALM_FLLC_Automatic` | stub turbine, line, `fllc = automatic`, 20 steps | `RunOptionParity.cmake`, `RunRestartParity.cmake` | automatic equals the same settings given by hand (zero tolerance); restart parity with the width set again from the restored rotor |
 | `OpenFAST_ADM_Askervein` | IEA 15 MW, **real OpenFAST**, disk, on the Askervein summit | `RunOpenFASTADM.cmake` | plotfile, flow and turbine logs (1e-6, six digits), `fx == -(T.n) n_x` (`Tests/check_openfast_shaft_source.py`) |
 | `OpenFAST_ALM_Askervein` | IEA 15 MW, **real OpenFAST**, line with FLLC, tower and nacelle, on the Askervein summit | `RunOpenFASTADM.cmake` | plotfile, flow and turbine logs (1e-6, six digits), `fx == -load_x` |
 

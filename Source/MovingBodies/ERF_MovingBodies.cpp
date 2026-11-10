@@ -184,17 +184,24 @@ MovingBodies::MovingBodies (MovingBodiesInputs in, int anchor, double dt, double
             m_turbine_mode.push_back(b.mode);
             m_turbine_points_t.push_back(b.num_points_t);
             m_turbine_in.push_back(b);
-            const KernelWidths w = b.kernel_widths(1.0);
+            // a width taken from epsilon under fllc = automatic is set once OpenFAST reports the rotor
+            auto spread = [&] (Real own) {
+                std::ostringstream o;
+                if (own > 0.0) { o << own << " dx"; }
+                else if (b.fllc_automatic) { o << b.epsilon_diameters << " rotor diameters (fllc = automatic)"; }
+                else { o << b.epsilon << " dx"; }
+                return o.str();
+            };
             if (b.mode != "none") {
-                Print() << "  " << b.name << ": rotor points spread " << w.rotor << " dx\n";
+                Print() << "  " << b.name << ": rotor points spread " << spread(-1.0) << "\n";
             }
             if (b.mode != "none" && b.num_force_points_tower > 0) {
                 Print() << "  " << b.name << ": tower loads forced on " << b.num_force_points_tower << " points, spread "
-                        << w.tower << " dx\n";
+                        << spread(b.epsilon_tower) << "\n";
             }
             if (b.mode != "none" && b.nacelle_cd > 0.0) {
                 Print() << "  " << b.name << ": nacelle drag point, cd " << b.nacelle_cd << ", area " << b.nacelle_area
-                        << " m^2, density " << b.air_density << ", spread " << w.nacelle << " dx\n";
+                        << " m^2, density " << b.air_density << ", spread " << spread(b.epsilon_nacelle) << "\n";
             }
             if (b.fllc) {
                 Print() << "  " << b.name << ": filtered lifting-line correction, optimal kernel " << b.fllc_eps_chord
@@ -347,6 +354,9 @@ MovingBodies::set_ground (const MultiFab* z_phys_nd, const Geometry& geom, const
     }
     m_ground_set = true;
     m_anchor_geom = geom;
+    // fllc = automatic: the widths in cells, now that the anchor level's spacing is known (a fresh start and
+    // a restart alike, from the model's rotor radius, so a restart sets the same widths)
+    resolve_automatic_widths();
     m_fitted = (z_phys_nd != nullptr);
     std::vector<Real> pos;
     for (const auto& m : m_motion) { const auto b = m->position(0.0); pos.insert(pos.end(), {b[0], b[1], b[2]}); }
@@ -388,6 +398,7 @@ MovingBodies::set_ground (const MultiFab* z_phys_nd, const Geometry& geom, const
                        << t.owner_rank << "\n";
         }
     }
+
 #endif
     if (ParallelDescriptor::IOProcessor()) {
         UtilCreateDirectory(m_in.diagnostics_dir, 0755);
@@ -508,6 +519,48 @@ MovingBodies::set_hubs ()
     }
 #endif
     // a disk stands still: the centre of its points
+}
+
+void
+MovingBodies::resolve_automatic_widths ()
+{
+#ifdef ERF_USE_OPENFAST
+    const Real dx = static_cast<Real>(m_anchor_geom.CellSize(0));
+    const Real dy = static_cast<Real>(m_anchor_geom.CellSize(1));
+    const Real dz = static_cast<Real>(m_anchor_geom.CellSize(2));
+    for (int i = 0; i < num_turbines(); ++i) {
+        MovingBodyInputs& b = m_turbine_in[i];
+        if (!b.fllc_automatic) { continue; }
+        // the rotor radius the model's files give (ElastoDyn TipRad, or the stub's rotor_radius), read at
+        // start-up and the same on every rank: not the deflected blades of the moment
+        const auto f = m_model_facts.find(b.fst_file);
+        const Real r_tip = (f != m_model_facts.end()) ? f->second.rotor_radius : Real(-1.0);
+        if (!(r_tip > Real(0.0)) || !std::isfinite(r_tip)) {
+            Abort("erf.moving_bodies." + b.name + ".fllc = automatic: the model files of " + b.fst_file + " give no rotor "
+                  "radius (ElastoDyn TipRad), so the kernel width cannot be set from the rotor diameter; set fllc = true "
+                  "and choose epsilon yourself");
+        }
+        const Real eps_m = b.epsilon_diameters * Real(2.0) * r_tip;
+        b.epsilon = eps_m / dx;
+        Print() << "  " << b.name << ": fllc = automatic: epsilon = " << b.epsilon_diameters << " D = " << eps_m << " m = "
+                << std::setprecision(17) << b.epsilon << std::setprecision(6) << " cells of the anchor level's x spacing (D = 2 x "
+                << r_tip << " m, the model's tip radius); fllc_eps_chord " << b.fllc_eps_chord << ", fllc_eps_dr " << b.fllc_eps_dr
+                << ", fllc_start_time " << b.fllc_start_time << " s, " << b.num_force_points_blade << " points per blade\n";
+        // below about 0.75 cells the spread kernel's width depends on where a node sits in its cell (by up to a
+        // factor of 7 at 0.42 cells), so the correction, which assumes the nominal width, would vary with azimuth
+        if (b.epsilon < AutomaticFLLC::min_cells) {
+            Abort("erf.moving_bodies." + b.name + ".fllc = automatic: epsilon = 0.035 D = " + std::to_string(eps_m) + " m is " +
+                  std::to_string(b.epsilon) + " cells of the anchor level's x spacing (" + std::to_string(dx) + " m), below " +
+                  std::to_string(AutomaticFLLC::min_cells) + "; it needs cells of at most " +
+                  std::to_string(eps_m / AutomaticFLLC::min_cells) + " m at the rotor: refine there, or set fllc = true and "
+                  "choose epsilon yourself");
+        }
+        if (std::abs(dy - dx) > Real(1.0e-6) * dx || std::abs(dz - dx) > Real(1.0e-6) * dx) {
+            Print() << "  " << b.name << ": note: the anchor level's cells are " << dx << " x " << dy << " x " << dz << " m; "
+                    << "fllc = automatic was tested on cells with dx = dy = dz only, and the kernel is round with its width in dx\n";
+        }
+    }
+#endif
 }
 
 std::vector<Real>

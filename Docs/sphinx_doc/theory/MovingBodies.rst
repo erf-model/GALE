@@ -20,7 +20,8 @@ OpenFAST 5; the interface is the same in 4.2). Every ERF step:
    structural nodes) is sampled from ERF's velocity field and handed to
    OpenFAST (or, for testing, the uniform ``erf.moving_bodies.prescribed_velocity``);
 #. OpenFAST advances its own, smaller, time step ``n`` times, where ``n`` is the
-   ratio of ``erf.fixed_dt`` to the OpenFAST ``DT``; ERF refuses to start when
+   ratio of the bodies' step (``erf.fixed_dt`` divided by the time refinement
+   down to the anchor level) to the OpenFAST ``DT``; ERF refuses to start when
    the ratio is not a whole number;
 #. OpenFAST returns the positions of its actuator force points and the
    aerodynamic force on each. OpenFAST reports every position in the
@@ -305,7 +306,7 @@ Disk set-up                                       thrust     power     sampled v
 disk sampling, 20 m cells, kernel 1.5 dx          1.084      1.288     8.40
 disk sampling, 20 m cells, kernel 2 dx            1.093      1.328     8.47
 disk sampling, 20 m cells, kernel 3 dx            1.112      1.403     8.63
-disk sampling, 20 m + 10 m anchor patch           1.095      1.316     8.64
+disk sampling, 20 m + 10 m anchor patch [#]_      1.095      1.316     8.64
 disk sampling, 10 m cells, kernel 2 dx            1.072      1.243     8.36
 upstream sampling 1 D, BEM on, 20 m and 10 m      0.977      0.954     10.43
 upstream sampling 2 D, BEM on, 20 m               0.993      0.999     10.58
@@ -313,6 +314,9 @@ disk_corrected, 20 m cells, kernel 2 dx           0.997      1.000     8.74 -> 1
 disk_corrected, 10 m cells, kernel 2 dx           1.001      0.993     8.44 -> 10.82
 disk_corrected, 20 m cells, kernel 3 dx           0.991      0.994     8.99 -> 10.67
 ================================================  =========  ========  =====================
+
+.. [#] Made before the coarser levels carried the bodies' force (see "Anchor level on
+   multi-level grids"); level 0 was unforced, so this row is not current.
 
 The ratios do not depend on the advection scheme (third- or fifth-order upwind,
 WENO, or blended upwind give the same loads within 0.1 %) nor on the boundary
@@ -356,10 +360,12 @@ which the disk averages away. The integrated momentum source equals minus the
 full thrust vector, the torque about the shaft is preserved by the point loads
 (see the ground-cut kernel above), and no in-plane force is lost. The kernel
 width ``epsilon`` is given in units of the anchor level's ``dx`` but is best
-chosen as a length at the scale of the chord: about 2 m for the IEA 15 MW with
-the FLLC, which on 2.5 m cells is 0.8 cells. A kernel wider than the chord
-smears the tip loading and raises the power for a given inflow: two 2.5 m cells
-(5 m) over-predicted the power by 44 %. The line must not jump over cells between two
+held at a fixed length as the mesh is refined: 0.035 rotor diameters (8.4 m for
+the IEA 15 MW) with the FLLC, which is 0.84 cells on 10 m cells and 1.68 on 5 m
+cells (see the kernel widths below and :doc:`the how-to <../CouplingToOpenFAST>`);
+``fllc = automatic`` sets it so. Held at a fixed number of cells instead, the
+kernel shrinks with the mesh, and 0.8 cells on 2.5 m cells (2 m) gave 15 % less
+power than OpenFAST. The line must not jump over cells between two
 steps: at every step ERF computes how many cells the blade tip sweeps,
 ``rotor_speed * tip_radius * dt / min(dx, dy, dz)``, with the tip radius ``R``
 the largest distance of a blade node from the hub axis, and aborts when it
@@ -409,8 +415,8 @@ requirement and hub-axis check apply as for the disk.
 Filtered lifting-line correction
 --------------------------------
 
-An actuator line spread with a kernel of width ``epsilon`` (two cells or so,
-tens of metres for a 240 m rotor) sees at its own points a weaker induced
+An actuator line spread with a kernel of width ``epsilon`` (several metres
+for a 240 m rotor) sees at its own points a weaker induced
 velocity than the vortex sheet of a real blade, whose kernel is of the order
 of the chord: the blades then see too much wind and the line over-predicts
 power, more so for wider kernels. The filtered lifting-line correction
@@ -420,7 +426,9 @@ Meneveau, Wind Energy 27:101, 2024), on by default with ``mode = alm``
 (``fllc = false`` switches it off), computes the velocity the trailing vorticity of the line's own lift
 distribution induces at the line for the kernel actually used and for the
 optimal one, ``epsilon_opt = fllc_eps_chord * chord`` (a quarter chord by
-default, the chord being OpenFAST's at each force node), and adds the relaxed
+default; ``fllc = automatic`` uses 0.15, the lower end of the optimal range
+0.1 to 0.25 of Martinez-Tossas and Meneveau, which matched OpenFAST better for
+the IEA 15 MW; the chord is OpenFAST's at each force node), and adds the relaxed
 difference to the velocities OpenFAST is given at its blade nodes. For each
 blade, with the force on the fluid per unit density ``F``, the relative
 velocity ``v`` (flow minus blade motion) and the node width ``dr``, the lift
@@ -483,8 +491,9 @@ its own set:
 
 * ``epsilon``: the rotor's points (the blade and hub nodes of an actuator line,
   the rings of an actuator disk, a ``ct_disk``'s points). For an actuator line
-  it is best of the order of the chord, about 2 m for the IEA 15 MW with the
-  FLLC (see above); the FLLC and the ``disk_corrected`` filtered-disk factor
+  it is best held at a fixed length, 0.035 rotor diameters (8.4 m for the
+  IEA 15 MW), whatever the cell size (see above); the FLLC and the
+  ``disk_corrected`` filtered-disk factor
   both use it, as they correct for the width the rotor is spread with.
 * ``epsilon_tower``: the tower force nodes. A tower node samples the velocity
   its own drag has already lowered: by the streamline argument that gives the
@@ -520,10 +529,11 @@ its own set:
   effects to a few per cent; Kynema's choice ``sqrt(2 cd area / pi)`` gives a
   factor of 7/8 (6.2 m for that nacelle).
 
-  The nacelle therefore usually wants its own width beside an actuator line:
-  for the IEA 15 MW (``cd area`` of about 50 to 60 m^2) the 2 m blade width of
-  the FLLC runs above leaves the factor between 0.02 and -0.19, which aborts, while
-  ``epsilon_nacelle`` of two 2.5 m cells gives 0.81 to 0.84.
+  A narrow blade kernel can leave the nacelle's factor too small: for the
+  IEA 15 MW (``cd area`` of about 50 to 60 m^2) a 2 m width gives a factor
+  between about 0 and -0.19, which aborts, and the nacelle then needs its own
+  width (two 2.5 m cells give 0.81 to 0.84). The recommended 8.4 m blade width
+  gives 0.93 to 0.94, so there one width serves both.
 
 Unset, ``epsilon_tower`` and ``epsilon_nacelle`` take ``epsilon``, which
 spreads every point of a body with one width. With ``mode`` adm or alm, a width
@@ -780,14 +790,20 @@ each OpenFAST turbine's own checkpoint ``<name>.chkp``, written through
 ``FAST_CreateCheckpoint`` by the rank that owns the turbine, with the
 turbine's node loads (``<name>_nodes.dat``) and lifting-line correction
 (``<name>_fllc.dat``) written by that rank too, the wake lines' running sums
-and the bodies' statistics. A restart may run on another number of ranks: the
+and the bodies' statistics, and, with an anchor level above 0, the anchor
+level's face forces (``force_x``, ``force_y``, ``force_z``) that the coarser
+levels' first steps after the restart sum onto their faces. A restart may run on another number of ranks: the
 owners are chosen again from its boxes, and each reads its turbines' files
 (tested with the stub library, from two ranks to one). On a restart the
 turbines are restored with ``FAST_ExtInfw_Restart`` instead of being
 initialised, ERF checks that the time index OpenFAST reports is the one its
-own checkpoint expects, and the run continues with the next step; the
-momentum sources are not stored but rebuilt at that step from the restored
-loads, as they would have been in the run being continued. The diagnostics
+own checkpoint expects, and the run continues with the next step; the anchor
+level's momentum sources are not stored but rebuilt at that step from the
+restored loads, as they would have been in the run being continued, while the
+coarser levels take theirs from the stored face forces. A checkpoint written
+before the face forces were stored restarts with an unforced first coarse step,
+and the log says so. With ``fllc = automatic`` the kernel width is set again
+from the restored rotor. The diagnostics
 files keep their rows up to the checkpoint, dropping any that a run which went
 on past it wrote, and are appended to from there (a restart in a clean
 directory starts them afresh with their headers). The restarted run must name
@@ -881,7 +897,9 @@ checks (the coverage check, the audits, the disks' density check), the
 sampling (``MovingBodies::supply_velocities()``), the OpenFAST step
 (``OpenFASTDriver::step()``, every turbine's ``FAST_CFD_Step`` calls on its
 owner), the spreading (``MovingBodies::spread_sources()``, the zeroing of the
-source and the actuator lines' tip cells included), each diagnostics writer,
+source and the actuator lines' tip cells included, then
+``MovingBodies::store_face_forces()`` on the anchor level and
+``MovingBodies::restrict_sources()`` at each step of a coarser level), each diagnostics writer,
 the statistics and the wake lines (their set-up included). Inside the
 exchanges they cover the routing of the points to ranks, the envelope check,
 each message round (``BodyExchange::sample_velocity``: the points and the

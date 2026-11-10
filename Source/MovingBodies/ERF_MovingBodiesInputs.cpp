@@ -1,6 +1,7 @@
 #include "ERF_MovingBodiesInputs.H"
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstdlib>
 #include <iomanip>
@@ -273,9 +274,48 @@ MovingBodiesInputs::read ()
             if (!(b.air_density > 0.0) || !std::isfinite(b.air_density)) {
                 Abort(pre + ".air_density must be positive");
             }
-            if (!ppb.query("fllc", b.fllc)) { b.fllc = (b.mode == "alm"); }   // an actuator line runs with the correction unless told not to
+            // fllc: true | false | automatic; an actuator line runs with the correction unless told not to
+            std::string fllc_in;
+            if (!ppb.query("fllc", fllc_in)) {
+                b.fllc = (b.mode == "alm");
+            } else {
+                std::string v = fllc_in;
+                std::transform(v.begin(), v.end(), v.begin(), [] (unsigned char c) { return static_cast<char>(std::tolower(c)); });
+                // the spellings amrex::ParmParse takes for a bool (true/t, false/f in any case, or a number,
+                // non-zero for on), and automatic
+                char* end = nullptr;
+                const double num_v = std::strtod(v.c_str(), &end);
+                if (v == "automatic") {
+                    b.fllc = true;
+                    b.fllc_automatic = true;
+                } else if (v == "true" || v == "t") {
+                    b.fllc = true;
+                } else if (v == "false" || v == "f") {
+                    b.fllc = false;
+                } else if (!v.empty() && end != v.c_str() && *end == '\0' && std::isfinite(num_v)) {
+                    b.fllc = (num_v != 0.0);
+                } else {
+                    Abort(pre + ".fllc = '" + fllc_in + "' is not known; use true, false or automatic");
+                }
+            }
             if (b.fllc && b.mode != "alm") {
-                Abort(pre + ".fllc = true needs mode = alm; the correction is for an actuator line");
+                Abort(pre + ".fllc = " + (b.fllc_automatic ? std::string("automatic") : std::string("true")) +
+                      " needs mode = alm; the correction is for an actuator line");
+            }
+            if (b.fllc_automatic) {
+                // automatic sets these itself: a value given with it would be ignored
+                for (const char* k : AutomaticFLLC::keys) {
+                    if (ppb.contains(k)) {
+                        Abort(pre + "." + k + " cannot be given with " + pre + ".fllc = automatic, which sets it; remove " +
+                              pre + "." + k + ", or set fllc = true to choose the settings yourself");
+                    }
+                }
+                b.epsilon = -1.0;   // set in cells once the anchor level's spacing is known (MovingBodies::resolve_automatic_widths)
+                b.epsilon_diameters = AutomaticFLLC::epsilon_diameters;
+                b.fllc_eps_chord = AutomaticFLLC::eps_chord;
+                b.fllc_eps_dr = AutomaticFLLC::eps_dr;
+                b.fllc_start_time = AutomaticFLLC::start_time;
+                b.num_force_points_blade = AutomaticFLLC::num_force_points_blade;
             }
             if (b.fllc && b.num_force_points_blade < 2) {
                 Abort(pre + ".num_force_points_blade must be >= 2 with fllc (the correction integrates along the blade)");
@@ -372,9 +412,11 @@ std::vector<std::pair<std::string,std::string>>
 MovingBodiesInputs::restart_record (const MovingBodyInputs& b)
 {
     auto num = [] (double v) { std::ostringstream o; o << std::setprecision(17) << v; return o.str(); };
+    // fllc = automatic records its fraction of the diameter, so a change of that constant stops a restart
+    auto automatic = [&b] () { std::ostringstream o; o << "automatic:" << b.epsilon_diameters; return o.str(); };
     std::vector<std::pair<std::string,std::string>> r{
         {"type", b.type}, {"base_x", num(b.base_pos[0])}, {"base_y", num(b.base_pos[1])}, {"base_z", num(b.base_pos[2])},
-        {"epsilon", num(b.epsilon)}, {"air_density", num(b.air_density)}};
+        {"epsilon", b.fllc_automatic ? automatic() : num(b.epsilon)}, {"air_density", num(b.air_density)}};
     // the keys the body's options use: one it ignores may change freely
     if (b.type != "openfast_turbine" || b.mode == "adm") { r.push_back({"num_points_t", std::to_string(b.num_points_t)}); }
     if (b.type == "openfast_turbine" && b.mode == "adm") { r.push_back({"adm_spreading", b.adm_spreading}); }
@@ -382,12 +424,13 @@ MovingBodiesInputs::restart_record (const MovingBodyInputs& b)
         r.insert(r.end(), {{"fst_file", b.fst_file}, {"mode", b.mode}, {"sampling", b.sampling},
                            {"num_force_points_blade", std::to_string(b.num_force_points_blade)},
                            {"num_force_points_tower", std::to_string(b.num_force_points_tower)},
-                           {"fllc", b.fllc ? "1" : "0"}});
+                           {"fllc", b.fllc_automatic ? "automatic" : (b.fllc ? "1" : "0")}});
         if (b.mode != "none") { r.insert(r.end(), {{"nacelle_cd", num(b.nacelle_cd)}, {"nacelle_area", num(b.nacelle_area)}}); }
         // the widths in cells, as given or taken from epsilon, after the switches that turn their points on
-        const KernelWidths w = b.kernel_widths(1.0);
-        if (b.mode != "none" && b.num_force_points_tower > 0) { r.push_back({"epsilon_tower", num(w.tower)}); }
-        if (b.mode != "none" && b.nacelle_cd > 0.0) { r.push_back({"epsilon_nacelle", num(w.nacelle)}); }
+        // (with fllc = automatic, a width taken from epsilon is recorded as automatic: it is set from the rotor later)
+        auto width = [&] (Real own) { return (own > 0.0) ? num(own) : (b.fllc_automatic ? automatic() : num(b.epsilon)); };
+        if (b.mode != "none" && b.num_force_points_tower > 0) { r.push_back({"epsilon_tower", width(b.epsilon_tower)}); }
+        if (b.mode != "none" && b.nacelle_cd > 0.0) { r.push_back({"epsilon_nacelle", width(b.epsilon_nacelle)}); }
         if (b.sampling == "upstream") { r.push_back({"sample_diameters_upstream", num(b.sample_diameters_upstream)}); }
         if (b.sampling == "disk_corrected") {
             r.insert(r.end(), {{"correction_relax", num(b.correction_relax)}, {"correction_time", num(b.correction_time)}});

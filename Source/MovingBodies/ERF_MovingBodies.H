@@ -313,6 +313,13 @@ private:
     amrex::Real exchange_margin (int b, const amrex::Geometry& geom) const;
     /** Hand the exchange the hub (and blade sweep) of every turbine this rank owns, for its throttled envelope checks. */
     void set_hubs ();
+    /**
+     * fllc = automatic: set each such turbine's epsilon (cells of the anchor level's x spacing) to
+     * epsilon_diameters times its rotor diameter, twice the tip radius its model's files give (the same on
+     * every rank); aborts when the model gives none, or below AutomaticFLLC::min_cells. Called from
+     * set_ground(), on a fresh start and a restart alike, before any kernel width is used.
+     */
+    void resolve_automatic_widths ();
     /** Print, for each body of the exchange whose exchanges now reach other ranks than last time, the ranks it exchanges with. */
     static void report_participants (const erf_actuator::BodyExchange& ex, const std::vector<std::string>& names,
                                      std::vector<std::vector<int>>& reported);

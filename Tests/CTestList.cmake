@@ -2101,6 +2101,32 @@ if(ERF_ENABLE_OPENFAST AND ERF_OPENFAST_USE_STUB AND ERF_ENABLE_FFT AND ERF_ENAB
       DATALOG "T1_fllc.csv T1_erf.csv T1_flow.csv T1_stats.csv moving_bodies/momentum_source.csv moving_bodies/total_load.csv"
       DATALOG_SIGDIGITS 10 OVERRUN)
 
+  # fllc = automatic against the same settings given by hand: fllc = true, epsilon = 0.035 x 2 x 120 m (the
+  # stub's rotor_radius) / 10 m (the deck's dx) = 0.84000000000000008 (that product in double precision,
+  # written to 17 digits), fllc_eps_chord 0.15, fllc_eps_dr 3, fllc_start_time 5, 300 points: identical
+  # plotfiles at zero tolerance. A wrong diameter, radius or level would change epsilon and the plotfile.
+  # The correction acts from t = 5 s on.
+  # (each leg runs in its own subdirectory, so the model file is named from there)
+  add_test_option_parity(OpenFAST_ALM_FLLC_Automatic OpenFAST_ALM_FLLC_Automatic "plt00060"
+      COMMON_OPTIONS "erf.moving_bodies.T1.fst_file=../stub_turbine.fst"
+      ON_OPTIONS "erf.moving_bodies.T1.fllc=true erf.moving_bodies.T1.epsilon=0.84000000000000008 erf.moving_bodies.T1.fllc_eps_chord=0.15 erf.moving_bodies.T1.fllc_eps_dr=3 erf.moving_bodies.T1.fllc_start_time=5 erf.moving_bodies.T1.num_force_points_blade=300"
+      OFF_LOG_REGEX "fllc = automatic: epsilon = 0[.]035 D = 8[.]4 m = 0[.]8400000000000000[0-9]* cells.*D = 2 x 120 m"
+      FCOMPARE_RTOL "0.0" FCOMPARE_ATOL "0.0")
+  set_property(TEST OpenFAST_ALM_FLLC_Automatic APPEND PROPERTY LABELS "moving-bodies")
+  # Checkpointed at step 55 (after the correction starts) and restarted to step 60 on two ranks, the base in
+  # the second of four 32-cell boxes in x: the restart sets the same epsilon from the model and must equal the
+  # straight run.
+  add_test_restart_parity(OpenFAST_ALM_FLLC_Automatic_Restart OpenFAST_ALM_FLLC_Automatic 55 60
+      COMMON_OPTIONS "amr.max_grid_size_x=32"
+      FCOMPARE_RTOL "0.0" FCOMPARE_ATOL "0.0"
+      CHK_NRANKS 2 RESTART_NRANKS 2
+      DATALOG "T1_fllc.csv T1_erf.csv T1_flow.csv moving_bodies/momentum_source.csv"
+      DATALOG_SIGDIGITS 10 OVERRUN)
+  # a restart may not switch automatic for the same numbers given by hand
+  add_test_restart_abort(MovingBodies_Restart_FllcAutomaticToTrue OpenFAST_ALM_FLLC_Automatic 55
+      "T1[.]epsilon changed on restart"
+      RESTART_OPTIONS "erf.moving_bodies.T1.fllc=true erf.moving_bodies.T1.epsilon=0.84000000000000008 erf.moving_bodies.T1.fllc_eps_chord=0.15 erf.moving_bodies.T1.fllc_eps_dr=3 erf.moving_bodies.T1.fllc_start_time=5 erf.moving_bodies.T1.num_force_points_blade=300")
+
   # The disk on two levels: level 1 (25 m) over a box around the rotor is the anchor, sampled and
   # forced with the fine level's step, level 0 carries its force summed onto its faces from level 1.
   # Plotfile and flow-log golds, and the source still integrates to minus the thrust.
@@ -3851,6 +3877,12 @@ if(ERF_ENABLE_OPENFAST AND ERF_OPENFAST_USE_STUB AND ERF_ENABLE_FFT AND ERF_ENAB
       "steps of erf[.]fixed_dt = 0[.]5.*not a whole" "stop_time=4.75 max_step=-1")
   # on two levels the stop time must be a whole number of level-0 steps, which ERF cuts, not of the
   # bodies' finer steps: 4.75 s is 19 steps of level 1 but 9.5 of level 0
+  # fllc = automatic on 50 m cells: 8.4 m is 0.17 cells, below the 0.75 it accepts, and the run must stop
+  add_test_abort(MovingBodies_FllcAutomaticCellsTooCoarse ${_mb_cases}/OpenFAST_ALM_FLLC_Automatic OpenFAST_ALM_FLLC_Automatic.i
+      "fllc = automatic: epsilon = 0[.]035 D = 8[.]4[0-9]* m is 0[.]168[0-9]* cells.*below 0[.]75" "amr.n_cell=24 12 8 erf.fixed_dt=0.5 max_step=1")
+  # fllc = automatic sets epsilon itself: the deck's own epsilon must stop the run, naming it
+  add_test_abort(MovingBodies_FllcAutomaticWithEpsilon ${_mb_cases}/OpenFAST_ALM_FLLC OpenFAST_ALM_FLLC.i
+      "T1[.]epsilon cannot be given with erf[.]moving_bodies[.]T1[.]fllc = automatic" "erf.moving_bodies.T1.fllc=automatic")
   add_test_abort(MovingBodies_StopTimeNotWholeCoarseSteps ${_mb_cases}/OpenFAST_ADM_TwoLevel OpenFAST_ADM_TwoLevel.i
       "is 9[.]5[0-9]* steps of erf[.]fixed_dt = 0[.]5.*not a whole" "stop_time=4.75 max_step=-1")
   # a stop time that is no whole number of steps is fine when max_step ends the run first, as no step
@@ -3913,7 +3945,8 @@ if(ERF_ENABLE_OPENFAST AND ERF_OPENFAST_USE_STUB AND ERF_ENABLE_FFT AND ERF_ENAB
              MovingBodies_ALMTipTravelPhysicalCells_Verify
              MovingBodies_StopTimeNotWholeCoarseSteps
              MovingBodies_AnchorLevelMissingAtStart
-             MovingBodies_MaxStepEndsTheRunFirst MovingBodies_NacelleKernelTooNarrow MovingBodies_TowerWidthWithoutTower)
+             MovingBodies_MaxStepEndsTheRunFirst MovingBodies_NacelleKernelTooNarrow MovingBodies_TowerWidthWithoutTower
+             MovingBodies_FllcAutomaticWithEpsilon MovingBodies_FllcAutomaticCellsTooCoarse)
     set_property(TEST ${_t} APPEND PROPERTY LABELS "moving-bodies")
   endforeach()
 
