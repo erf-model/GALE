@@ -41,6 +41,8 @@ enum class DiagnosticID
     SebQsfc,
     SebHfx,
     SebLh,
+    SebSwNet,
+    IbsebGroundShadow,
     SensFlux,
     LatenFlux,
     SurfPres,
@@ -57,6 +59,8 @@ enum class DiagnosticID
     IntegratedQr,
     IntegratedQs,
     IntegratedQg,
+    CloudOpticalDepthSW,
+    CloudAlbedoEst,
     SurfaceDiagnosticSource,
     SensibleHeatFlux,
     LatentHeatFlux,
@@ -107,6 +111,7 @@ enum class DiagnosticCategory
     Precipitation,
     ColumnIntegral,
     LandSurface,
+    NearSurface,
     SampledLevel
 };
 

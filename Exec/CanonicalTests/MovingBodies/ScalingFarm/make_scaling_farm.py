@@ -100,7 +100,7 @@ xhi.type     = "Outflow"
 zlo.type     = "SlipWall"
 zhi.type     = "SlipWall"
 
-erf.anelastic       = 1
+erf.compressibility_type = Anelastic
 erf.use_fft         = true
 erf.molec_diff_type = "None"
 erf.les_type        = "None"

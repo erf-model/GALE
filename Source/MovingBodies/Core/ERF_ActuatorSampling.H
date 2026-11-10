@@ -19,6 +19,9 @@
 
 namespace erf_actuator {
 
+/// Abort, naming who, unless every rank passes the same number of points (one collective).
+void check_same_points_everywhere (int npts, const char* who);
+
 /**
  * Sample the velocity at a set of points from the face-centred velocity fields.
  *
@@ -31,11 +34,16 @@ namespace erf_actuator {
  * Every rank interpolates the points whose containing cell lies in one of its valid boxes,
  * reading the neighbours from the ghost cells, and the results are summed across ranks; the
  * velocity fields must therefore have at least one filled ghost cell, and z_phys_nd one ghost
- * node, on the velocities' boxes and distribution. In a periodic direction a point is moved by
- * whole periods into the domain; a point on the domain's upper x or y face belongs to the last
- * cell. A point outside the domain otherwise, or one found by no rank or by more than one, aborts
+ * node, on the velocities' boxes and distribution. The ghost cells across the domain's lateral
+ * boundaries are read too (a point within half a cell of a non-periodic face takes up to half
+ * its value from them), so the fields must be filled there as well (FillPatch, not only
+ * FillBoundary). In a periodic direction a point is moved by whole periods into the domain; a
+ * point on the domain's upper x, y or z face belongs to the last cell. A point outside the
+ * domain otherwise, or one found by no rank or by more than one, aborts
  * with its coordinates: the caller owns the points and must keep them inside the domain. Every
- * rank must pass the same points (BodyExchange samples the points of bodies each rank owns alone).
+ * rank must pass the same points: the reduction is collective and the call stops when the ranks
+ * disagree on their number. BodyExchange, whose ranks hold different points (those of the
+ * bodies each owns), calls sample_velocity_local() instead, which has no such check.
  *
  * @param[in] U,V,W face-centred velocities on one level, ghost cells filled (m/s)
  * @param[in] z_phys_nd nodal physical heights (m), or nullptr on a uniform-dz mesh

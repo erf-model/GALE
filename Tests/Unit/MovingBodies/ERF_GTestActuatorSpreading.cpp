@@ -842,3 +842,49 @@ TEST(ActuatorSpreading, TheHostScatterIsTheFaceByFacePassBitForBit)
         EXPECT_GT(changed, 1000);
     }
 }
+
+// from erf-model/ERF#5002: the source summed with the test's own face volumes, for a detJ that
+// varies in k as well (integrate_source shares face_volume with the spreader, so a wrong neighbour
+// there would cancel out in the other terrain tests)
+TEST(ActuatorSpreading, TerrainVolumesAreTheFaceAveragesOfDetJ)
+{
+    Mesh m;
+    m.hill = 100.0;
+    Sources s(m, true);
+    auto dj = [&](int i, int j, int k) { return m.detj(i, j) * (Real(1.0) + Real(0.5) * k / m.nz); };
+    for (amrex::MFIter mfi(*s.detj, false); mfi.isValid(); ++mfi) {
+        auto ja = s.detj->array(mfi);
+        amrex::LoopOnCpu(amrex::grow(mfi.validbox(), 1), [&](int i, int j, int k) { ja(i,j,k) = dj(i, j, k); });
+    }
+    const Real eps = 2.0 * m.dx();
+    const std::vector<Real> pos = xyz(0.2 * m.Lx, 0.3 * m.Ly, 0.4 * m.H);
+    const std::vector<Real> force = xyz(-1.5e6, 2.0e5, 4.0e4);
+    erf_actuator::spread_forces(pos, force, eps, s.znd.get(), s.detj.get(), s.geom, s.sx, s.sy, s.sz);
+    const double dv = static_cast<double>(m.dx()) * static_cast<double>(m.dy()) * static_cast<double>(m.H / m.nz);
+    std::array<double,3> total{{0.0, 0.0, 0.0}};
+    for (amrex::MFIter mfi(s.sx, false); mfi.isValid(); ++mfi) {
+        const auto a = s.sx.const_array(mfi);
+        amrex::LoopOnCpu(mfi.validbox(), [&](int i, int j, int k) {
+            if (i == m.nx) { return; }                                   // the periodic image of face 0
+            total[0] += static_cast<double>(a(i,j,k)) * 0.5 * (dj(i-1,j,k) + dj(i,j,k)) * dv;
+        });
+    }
+    for (amrex::MFIter mfi(s.sy, false); mfi.isValid(); ++mfi) {
+        const auto a = s.sy.const_array(mfi);
+        amrex::LoopOnCpu(mfi.validbox(), [&](int i, int j, int k) {
+            if (j == m.ny) { return; }
+            total[1] += static_cast<double>(a(i,j,k)) * 0.5 * (dj(i,j-1,k) + dj(i,j,k)) * dv;
+        });
+    }
+    for (amrex::MFIter mfi(s.sz, false); mfi.isValid(); ++mfi) {
+        const auto a = s.sz.const_array(mfi);
+        amrex::LoopOnCpu(mfi.validbox(), [&](int i, int j, int k) {
+            total[2] += static_cast<double>(a(i,j,k)) * 0.5 * (dj(i,j,k-1) + dj(i,j,k)) * dv;   // boundary faces hold no source
+        });
+    }
+    amrex::ParallelDescriptor::ReduceRealSum(total.data(), 3);
+    const std::array<Real,3> scale = abs_sum(force);
+    for (int d = 0; d < 3; ++d) {
+        EXPECT_NEAR(static_cast<Real>(total[d]), force[d], rel_tol * std::max(Real(1.0), scale[d])) << "component " << d;
+    }
+}

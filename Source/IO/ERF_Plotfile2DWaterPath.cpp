@@ -3,6 +3,7 @@
  */
 #include "ERF_Plotfile2DWaterPath.H"
 #include "ERF_Plotfile2DPrecip.H"
+#include "ERF_Plotfile2DCloudOptics.H"
 #include "ERF_TileNoZ.H"
 
 #include <AMReX.H>
@@ -190,16 +191,19 @@ available_diagnostic_names (const SolverChoice& solver_choice,
              (active_lsm_names.empty() && !has_noahmp))) {
             continue;
         }
-        if (descriptor.id == DiagnosticID::Temperature2m && !(has_noahmp || has_surface_layer)) {
+        // The NearSurface fields need Noah-MP or a surface layer; the
+        //    mixing ratio also needs a moist run
+        if (descriptor.category == DiagnosticCategory::NearSurface) {
+            if (has_noahmp || has_surface_layer) {
+                if (descriptor.id != DiagnosticID::WaterVaporMixingRatio2m || has_moisture) {
+                    names.push_back(descriptor.name);
+                }
+            }
             continue;
         }
-        if ((descriptor.id == DiagnosticID::WaterVaporMixingRatio2m ||
-             descriptor.id == DiagnosticID::NearSurfaceDiagnosticSource) &&
-            !(has_moisture && (has_noahmp || has_surface_layer))) {
-            if (descriptor.id == DiagnosticID::NearSurfaceDiagnosticSource &&
-                (has_noahmp || has_surface_layer)) {
-                names.push_back(descriptor.name);
-            }
+        if ((descriptor.id == DiagnosticID::CloudOpticalDepthSW ||
+             descriptor.id == DiagnosticID::CloudAlbedoEst) &&
+            !cloud_optics_available(solver_choice.moisture_indices)) {
             continue;
         }
         if (is_condensed_water_path(descriptor.id)) {

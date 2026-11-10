@@ -81,6 +81,20 @@ Real sample_component (int dir, Array4<Real const> const& f, Real x, Real y, Rea
 
 } // namespace
 
+// The point list must be the same on every rank: the reductions below are collective, so a rank
+// with another count (or none while the others have points) would hang or mis-sum. Checked
+// with one collective, which every rank reaches whatever its count.
+void check_same_points_everywhere (int npts, const char* who)
+{
+    int lo = npts, hi = npts;
+    ParallelDescriptor::ReduceIntMin(lo);
+    ParallelDescriptor::ReduceIntMax(hi);
+    if (lo != hi) {
+        Abort(std::string(who) + ": the ranks disagree on the number of points (" + std::to_string(lo) + " to " +
+              std::to_string(hi) + "); every rank must pass the same point list");
+    }
+}
+
 std::vector<Real>
 wrap_periodic (const std::vector<Real>& pos, const Geometry& geom)
 {
@@ -217,6 +231,7 @@ sample_velocity (const MultiFab& U, const MultiFab& V, const MultiFab& W,
     BL_PROFILE("erf_actuator::sample_velocity()");
     AMREX_ALWAYS_ASSERT_WITH_MESSAGE(pos.size() % 3 == 0, "sample_velocity: pos holds x,y,z triples");
     const int npts = static_cast<int>(pos.size() / 3);
+    check_same_points_everywhere(npts, "sample_velocity");
     std::vector<int> cnt;
     sample_velocity_local(U, V, W, z_phys_nd, geom, wrap_periodic(pos, geom), vel, cnt);
     if (npts == 0) { return; }
@@ -267,6 +282,7 @@ sample_cell_scalar (const MultiFab& mf, int comp, const MultiFab* z_phys_nd, con
     AMREX_ALWAYS_ASSERT_WITH_MESSAGE(pos.size() % 3 == 0, "sample_cell_scalar: pos holds x,y,z triples");
     const int npts = static_cast<int>(pos.size() / 3);
     val.assign(npts, 0.0);
+    check_same_points_everywhere(npts, "sample_cell_scalar");
     if (npts == 0) { return; }
     AMREX_ALWAYS_ASSERT_WITH_MESSAGE(mf.nGrow() >= 1, "sample_cell_scalar: the field needs a filled ghost cell");
     check_layout(mf, z_phys_nd, 1, "sample_cell_scalar: z_phys_nd");
@@ -369,6 +385,7 @@ terrain_heights (const MultiFab* z_phys_nd, const Geometry& geom, const std::vec
     BL_PROFILE("erf_actuator::terrain_heights()");
     const int npts = static_cast<int>(pos.size() / 3);
     h.assign(npts, static_cast<Real>(geom.ProbLo(2)));
+    check_same_points_everywhere(npts, "terrain_heights");
     if (npts == 0 || z_phys_nd == nullptr) { return; }
     const auto plo = geom.ProbLoArray();
     const auto phi = geom.ProbHiArray();

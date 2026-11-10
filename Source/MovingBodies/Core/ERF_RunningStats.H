@@ -151,7 +151,10 @@ public:
             *error = msg;
             return false;
         };
-        if (!amrex::FileExists(fname)) { return false; }
+        if (!amrex::FileExists(fname)) {
+            amrex::AllPrint() << "RunningStats " << m_name << ": no " << fname << " in the checkpoint; the statistics start afresh\n";
+            return false;
+        }
         std::ifstream in(fname);
         if (!in) { return fail("cannot read the statistics checkpoint '" + fname + "' on rank " +
                                std::to_string(amrex::ParallelDescriptor::MyProc()) + ", the body's owner"); }
@@ -175,7 +178,7 @@ public:
         std::string afresh;
         for (std::size_t i = 0; i < size; ++i) {
             if (!(in >> qname >> sum[i] >> sum2[i] >> mn[i] >> mx[i])) {
-                return fail("the statistics checkpoint '" + fname + "' does not list " + m_names[i] + " where expected");
+                return fail("the statistics checkpoint '" + fname + "' is truncated: " + m_names[i] + " is missing or incomplete");
             }
             if (qname != m_names[i]) {
                 const auto r = m_renamed.find(qname);
@@ -195,7 +198,7 @@ public:
         }
         if (!afresh.empty()) {
             amrex::AllPrint() << "RunningStats " << m_name << ": the checkpoint lists " << afresh << ", another quantity than "
-                           << m_renamed[afresh].first << " here; these statistics start afresh at the restart\n";
+                           << m_renamed[afresh].first << " here; all statistics of " << m_name << " start afresh at the restart\n";
             return true;
         }
         m_sum = sum; m_sum2 = sum2; m_min = mn; m_max = mx;

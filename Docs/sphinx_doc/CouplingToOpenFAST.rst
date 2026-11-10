@@ -87,8 +87,8 @@ solution. Its AeroDyn file sets ``Wake_Mod = 1``, as the default
 
 .. code-block:: text
 
-   erf.anelastic      = 1
-   erf.anelastic_type = MidPoint     # the implicit vertical solve is honoured
+   erf.compressibility_type = Anelastic
+   erf.timestepping_type = MidPoint   # honours the implicit vertical solve (RK2 does not)
    erf.vert_implicit  = true
    erf.use_fft        = true
    erf.fixed_dt       = 0.2          # on the anchor level: a whole multiple of OpenFAST's DT

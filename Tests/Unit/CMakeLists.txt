@@ -112,6 +112,9 @@ target_sources(${erf_exe_name}
     ${CMAKE_CURRENT_SOURCE_DIR}/ERF_GTestHelloWorld.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/ERF_GTestRuntimeStubs.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/BoundaryConditions/ERF_GTestSurfaceDiagnosticSource.cpp
+    # Motivation: the ghost cells beside an ingested boundary plane along a periodic
+    # direction must take the plane at the periodic image, not the near side of the seam.
+    ${CMAKE_CURRENT_SOURCE_DIR}/BoundaryConditions/ERF_GTestBndryPlaneIndex.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/BoundaryConditions/ERF_GTestMultiScalarSlots.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/BoundaryConditions/ERF_GTestSurfaceLayerStress.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/BoundaryConditions/ERF_GTestSurfaceLayer.cpp
@@ -121,6 +124,9 @@ target_sources(${erf_exe_name}
     # Motivation: the MOST flux kernels must stay bounded and correctly signed at the
     # stable fold of a prescribed flux and when the log-law bracket would change sign.
     ${CMAKE_CURRENT_SOURCE_DIR}/BoundaryConditions/ERF_GTestMOSTIteration.cpp
+    # Motivation: the QNSE stable-side functions must match their closed forms, keep the
+    # default and the unstable side untouched, and move the stable fold the way the analysis says.
+    ${CMAKE_CURRENT_SOURCE_DIR}/BoundaryConditions/ERF_GTestMOSTStableFunctions.cpp
     # Motivation: the MOST reference height must use the true stretched cell
     # centers, and a query on a mesh face must be found rather than abort.
     ${CMAKE_CURRENT_SOURCE_DIR}/BoundaryConditions/ERF_GTestMOSTAverageZref.cpp
@@ -131,6 +137,9 @@ target_sources(${erf_exe_name}
     ${CMAKE_CURRENT_SOURCE_DIR}/Utils/ERF_GTestReduceToMaxPerHeight.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/BoundaryConditions/ERF_GTestWrfBoundaryDensity.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/BoundaryConditions/ERF_GTestWrfBoundaryMoisture.cpp
+    # Motivation: the wrfbdy time-interpolation weight must follow the elapsed time to roundoff,
+    # not to the ~2.4e-7 s spacing of doubles at epoch times.
+    ${CMAKE_CURRENT_SOURCE_DIR}/BoundaryConditions/ERF_GTestBdyTimeWeights.cpp
     # Motivation: face-local wall metadata must not inherit a later wall's
     # density representation or treat explicit zero as absent.
     ${CMAKE_CURRENT_SOURCE_DIR}/BoundaryConditions/ERF_GTestWallBCMetadata.cpp
@@ -253,6 +262,10 @@ target_sources(${erf_exe_name}
     # their fluid cell without its water vapour (erf-model/ERF#4481); they now match the
     # two-stream column's equation of state for the same moist cell.
     ${CMAKE_CURRENT_SOURCE_DIR}/SourceTerms/ERF_GTestIBSEBMoistAir.cpp
+    # Motivation: with erf.ibseb.two_stream_buildings the ground balance takes the beam
+    # off the ground the buildings shade; the shadow must be the buildings' geometry,
+    # across a periodic edge too, and under an overhang, in every box of a level.
+    ${CMAKE_CURRENT_SOURCE_DIR}/SourceTerms/ERF_GTestIBSEBGroundShadow.cpp
     # Motivation: observation nudging must read a station file exactly, relax
     # to the closed-form target with the right weight, sigma band and rate cap,
     # and put its sources on the right faces over flat, fitted and immersed
@@ -268,6 +281,10 @@ target_sources(${erf_exe_name}
     # moist layer reaches the domain top (erf-model/ERF#4484), and give the top
     # cell its closed-form heating there.
     ${CMAKE_CURRENT_SOURCE_DIR}/Radiation/ERF_GTestRadiationSimple.cpp
+    # Motivation: with erf.ibseb.two_stream_buildings the sweep writes no heating in a
+    # building's solid cells, and the ground balance holds a footprint and takes the
+    # absorbed beam (not the diffuse light) off the shaded ground, once per sweep.
+    ${CMAKE_CURRENT_SOURCE_DIR}/Radiation/ERF_GTestTwoStreamBuildingCover.cpp
     # Motivation: with erf.ibseb.sun_mode = two_stream the building faces must
     # see the two-stream columns' sun: the same zenith, a morning sun in the
     # east, and the start date read the same way.
@@ -302,6 +319,7 @@ target_sources(${erf_exe_name}
     ${CMAKE_CURRENT_SOURCE_DIR}/Radiation/ERF_GTestOrbitalGeometry.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Radiation/ERF_GTestTopographicShading.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/IO/ERF_GTestPlotfile2D.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/IO/ERF_GTestCloudOptics.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/IO/ERF_GTestPlotfileSelection.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/IO/ERF_GTestStationSampler.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/IO/ERF_GTestProvenance.cpp
@@ -381,7 +399,7 @@ target_sources(${erf_exe_name}
     ${CMAKE_CURRENT_SOURCE_DIR}/LandSurfaceModel/SLM/ERF_GTestSLMInterface.cpp
     # Motivation: a finer level's land state must be interpolated land from land and water
     # from water (erf-model/ERF#4390), keeping each coarse mean and cell_cons_interp elsewhere.
-    ${CMAKE_CURRENT_SOURCE_DIR}/LandSurfaceModel/ERF_GTestLandWaterInterp.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/LandSurfaceModel/ERF_GTestTypedInterp.cpp
 )
 # The fire coupling's headers are only on the include path, and its sources
 # only in the library, when the fire coupling is built.
@@ -498,6 +516,12 @@ if(ERF_ENABLE_MOVING_BODIES)
   # phase alone and only when it is on, and give each phase's minimum, mean and maximum over the ranks.
   target_sources(${erf_exe_name} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/MovingBodies/ERF_GTestPhaseTimers.cpp
+  )
+  # Motivation: a structure model that registers itself from its own file must be listed and
+  # created by the name erf.structures.model gives; an unknown name must stop the run with
+  # the names it accepts, and a name registered twice or an empty name must stop it too.
+  target_sources(${erf_exe_name} PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/MovingBodies/ERF_GTestStructureRegistry.cpp
   )
 endif()
 if(ERF_ENABLE_OPENFAST AND ERF_OPENFAST_USE_STUB)
@@ -742,7 +766,7 @@ if(TARGET erf_exec AND ERF_DIM STREQUAL "3" AND
   add_sbm_expected_failure_test(SBM_M3_Reject_Anelastic_StaticTerrain
     inputs_periodic_static_terrain
     "SBM M3 does not currently support anelastic StaticFittedMesh"
-    "-DOVERRIDE=erf.anelastic=1")
+    "-DOVERRIDE=erf.compressibility_type=Anelastic erf.timestepping_type=RK2")
   add_sbm_expected_failure_test(SBM_Native_QC_Write_Fault inputs_zero_carrier
     "SBM owns compact qc/qr; native advection write denied for component range"
     "-DOVERRIDE=erf.sbm_test_native_qc_write_fault=true")
@@ -751,8 +775,8 @@ if(TARGET erf_exec AND ERF_DIM STREQUAL "3" AND
   add_sbm_expected_failure_test(SBM_Invalid_Zero_Edge_AutoPivot inputs_invalid_zero_edge_autopivot
     "Invalid SBM configuration: pivots must be finite and positive")
   add_sbm_expected_failure_test(SBM_Implicit_Substepping inputs_zero_carrier
-    "SBM M3 requires acoustic substepping_type=None"
-    "-DOVERRIDE=erf.substepping_type=Implicit")
+    "SBM M3 does not support acoustic substepping"
+    "-DOVERRIDE=erf.timestepping_type=RK3_ImplicitSubstep")
   add_sbm_expected_failure_test(SBM_Nonperiodic_Geometry inputs_nonperiodic
     "SBM M3 currently requires triply periodic geometry")
   add_sbm_expected_failure_test(SBM_Immersed_Buildings inputs_zero_carrier
@@ -1002,6 +1026,7 @@ if(ERF_ENABLE_MPI)
       # The boxes are spread over the ranks, so a k may be held by another rank only
       ${CMAKE_CURRENT_SOURCE_DIR}/Utils/ERF_GTestReduceToMaxPerHeight.cpp
       ${CMAKE_CURRENT_SOURCE_DIR}/Radiation/ERF_GTestTopographicShading.cpp
+      ${CMAKE_CURRENT_SOURCE_DIR}/IO/ERF_GTestCloudOptics.cpp
       # The immersed average down copies the fine sums to the coarse layout: check it across ranks
       ${CMAKE_CURRENT_SOURCE_DIR}/Utils/ERF_GTestImmersedAverageDown.cpp
       # The mismatch count reduces over the ranks: check it across ranks
@@ -1155,4 +1180,22 @@ endif()
       PROCESSORS 2
       TIMEOUT 120
   )
+endif()
+
+if(TARGET erf_exec AND ERF_DIM STREQUAL "3" AND NOT AMReX_HDF5)
+  add_executable(erf_cloud_optics_plotfile_check
+    ${CMAKE_CURRENT_SOURCE_DIR}/IO/ERF_CloudOpticsPlotfileCheck.cpp)
+  target_link_libraries(erf_cloud_optics_plotfile_check PRIVATE AMReX::amrex)
+  if(ERF_ENABLE_CUDA)
+    setup_target_for_cuda_compilation(erf_cloud_optics_plotfile_check)
+  endif()
+  add_test(NAME CloudOptics_RadiationOff_Plot2D
+    COMMAND ${CMAKE_COMMAND}
+      -DERF_EXECUTABLE=$<TARGET_FILE:erf_exec>
+      -DCHECK_EXECUTABLE=$<TARGET_FILE:erf_cloud_optics_plotfile_check>
+      -DINPUT_FILE=${PROJECT_SOURCE_DIR}/Exec/RegTests/Bubble/inputs_BF02_moist_bubble
+      -DTEST_ROOT=${CMAKE_CURRENT_BINARY_DIR}/cloud_optics_writer
+      -P ${CMAKE_CURRENT_SOURCE_DIR}/IO/RunCloudOptics.cmake)
+  set_tests_properties(CloudOptics_RadiationOff_Plot2D PROPERTIES
+    LABELS "integration;cloud_optics" TIMEOUT 60 RUN_SERIAL TRUE)
 endif()
