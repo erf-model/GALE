@@ -383,8 +383,12 @@ Known limits
   in an anelastic run: the inflow theta is scaled by the density ratio.
 - The k-equation length-scale cap from the PBL height reads each level's own
   diagnosis; pin ``erf.max_geom_lscale`` on multi-level ABL runs.
-- Refined levels on a terrain-fitted mesh have not been re-tested with turbines.
-  In two-level Askervein runs on a build of 2026-10-11, the anelastic
+- Refined levels on a terrain-fitted mesh with turbines: a 100 m Gaussian hill
+  with four levels (160, 80, 40 and 20 m across, refinement ``2 2 1``, the
+  refined levels stopping at 800, 720 and 640 m of the 960 m domain,
+  ``erf.coupling_type = OneWay``, the default ``gmres_fft`` solver) ran 600 s
+  with the IEA 15 MW as a disk (kEqn RANS) and as a line (LES) on a build of
+  2026-11-04. In two-level Askervein runs on a build of 2026-10-11, the anelastic
   projection with the FFT-preconditioned GMRES solver did not converge on the
   refined level (divergence 6e-5 to 2.4 there, against 1e-10 on level 0), the
   temperature and kinetic energy grew on that level, and a three-level
@@ -393,9 +397,9 @@ Known limits
   Neumann faces (erf-model/ERF#4279), the ``mlmg`` and ``gmres_mlmg`` choices of
   ``erf.terrain_poisson_solver`` (#4280), refined levels that stop inside the
   domain in z (#4337), and the coarse/fine fluxes over terrain (#4879, #4902,
-  #4925); and the coarser levels now carry the bodies' force. Until a terrain
-  case with turbines on refined levels is run again, check the "divergence
-  after" lines (``erf.mg_v = 1``) on every level of such a run.
+  #4925); and the coarser levels now carry the bodies' force. Askervein has not
+  been rerun with turbines on a refined level since; until it is, check the
+  "divergence after" lines (``erf.mg_v = 1``) on every level of such a run.
 
 Release notes
 -------------
