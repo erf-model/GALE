@@ -706,7 +706,16 @@ BodyExchange::spread_forces (const std::vector<std::vector<Real>>& pos, const st
     // boxes) take those rounds. Decided per point by the owner, and sent as a flag with it
     std::vector<std::vector<Real>> norm(nb);
     std::vector<std::vector<char>> local(nb);
+#ifdef AMREX_USE_GPU
+    // Not on a device build: uniform_mesh_norm() sums on the host, while the source is added by a device
+    // kernel. The two compilers may round a face's squared distance differently, so that a face on a
+    // kernel's 3 epsilon cut-off counts in the normalisation and gets no source, or the reverse (for a
+    // point on the mesh's nodes or centres, up to about 1e-3 of the normalisation at half-cell widths).
+    // The two rounds below take both from device kernels of the same function
+    const bool uniform = false;
+#else
     const bool uniform = (z_phys_nd == nullptr && detJ_cc == nullptr);
+#endif
     for (int b = 0; b < nb; ++b) {
         if (!owns(b) || usable[b] == 0) { continue; }
         norm[b].assign(pos[b].size(), Real(0.0));

@@ -93,10 +93,11 @@ std::vector<int> choose_owners (const std::vector<amrex::Box>& footprints, const
  *
  * The results are those of sample_velocity() and spread_forces() over all the points, whatever
  * the owners: a sampled velocity is the one value of the one box holding the point. A kernel's
- * normalisation is, on a uniform mesh whose boxes cover its reach, the owner's own sum over the
- * faces it reaches (uniform_mesh_norm(), sent with the point, so that spreading takes one message
- * each way instead of three); otherwise the sum of the participants' partial sums taken in rank
- * order. Either way the faces are those spread_forces() sums, added in another order, so the two
+ * normalisation is, on a uniform mesh whose boxes cover its reach and without a GPU, the owner's own
+ * sum over the faces it reaches (uniform_mesh_norm(), sent with the point, so that spreading takes one
+ * message each way instead of three); otherwise, and always on a GPU build (where a sum on the host and
+ * the device's source could disagree on a face at the kernel's cut-off), the sum of the participants'
+ * partial sums taken in rank order. Either way the faces are those spread_forces() sums, added in another order, so the two
  * can differ in the last bits.
  */
 class BodyExchange
