@@ -224,6 +224,8 @@ ERF::init_stuff (int lev, const BoxArray& ba, const DistributionMapping& dm,
     // kind of domain decomposition in the vertical (at level 0 or above)
     lev_new[Vars::zvel].define(convert(ba, IntVect(0,0,1)), dm, 1, ngrow_vels);
     lev_old[Vars::zvel].define(convert(ba, IntVect(0,0,1)), dm, 1, ngrow_vels);
+    lev_new[Vars::zvel].setVal(bogus_large_value);
+    lev_old[Vars::zvel].setVal(bogus_large_value);
 
     gradp[lev][GpVars::gpx].define(convert(ba, IntVect(1,0,0)), dm, 1, 1); gradp[lev][GpVars::gpx].setVal(zero);
     gradp[lev][GpVars::gpy].define(convert(ba, IntVect(0,1,0)), dm, 1, 1); gradp[lev][GpVars::gpy].setVal(zero);
@@ -1313,6 +1315,30 @@ ERF::update_terrain_arrays (int lev)
             const MultiFab& volfrac = ebfact.getVolFrac();
             detJ_cc[lev] = std::make_unique<MultiFab>(volfrac, amrex::make_alias, 0, volfrac.nComp());
         }
+    }
+    update_zsfc_nd(lev);
+}
+
+/**
+ * (Re)build z_sfc_nd[lev], the height of the bottom of the domain at each node, from
+ * z_phys_nd[lev]. A box that does not reach the bottom interpolates it from the coarser
+ * level, so z_sfc_nd[lev-1] must be current when this is called for lev > 0.
+ *
+ * @param[in] lev level of refinement
+ */
+void
+ERF::update_zsfc_nd (int lev)
+{
+    BoxArray ba2d_nd(ba2d[lev]);
+    ba2d_nd.surroundingNodes(0); ba2d_nd.surroundingNodes(1);
+    if (!z_sfc_nd[lev] || z_sfc_nd[lev]->boxArray() != ba2d_nd ||
+        z_sfc_nd[lev]->DistributionMap() != dmap[lev]) {
+        z_sfc_nd[lev] = std::make_unique<MultiFab>(ba2d_nd, dmap[lev], 1, 0);
+    }
+    if (lev > 0) {
+        make_zsfc_nd(geom[lev], *z_phys_nd[lev], *z_sfc_nd[lev], z_sfc_nd[lev-1].get(), ref_ratio[lev-1]);
+    } else {
+        make_zsfc_nd(geom[lev], *z_phys_nd[lev], *z_sfc_nd[lev]);
     }
 }
 
