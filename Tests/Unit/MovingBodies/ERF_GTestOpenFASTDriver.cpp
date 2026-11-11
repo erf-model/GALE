@@ -218,7 +218,7 @@ TEST(MovingBodiesInputs, ReadFillsEveryBodyFromItsBlock)
 
 TEST(OpenFASTDriver, InitReportsTheStubNodeLayout)
 {
-    const StubDeck d;
+    const StubDeck d{};
     const auto dir = scratch_dir("layout");
     const std::string fst = write_stub_deck(dir, d);
     erf_openfast::OpenFASTDriver driver({one_turbine(fst, dir)});
@@ -266,7 +266,7 @@ TEST(OpenFASTDriver, InitReportsTheStubNodeLayout)
 // "Simulation completed." as information only while the loads stay frozen: the driver must stop there.
 TEST(OpenFASTDriver, SteppingPastTheOpenFASTStopTimeAborts)
 {
-    const StubDeck d;
+    const StubDeck d{};
     const auto dir = scratch_dir("tmax");
     const std::string fst = write_stub_deck(dir, d);
     erf_openfast::OpenFASTDriver driver({one_turbine(fst, dir)});
@@ -286,7 +286,7 @@ TEST(OpenFASTDriver, CheckpointAndRestartReproduceTheUninterruptedRun)
     // a run of five ERF steps, checkpointed after three; a second driver restored from that
     // checkpoint and stepped twice must report exactly the state of the uninterrupted run
     // (the stub is deterministic, and the interface stores the same floats)
-    const StubDeck d;
+    const StubDeck d{};
     const auto dir = scratch_dir("restart");
     const std::string fst = write_stub_deck(dir, d);
     const std::string prefix = (dir / "chk_").string();
@@ -349,7 +349,7 @@ TEST(OpenFASTDriver, CheckpointAndRestartReproduceTheUninterruptedRun)
 
 TEST(OpenFASTDriver, StepAdvancesTheRotorAndReturnsTheDiskLoads)
 {
-    const StubDeck d;
+    const StubDeck d{};
     const auto dir = scratch_dir("step");
     const std::string fst = write_stub_deck(dir, d);
     erf_openfast::OpenFASTDriver driver({one_turbine(fst, dir)});

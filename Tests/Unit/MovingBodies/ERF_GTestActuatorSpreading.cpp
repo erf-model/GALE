@@ -788,7 +788,7 @@ TEST(ActuatorSpreading, TheHostScatterIsTheFaceByFacePassBitForBit)
 {
 #ifdef AMREX_USE_GPU
     GTEST_SKIP() << "a device has only the face-by-face pass";
-#endif
+#else   // the body is compiled only where it runs: after the skip a device compiler reports it as unreachable
     // over terrain and on a flat mesh, several boxes, several points per face, periodic images in x and y, zero
     // scales, kernels reaching the ground and the top, and sources that already hold values (several bodies add
     // into the same sources)
@@ -841,6 +841,7 @@ TEST(ActuatorSpreading, TheHostScatterIsTheFaceByFacePassBitForBit)
         amrex::ParallelDescriptor::ReduceLongSum(changed);
         EXPECT_GT(changed, 1000);
     }
+#endif
 }
 
 // from erf-model/ERF#5002: the source summed with the test's own face volumes, for a detJ that
