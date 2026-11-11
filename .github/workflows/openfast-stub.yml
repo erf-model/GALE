@@ -9,7 +9,7 @@ name: Linux GCC OpenFAST stub
 
 on:
   push:
-    branches: [development, ERF-MovingBodies]
+    branches: [development]
   pull_request:
     types: [opened, synchronize, reopened]
 

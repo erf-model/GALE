@@ -12,7 +12,7 @@ name: Linux GCC OpenFAST 5
 
 on:
   push:
-    branches: [development, ERF-MovingBodies]
+    branches: [development]
   pull_request:
     types: [opened, synchronize, reopened]
 
