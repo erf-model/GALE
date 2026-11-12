@@ -25,6 +25,41 @@ OpenFAST (library)   |realtests|
 .. |stubtests| image:: https://github.com/erf-model/GALE/actions/workflows/openfast-stub.yml/badge.svg?branch=development
 .. |realtests| image:: https://github.com/erf-model/GALE/actions/workflows/openfast-real.yml/badge.svg?branch=development
 
+Where the examples are
+----------------------
+
+The moving-bodies examples are in ``Exec/CanonicalTests/MovingBodies``. Each
+case has its own folder with the input deck and the turbine file, ready to run
+with the ``erf_exec`` of a build described under `Building and running`_.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 34 66
+
+   * - Folder in ``Exec/CanonicalTests/MovingBodies``
+     - What it shows
+   * - ``Actuator_UniformCtDisk``, ``Actuator_CtDisk_TwoLevel``
+     - A prescribed-thrust disk, on one level and on a refined patch. Needs no
+       OpenFAST.
+   * - ``Actuator_Sampling``, ``OpenFAST_DriverOnly``
+     - A turbine that samples the wind without forcing the flow.
+   * - ``OpenFAST_ADM_*``
+     - Actuator disks: uniform inflow, upstream sampling, terrain, wake lines,
+       precursor and perturbation inflow, two turbines, two levels, restart.
+   * - ``OpenFAST_ALM_*``
+     - Actuator lines: uniform inflow, tower and nacelle, per-component kernel
+       widths, the filtered lifting-line correction, restart.
+   * - ``OpenFAST_ADM_Askervein``, ``OpenFAST_ALM_Askervein``
+     - The IEA 15 MW turbine on the Askervein hill, with the OpenFAST library.
+   * - ``IEA15_land_model``
+     - The OpenFAST model of the IEA 15 MW turbine used by the Askervein cases.
+   * - ``ScalingFarm``
+     - Tools that write and time farms of 16 to more than 1024 turbines.
+
+Every case except the two Askervein cases runs with the bundled OpenFAST stub.
+The `cases README <Exec/CanonicalTests/MovingBodies/README.md>`_ lists each
+case, its body and what it checks.
+
 What GALE does
 --------------
 
