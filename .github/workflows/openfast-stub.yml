@@ -88,7 +88,7 @@ jobs:
 
     - name: Actuator and OpenFAST Unit Tests
       run: |
-        Tests/Unit/erf_unit_tests --gtest_filter='ActuatorSampling.*:ActuatorSpreading.*:BodyExchange.*:WakeLines.*:RunningStats.*:LogStreams.*:PrescribedCtDisk.*:OpenFAST*:FLLC.*:MovingBodiesInputs.*'
+        Tests/Unit/erf_unit_tests --gtest_filter='ActuatorSampling.*:ActuatorSpreading.*:BodyExchange.*:WakeLines.*:RunningStats.*:OwnedWakeLines.*:OwnedRunningStats.*:LogStreams.*:TrimLog.*:PrescribedCtDisk.*:OpenFAST*:FLLC.*:MovingBodiesInputs.*'
       working-directory: ${{runner.workspace}}/ERF/build
 
     # every unit test three times in shuffled orders, in one process; the ERF CI job runs this

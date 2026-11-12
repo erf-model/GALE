@@ -218,11 +218,9 @@ average that ``<output_root>_wake_avg.csv`` always holds (``samples`` is the
 number of samples in it). The running sums, with the sampling geometry, are
 written to and read from a checkpoint directory
 (``<name>_wake_avg.dat``: a ``key = value`` header with the sample count, the
-number of values, the hub, the axis, the diameter and the line layout
-``lines_xD``, ``half_width`` and ``num_points``, then the offsets, the
+number of values, the hub, the axis and the diameter, then the offsets, the
 point positions and the running sums), so the average continues across a
-restart; a restart with another line layout stops, and a checkpoint without
-the file starts the average afresh and says so.
+restart; a checkpoint without the file starts the average afresh and says so.
 
 Running statistics
 ------------------

@@ -1,6 +1,6 @@
 #include "ERF_OpenFASTDriver.H"
 
-#include "ERF_DiagnosticsLog.H"
+#include "ERF_LogStreams.H"
 #include "ERF_OpenFASTAudit.H"
 
 #include <chrono>
@@ -752,10 +752,10 @@ OpenFASTDriver::write_diagnostics (double time)
         erf_log_row(i, erf_row);
         flow_log_row(i, flow_row);
         std::ofstream out;
-        if (erf_actuator::open_log(out, t.output_root + "_erf.csv", truncate)) { out << "time," << erf_log_columns() << "\n"; }
+        if (erf_actuator::open_log_once(out, t.output_root + "_erf.csv", truncate)) { out << "time," << erf_log_columns() << "\n"; }
         erf_actuator::write_log_row(out, time, nullptr, erf_row, erf_log_size);
         std::ofstream flow;
-        if (erf_actuator::open_log(flow, t.output_root + "_flow.csv", truncate)) { flow << "time," << flow_log_columns() << "\n"; }
+        if (erf_actuator::open_log_once(flow, t.output_root + "_flow.csv", truncate)) { flow << "time," << flow_log_columns() << "\n"; }
         erf_actuator::write_log_row(flow, time, nullptr, flow_row, flow_log_size);
     }
     m_logs_started = true;

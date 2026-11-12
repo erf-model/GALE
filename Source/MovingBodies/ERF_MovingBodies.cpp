@@ -21,10 +21,11 @@
 #include <AMReX_VisMF.H>
 
 #include "ERF_ActuatorSampling.H"
+#include "ERF_CellHeights.H"
 #ifdef ERF_USE_OPENFAST
 #include "ERF_OpenFASTAudit.H"
 #endif
-#include "ERF_DiagnosticsLog.H"
+#include "ERF_LogStreams.H"
 #include "ERF_ActuatorSpreading.H"
 #include "ERF_ActuatorRestriction.H"
 #include "ERF_DataStruct.H"
@@ -1288,7 +1289,7 @@ MovingBodies::write_statistics ()
     // body b of m_exchange: its statistics (a turbine's, then a disk's)
     const int nturb = num_turbines();
     const int nbody = nturb + static_cast<int>(m_disks.size());
-    auto stats = [this, nturb] (int b) -> const erf_actuator::RunningStats& {
+    auto stats = [this, nturb] (int b) -> const erf_actuator::OwnedRunningStats& {
         return (b < nturb) ? m_turbine_stats[b] : m_disk_stats[b - nturb];
     };
     const std::string& format = m_in.diagnostics_format;
@@ -1297,14 +1298,14 @@ MovingBodies::write_statistics ()
         for (int b = 0; b < nbody; ++b) { stats(b).write(); }
         return;
     }
-    const std::string header = std::string("body,") + erf_actuator::RunningStats::columns();
+    const std::string header = std::string("body,") + erf_actuator::OwnedRunningStats::columns();
     if (format == "per_rank") {
         // each rank rewrites its own file with the statistics of the bodies it owns
         bool any = false;
         for (int b = 0; b < nbody && !any; ++b) { any = m_exchange.owns(b); }
         if (!any) { return; }
         std::ofstream out;
-        erf_actuator::open_log(out, rank_log_file(ParallelDescriptor::MyProc(), "stats"), true);
+        erf_actuator::open_log_once(out, rank_log_file(ParallelDescriptor::MyProc(), "stats"), true);
         out << header << "\n";
         for (int b = 0; b < nbody; ++b) {
             if (m_exchange.owns(b)) { stats(b).write_rows(out, m_exchange_names[b] + ","); }
@@ -1331,7 +1332,7 @@ MovingBodies::write_statistics ()
     }
     part.write = [this, nbody, offset, stats, header] (const double* all) {
         std::ofstream out;
-        erf_actuator::open_log(out, farm_log_file("stats"), true);
+        erf_actuator::open_log_once(out, farm_log_file("stats"), true);
         out << header << "\n";
         for (int b = 0; b < nbody; ++b) {
             const double* v = all + offset[b];
@@ -1339,7 +1340,7 @@ MovingBodies::write_statistics ()
             const auto& names = stats(b).quantities();
             std::vector<Real> q(4 * names.size());
             for (std::size_t k = 0; k < q.size(); ++k) { q[k] = static_cast<Real>(v[4+k]); }
-            erf_actuator::RunningStats::write_rows(out, m_exchange_names[b] + ",", names, static_cast<int>(v[1]), v[2], v[3], q.data());
+            erf_actuator::OwnedRunningStats::write_rows(out, m_exchange_names[b] + ",", names, static_cast<int>(v[1]), v[2], v[3], q.data());
         }
     };
     m_pending_logs.push_back(std::move(part));
@@ -1408,7 +1409,7 @@ MovingBodies::build_wake_lines (const BoxArray& level_grids, const MultiFab* z_p
         const std::size_t nl = w.lines_xD.size();
         for (std::size_t r = 0; r < rotors.size(); ++r) {
             const std::vector<Real> g(ground.begin() + static_cast<std::ptrdiff_t>(r * nl), ground.begin() + static_cast<std::ptrdiff_t>((r + 1) * nl));
-            m_wakes.push_back(std::make_unique<erf_actuator::WakeLines>(rotors[r].name, rotors[r].root, rotors[r].hub, rotors[r].axis,
+            m_wakes.push_back(std::make_unique<erf_actuator::OwnedWakeLines>(rotors[r].name, rotors[r].root, rotors[r].hub, rotors[r].axis,
                                                                         rotors[r].diameter, w.lines_xD, w.half_width, w.num_points, g));
         }
     }

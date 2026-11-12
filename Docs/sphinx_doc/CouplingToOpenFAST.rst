@@ -377,7 +377,7 @@ Tests
    ctest -L moving-bodies            # the canonical cases and the start-up aborts
    ctest -L restart-parity -R "OpenFAST|MovingBodies"
    ctest -L box-parity -R "OpenFAST|Actuator"
-   Tests/Unit/erf_unit_tests --gtest_filter='OpenFAST*:Actuator*:BodyExchange.*:FLLC*:WakeLines*:RunningStats*:PrescribedCtDisk.*:MovingBodiesInputs.*'
+   Tests/Unit/erf_unit_tests --gtest_filter='OpenFAST*:Actuator*:BodyExchange.*:FLLC*:WakeLines*:RunningStats*:Owned*:LogStreams*:TrimLog*:PrescribedCtDisk.*:MovingBodiesInputs.*'
    ctest -L parallel -R "Actuator|BodyExchange"   # the same exchanges on 1, 2 and 4 ranks
 
 These CTests run on the stub library (``-DERF_OPENFAST_USE_STUB=ON``); their

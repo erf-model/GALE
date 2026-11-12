@@ -14,6 +14,7 @@
 
 #include "ERF_ActuatorSampling.H"
 #include "ERF_ActuatorSpreading.H"
+#include "ERF_UniformMeshNorm.H"
 
 using namespace amrex;
 

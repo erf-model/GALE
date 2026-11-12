@@ -1,0 +1,13 @@
+CEXE_headers += ERF_PhaseTimers.H
+CEXE_headers += ERF_LogStreams.H
+CEXE_headers += ERF_OwnedRunningStats.H
+CEXE_headers += ERF_OwnedWakeLines.H
+CEXE_sources += ERF_OwnedWakeLines.cpp
+CEXE_headers += ERF_CellHeights.H
+CEXE_sources += ERF_CellHeights.cpp
+CEXE_headers += ERF_UniformMeshNorm.H
+CEXE_sources += ERF_UniformMeshNorm.cpp
+CEXE_headers += ERF_ActuatorRestriction.H
+CEXE_sources += ERF_ActuatorRestriction.cpp
+CEXE_headers += ERF_BodyExchange.H
+CEXE_sources += ERF_BodyExchange.cpp
