@@ -51,12 +51,22 @@ with the ``erf_exec`` of a build described under `Building and running`_.
        widths, the filtered lifting-line correction, restart.
    * - ``OpenFAST_ADM_Askervein``, ``OpenFAST_ALM_Askervein``
      - The IEA 15 MW turbine on the Askervein hill, with the OpenFAST library.
+   * - ``OpenFAST_IEA15_PowerCurve``
+     - The IEA 15 MW turbine with its ROSCO controller on a flat domain with
+       refinement levels, as a disk and as a line, compared with OpenFAST
+       alone at five wind speeds. Needs the OpenFAST and ROSCO libraries
+       (``Build/setup_rosco.sh`` or ``-DERF_BUILD_ROSCO=ON``). CTest runs ten
+       steps of each deck; the full runs are made by hand.
    * - ``IEA15_land_model``
-     - The OpenFAST model of the IEA 15 MW turbine used by the Askervein cases.
+     - The OpenFAST model of the IEA 15 MW turbine used by the Askervein and
+       power-curve cases.
    * - ``ScalingFarm``
      - Tools that write and time farms of 16 to more than 1024 turbines.
 
-Every case except the two Askervein cases runs with the bundled OpenFAST stub.
+Every case except the two Askervein cases and the power-curve case runs with
+the bundled OpenFAST stub. The Askervein decks expect the ``IEA15_land_model``
+folder and the terrain file of ``Exec/CanonicalTests/Real_Terrain/Askervein``
+next to them; CTest copies both.
 The `cases README <Exec/CanonicalTests/MovingBodies/README.md>`_ lists each
 case, its body and what it checks.
 
@@ -161,6 +171,8 @@ OpenFAST loads at run time from the path in its ServoDyn file
 
 Both need ``git``, a network connection and a Fortran compiler (the one
 OpenFAST was built with).
+With either option CTest also checks that the library loads and runs four
+short tests of the power-curve case (label ``rosco``).
 
 ``ERF_ENABLE_MOVING_BODIES=ON`` alone builds the framework with the ``ct_disk``
 body and no OpenFAST. A deck turns the bodies on by listing them in
@@ -177,7 +189,12 @@ case checks. The cases run under CTest:
 * label ``moving-bodies``: the stub and ``ct_disk`` cases, their restart and
   box-parity twins, and one abort test per start-up check;
 * label ``openfast-real``: the IEA 15 MW turbine as a disk and as a line on the
-  Askervein hill, against the OpenFAST library.
+  Askervein hill, against the OpenFAST library;
+* label ``rosco``: the IEA 15 MW turbine with the ROSCO controller on a flat
+  domain, as a disk on one and two levels and as a line on two and three, for
+  ten steps, and ``ROSCO_Library``, which checks that the controller library
+  loads. They are registered when the build is given ``ROSCO_DIR`` or
+  ``ERF_BUILD_ROSCO=ON``.
 
 The unit tests of the samplers, the force spreading, the body exchange and the
 OpenFAST driver are in ``Tests/Unit/MovingBodies``.

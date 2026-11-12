@@ -58,6 +58,9 @@ that library at run time. For the ROSCO controller
 link against ROSCO: the ServoDyn file names the library (``DLL_FileName``), and
 the two options make its path known to tests that run such a model. Both need
 the OpenFAST library, not the stub.
+The tests of
+``Exec/CanonicalTests/MovingBodies/OpenFAST_IEA15_PowerCurve`` (label
+``rosco``) use it.
 
 Floating-point traps must stay off in a run with an OpenFAST turbine
 (``amrex.fpe_trap_invalid``, ``amrex.fpe_trap_zero`` and
@@ -152,12 +155,14 @@ over 120 to 700 s, following the Kynema-SGF actuator-line calibration
 thrust. The line uses ``fllc = automatic``: a kernel of 0.035 rotor diameters
 (8.4 m), ``fllc_eps_chord = 0.15`` and 300 points per blade. Above rated
 (10.6 m/s) the controller holds power and rotor speed, so thrust is the test.
-The ROSCO model is not in the repository.
+The decks, the controller inputs and the scripts that make the runs and the
+comparison are in ``Exec/CanonicalTests/MovingBodies/OpenFAST_IEA15_PowerCurve``;
+the ROSCO library itself is not in the repository.
 
 ======  =====================  =====================  =====================
 U       disk, 20 m (1 level)   line, 10 m (2 levels)  line, 5 m (3 levels)
 ======  =====================  =====================  =====================
-5.0     -0.2 % / -0.1 %        +1.4 % / +0.6 %        +3.8 % / +1.6 %
+5.0     -0.2 % / -0.1 %        +1.4 % / +0.6 %        +3.7 % / +1.6 %
 6.5     -0.2 % / -0.1 %        -1.1 % / -0.4 %        +1.3 % / +0.7 %
 9.0     -0.2 % / -0.1 %        -3.8 % / -1.9 %        -1.1 % / -0.4 %
 11.0    0.0 % / +0.1 %         0.0 % / +6.6 %         0.0 % / +4.3 %

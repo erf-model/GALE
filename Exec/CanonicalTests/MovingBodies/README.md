@@ -85,5 +85,13 @@ was fitted for, which is fine for a regression of the feature each deck tests.
   it only when the physics changes, and say why in the pull request.
 - New cases go here with a row in this table and an entry in
   `Docs/sphinx_doc/RegressionTests.rst`.
+- `OpenFAST_IEA15_PowerCurve` is an example, not a regression case: the IEA 15 MW turbine with the ROSCO
+  controller and the real OpenFAST library on a flat domain with one to three levels, as a disk and as a
+  line, compared with OpenFAST alone at five wind speeds (see its README). It needs the ROSCO library
+  (`Build/setup_rosco.sh`, or `-DERF_BUILD_ROSCO=ON`) and its runs take a quarter of an hour to an hour. With
+  `ROSCO_DIR` or `ERF_BUILD_ROSCO=ON` four ten-step tests are registered (label `rosco`,
+  `Tests/RunIEA15PowerCurve.cmake`), one per deck: `OpenFAST_IEA15_PowerCurve_adm_20m`, `_adm_10m`, `_alm_10m` and
+  `_alm_5m` make their run folder with the case's `prepare.py`, require that ServoDyn loaded ROSCO, and compare rotor speed,
+  thrust, torque and power in `T1_erf.csv` with `gold/<deck>_T1_erf.csv.gold` to six digits.
 - `ScalingFarm` is not a case: it holds the tools that write and time farms of
   16 to 1024+ stub turbines (see its README); nothing in it is registered with CTest.
