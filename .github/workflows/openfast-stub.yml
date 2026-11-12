@@ -91,6 +91,13 @@ jobs:
         Tests/Unit/erf_unit_tests --gtest_filter='ActuatorSampling.*:ActuatorSpreading.*:BodyExchange.*:WakeLines.*:RunningStats.*:LogStreams.*:PrescribedCtDisk.*:OpenFAST*:FLLC.*:MovingBodiesInputs.*'
       working-directory: ${{runner.workspace}}/ERF/build
 
+    # every unit test three times in shuffled orders, in one process; the ERF CI job runs this
+    # only in builds without the moving bodies, so this is where their unit tests get it
+    - name: Shuffle Stress Check
+      run: |
+        ctest -L stress --output-on-failure --no-tests=error
+      working-directory: ${{runner.workspace}}/ERF/build
+
     - name: Moving-Bodies Regression Tests
       run: |
         ctest -L moving-bodies --output-on-failure --no-tests=error

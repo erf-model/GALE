@@ -372,20 +372,24 @@ TEST(MovingBodiesInputs, TheDiagnosticsFormatDefaultsToPerTurbineAndMustBeKnown)
 // key existed spread its disks with rings: a restart with merged_rings from it is a change.
 TEST(MovingBodiesInputs, TheAdmSpreadingDefaultsToRingsAndIsInTheRestartRecord)
 {
-    set_turbine("Tspr", "adm", "");
+    // fresh body names on every run, so a repeated test does not find the values it set before
+    static int run = 0;
+    const std::string name = "Tspr" + std::to_string(++run);
+    const std::string bad = "Tsprbad" + std::to_string(run);
+    set_turbine(name, "adm", "");
     EXPECT_EQ(only_body(MovingBodiesInputs::read()).adm_spreading, "rings");
     {
-        amrex::ParmParse pb("erf.moving_bodies.Tspr");
+        amrex::ParmParse pb("erf.moving_bodies." + name);
         pb.add("adm_spreading", std::string("merged_rings"));
     }
     MovingBodyInputs b = only_body(MovingBodiesInputs::read());
     EXPECT_EQ(b.adm_spreading, "merged_rings");
     {
-        set_turbine("Tspr2", "adm", "");
-        amrex::ParmParse pb("erf.moving_bodies.Tspr2");
+        set_turbine(bad, "adm", "");
+        amrex::ParmParse pb("erf.moving_bodies." + bad);
         pb.add("adm_spreading", std::string("merged"));
         const std::string msg = erf_gtest::abort_message([] { MovingBodiesInputs::read(); });
-        EXPECT_NE(msg.find("Tspr2.adm_spreading must be rings or merged_rings"), std::string::npos) << msg;
+        EXPECT_NE(msg.find(bad + ".adm_spreading must be rings or merged_rings"), std::string::npos) << msg;
     }
 
     // recorded for an actuator disk only
