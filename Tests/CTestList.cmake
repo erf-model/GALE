@@ -2746,6 +2746,20 @@ if(ERF_ENABLE_OPENFAST AND NOT ERF_OPENFAST_USE_STUB AND ERF_ENABLE_FFT AND ERF_
   endif()
   add_test_openfast_real(OpenFAST_ALM_Askervein "T1_flow.csv" "load_x")
 endif()
+if(ERF_ROSCO_LIBRARY AND NOT "${ERF_TEST_PYTHON}" STREQUAL "")
+  # The ROSCO controller library found with ROSCO_DIR or built with ERF_BUILD_ROSCO loads and exports
+  # DISCON, the entry point OpenFAST's ServoDyn calls (DLL_ProcName). ERF does not link against the
+  # library, so this is the build's only check that it is usable. The verdict is the exit code: a
+  # missing symbol raises, and Python's traceback repeats the source line, so a pass regex on the
+  # printed text would also match the failure.
+  add_test(NAME ROSCO_Library
+      COMMAND ${ERF_TEST_PYTHON} -c
+          "import ctypes, sys; lib = ctypes.CDLL(sys.argv[1]); lib.DISCON; print('DISCON found in', sys.argv[1])"
+          ${ERF_ROSCO_LIBRARY})
+  set_tests_properties(ROSCO_Library PROPERTIES
+      TIMEOUT 60
+      LABELS "openfast-real;rosco")
+endif()
 
 if(ERF_ENABLE_MOVING_BODIES AND NOT "${ERF_TEST_PYTHON}" STREQUAL "")
   # The shaft-thrust checker of the real-OpenFAST disk case on fixed logs: the real case's own logs must
