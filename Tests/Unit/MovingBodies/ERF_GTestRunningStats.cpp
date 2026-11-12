@@ -414,6 +414,8 @@ TEST(TrimLog, EdgeCases)
     const auto dir = gtest_scratch_root() / "erf_gtest_trim_edges";
     std::filesystem::create_directories(dir);
     const std::string f = (dir / "log.csv").string();
+    // the scratch root lasts for the whole process: remove the file a repeated run of this test left
+    std::filesystem::remove(f);
     // a missing file is left alone, and not made
     EXPECT_EQ(erf_actuator::trim_log_after(f, 1.0, true, 0.1), 0u);
     EXPECT_FALSE(std::filesystem::exists(f));
