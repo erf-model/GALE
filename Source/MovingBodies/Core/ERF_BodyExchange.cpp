@@ -712,7 +712,6 @@ BodyExchange::spread_forces (const std::vector<std::vector<Real>>& pos, const st
     // kernel's 3 epsilon cut-off counts in the normalisation and gets no source, or the reverse (for a
     // point on the mesh's nodes or centres, up to about 1e-3 of the normalisation at half-cell widths).
     // The two rounds below take both from device kernels of the same function
-    const bool uniform = false;
 #else
     const bool uniform = (z_phys_nd == nullptr && detJ_cc == nullptr);
 #endif
@@ -720,10 +719,12 @@ BodyExchange::spread_forces (const std::vector<std::vector<Real>>& pos, const st
         if (!owns(b) || usable[b] == 0) { continue; }
         norm[b].assign(pos[b].size(), Real(0.0));
         local[b].assign(eps[b].size(), 0);
+#ifndef AMREX_USE_GPU
         if (!uniform) { continue; }
         for (std::size_t p = 0; p < eps[b].size(); ++p) {
             if (uniform_mesh_norm(pos[b][3*p], pos[b][3*p+1], pos[b][3*p+2], eps[b][p], geom, ba, &norm[b][3*p])) { local[b][p] = 1; }
         }
+#endif
     }
     auto scale_of = [&] (int b, int p, int d) {
         return norm[b][3*p+d] > Real(0.0) ? force[b][3*p+d] / norm[b][3*p+d] : Real(0.0);
