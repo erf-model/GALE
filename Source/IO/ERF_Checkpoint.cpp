@@ -186,7 +186,10 @@ ERF::WriteCheckpointFile () const
 
 #ifdef ERF_USE_MOVING_BODIES
     // the bodies' state and the OpenFAST turbines' own checkpoints, under <chk>/moving_bodies
-    if (moving_bodies) { moving_bodies->write_checkpoint(checkpointname); }
+    if (moving_bodies) {
+        const int lev = std::min(moving_bodies->anchor_level(), finest_level);
+        moving_bodies->write_checkpoint(checkpointname, grids[lev], dmap[lev]);
+    }
 #endif
 
     if (sbm_state_manager) {
@@ -2403,16 +2406,6 @@ ERF::ReadCheckpointFile ()
     }
 #endif
 
-#ifdef ERF_USE_MOVING_BODIES
-    // the bodies' state and the OpenFAST turbines' own checkpoints, once the mesh is read: the
-    // bases are placed on the terrain before the turbines are restored
-    if (moving_bodies) {
-        const int lev = moving_bodies->anchor_level();
-        moving_bodies->set_ground((lev <= finest_level) ? z_phys_nd[lev].get() : nullptr, Geom(std::min(lev, finest_level)),
-                                  grids[std::min(lev, finest_level)], dmap[std::min(lev, finest_level)], t_new[0], finest_level);
-        moving_bodies->read_checkpoint(restart_chkfile, t_new[0]);
-    }
-#endif
 }
 
 /**
