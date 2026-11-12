@@ -12,7 +12,7 @@ pitch are the measures.
 A full run takes from a quarter of an hour to an hour on four ranks, so the comparison is
 made by hand. It needs the ROSCO controller library, which the repository does not hold;
 `Build/setup_rosco.sh` or the CMake option `ERF_BUILD_ROSCO` downloads and builds it. With
-ROSCO available, CTest runs the first ten steps of two of the decks (see CTest below).
+ROSCO available, CTest runs the first ten steps of each deck (see CTest below).
 
 ## Files
 
@@ -27,9 +27,10 @@ ROSCO available, CTest runs the first ten steps of two of the decks (see CTest b
 | `plot.py` | averages the runs, compares them with OpenFAST alone, writes a table and a figure |
 | `reference.csv` | the averages of the runs described under Expected Results |
 | `erf_vs_openfast.png` | the figure made from `reference.csv` (`python3 plot.py --reference`) |
-| `gold/` | the turbine logs of the two ten-step tests |
+| `gold/` | the turbine logs of the four ten-step tests |
 
-The decks are written for 9 m/s; `prepare.py` sets the wind speed. All four share the
+The decks are written for 9 m/s; `prepare.py` sets the wind speed. `adm_10m.i` has no wake
+lines, which would need level 1 to reach four diameters downstream. All four share the
 domain (2400 x 1920 x 1280 m, 20 m cells on level 0), the inflow and outflow boundaries in
 x with no sponge, the anelastic solver with the implicit vertical solve, and a 0.2 s step
 on level 0. The hub is at mid-height (z = 640 m), 600 m from the inflow.
@@ -165,13 +166,15 @@ difference from OpenFAST alone in power / thrust.
 
 ## CTest
 
-Two tests, registered when the build has the real OpenFAST library, MPI, FFT, Python 3
+Four tests, registered when the build has the real OpenFAST library, MPI, FFT, Python 3
 and a ROSCO library (`-DROSCO_DIR=<prefix>` or `-DERF_BUILD_ROSCO=ON`); label `rosco`:
 
 | test | deck | what it checks |
 | --- | --- | --- |
 | `OpenFAST_IEA15_PowerCurve_adm_20m` | `adm_20m.i`, 9 m/s, ten steps, two ranks | `prepare.py` makes the run folder; the log shows ROSCO was loaded; rotor speed, thrust, torque and power of `T1_erf.csv` agree with `gold/adm_20m_T1_erf.csv.gold` to six digits |
-| `OpenFAST_IEA15_PowerCurve_alm_10m` | `alm_10m.i`, the same on two levels | the same, against `gold/alm_10m_T1_erf.csv.gold` |
+| `OpenFAST_IEA15_PowerCurve_adm_10m` | `adm_10m.i`, the disk on two levels | the same, against `gold/adm_10m_T1_erf.csv.gold` |
+| `OpenFAST_IEA15_PowerCurve_alm_10m` | `alm_10m.i`, the line on two levels | the same, against `gold/alm_10m_T1_erf.csv.gold` |
+| `OpenFAST_IEA15_PowerCurve_alm_5m` | `alm_5m.i`, the line on three levels | the same, against `gold/alm_5m_T1_erf.csv.gold` |
 
 The golds were made on macOS arm64 with OpenFAST 5.0.0 and ROSCO 2.10.1. The full 360 s
 runs and the comparison with OpenFAST alone are not run by CTest. `prepare.py` and

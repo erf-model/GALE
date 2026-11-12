@@ -18,8 +18,8 @@ xhi.type     = "Outflow"
 zlo.type     = "NoSlipWall"
 zhi.type     = "SlipWall"
 
-erf.anelastic      = 1
-erf.anelastic_type = MidPoint   # the implicit vertical solve needs MidPoint
+erf.compressibility_type = Anelastic
+erf.timestepping_type    = MidPoint   # the implicit vertical solve needs MidPoint
 erf.vert_implicit  = true
 erf.use_fft        = true
 
@@ -49,12 +49,13 @@ erf.moving_bodies.T1.output_root             = T1
 erf.moving_bodies.diagnostics_int            = 5
 erf.moving_bodies.avg_start                  = 300.0
 
-# level 1 (10 m) around the rotor and the points sampled two diameters (480 m) upstream; it reaches the ground, where the turbine reads the terrain height
+# level 1 (10 m) around the rotor and the points sampled two diameters (480 m) upstream, with the
+# kernel's reach around them; it reaches the ground, where the turbine reads the terrain height
 amr.max_level        = 1
 amr.ref_ratio        = 2 2 2
 amr.n_error_buf      = 0
 erf.refinement_indicators = box1
-erf.box1.in_box_lo  = 80.   640. 0.
+erf.box1.in_box_lo  = 40.   640. 0.
 erf.box1.in_box_hi  = 1040. 1280. 970.
 erf.box1.max_level  = 1
 
@@ -77,5 +78,4 @@ erf.moving_bodies.T1.fst_file                  = IEA15-land-bem.fst
 erf.moving_bodies.T1.num_force_points_blade    = 50
 erf.moving_bodies.T1.num_points_t              = 24
 erf.moving_bodies.T1.epsilon                   = 4.0      # cells of 10 m: 40 m, as in adm_20m.i
-erf.moving_bodies.wake.lines_xD                = 2 4
-erf.moving_bodies.wake.int                     = 10
+# no wake lines here: they would need level 1 to reach 4 D (960 m) downstream of the rotor

@@ -18,8 +18,8 @@ xhi.type     = "Outflow"
 zlo.type     = "NoSlipWall"
 zhi.type     = "SlipWall"
 
-erf.anelastic      = 1
-erf.anelastic_type = MidPoint   # the implicit vertical solve needs MidPoint
+erf.compressibility_type = Anelastic
+erf.timestepping_type    = MidPoint   # the implicit vertical solve needs MidPoint
 erf.vert_implicit  = true
 erf.use_fft        = true
 

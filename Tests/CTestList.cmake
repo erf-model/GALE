@@ -2747,7 +2747,7 @@ if(ERF_ENABLE_OPENFAST AND NOT ERF_OPENFAST_USE_STUB AND ERF_ENABLE_FFT AND ERF_
   add_test_openfast_real(OpenFAST_ALM_Askervein "T1_flow.csv" "load_x")
 
   # The IEA 15 MW turbine under its ROSCO controller (Exec/CanonicalTests/MovingBodies/OpenFAST_IEA15_PowerCurve)
-  # on a flat domain at 9 m/s, for ten steps: the disk on one level and the line on two. Registered when the
+  # on a flat domain at 9 m/s, for ten steps: the disk on one and two levels, the line on two and three. Registered when the
   # build knows a ROSCO library (ROSCO_DIR or ERF_BUILD_ROSCO). Each test makes its run folder with the case's
   # prepare.py, requires that ServoDyn loaded ROSCO, and compares the turbine's rotor speed, thrust, torque and
   # power with a gold made on macOS arm64 with OpenFAST 5.0.0 and ROSCO 2.10.1, to six digits as for the
@@ -2782,7 +2782,9 @@ if(ERF_ENABLE_OPENFAST AND NOT ERF_OPENFAST_USE_STUB AND ERF_ENABLE_FFT AND ERF_
               ATTACHED_FILES_ON_FAIL "${_bin_dir}/simulation.log")
       endfunction()
       add_test_iea15_power_curve(adm_20m)
+      add_test_iea15_power_curve(adm_10m)
       add_test_iea15_power_curve(alm_10m)
+      add_test_iea15_power_curve(alm_5m)
   elseif(ERF_ROSCO_LIBRARY)
       message(WARNING "The OpenFAST_IEA15_PowerCurve tests are not registered: prepare.py needs a Python 3 interpreter")
   endif()
