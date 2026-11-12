@@ -48,6 +48,17 @@ the ``Linux GCC OpenFAST stub`` CI job. Two cases run the real library on the
 IEA 15 MW reference turbine (below); the ``Linux GCC OpenFAST 5`` CI job builds
 OpenFAST 5.0.0 with ``Build/setup_openfast.sh`` (cached between runs) for them.
 
+A turbine model whose ServoDyn file names a controller library also needs
+that library at run time. For the ROSCO controller
+(https://github.com/NREL/ROSCO), ``Build/setup_rosco.sh`` downloads release
+2.10.1, builds ``libdiscon`` and installs it under ``$HOME/opt/rosco-2.10.1``;
+``-DROSCO_DIR=<prefix>`` then tells the build where it is. Alternatively
+``-DERF_BUILD_ROSCO=ON`` downloads and builds it inside the build folder
+(``<build>/rosco/lib``; ``ERF_ROSCO_VERSION`` picks the release). ERF does not
+link against ROSCO: the ServoDyn file names the library (``DLL_FileName``), and
+the two options make its path known to tests that run such a model. Both need
+the OpenFAST library, not the stub.
+
 Floating-point traps must stay off in a run with an OpenFAST turbine
 (``amrex.fpe_trap_invalid``, ``amrex.fpe_trap_zero`` and
 ``amrex.fpe_trap_overflow`` all 0): OpenFAST's own arithmetic raises them.

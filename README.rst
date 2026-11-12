@@ -144,6 +144,24 @@ For real turbines, install OpenFAST once and point the build at it::
          -DERF_ENABLE_OPENFAST=ON -DOPENFAST_DIR=<install prefix>
    cmake --build cmake-build -j
 
+A turbine model with a controller also needs the controller library, which
+OpenFAST loads at run time from the path in its ServoDyn file
+(``DLL_FileName``). For `ROSCO <https://github.com/NREL/ROSCO>`_
+(``libdiscon``) there are two ways to get it; GALE does not link against it:
+
+* a script that downloads, builds and installs ROSCO 2.10.1 once::
+
+     Build/setup_rosco.sh                          # prints the ROSCO_DIR to use
+     cmake -S . -B cmake-build ... -DOPENFAST_DIR=<install prefix> -DROSCO_DIR=<ROSCO prefix>
+
+* or a CMake option that downloads and builds it inside the build folder::
+
+     cmake -S . -B cmake-build ... -DOPENFAST_DIR=<install prefix> -DERF_BUILD_ROSCO=ON
+     cmake --build cmake-build -j                  # also builds cmake-build/rosco/lib/libdiscon
+
+Both need ``git``, a network connection and a Fortran compiler (the one
+OpenFAST was built with).
+
 ``ERF_ENABLE_MOVING_BODIES=ON`` alone builds the framework with the ``ct_disk``
 body and no OpenFAST. A deck turns the bodies on by listing them in
 ``erf.moving_bodies.bodies``; every ``erf.moving_bodies.*`` key is in the inputs

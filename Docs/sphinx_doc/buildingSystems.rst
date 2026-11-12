@@ -612,6 +612,18 @@ CMake can also generate makefiles for the Ninja build system for faster compilat
      - Enables the OpenFAST turbine coupling (OpenFAST 5.0, tested with 5.0.0 and 4.2.1; set ``OPENFAST_DIR`` to the install prefix); turns on ``ERF_ENABLE_MOVING_BODIES``
      - OFF
      - ON/OFF
+   * - ``ERF_BUILD_ROSCO``
+     - Downloads and builds the ROSCO turbine controller library (``libdiscon``) in the build folder (``<build>/rosco/lib``); needs ``ERF_ENABLE_OPENFAST=ON`` with the OpenFAST library, ``git`` and a Fortran compiler; cannot be given with ``ROSCO_DIR``
+     - OFF
+     - ON/OFF
+   * - ``ERF_ROSCO_VERSION``
+     - The ROSCO release ``ERF_BUILD_ROSCO`` downloads; configure stops if it is not of the form ``x.y.z``
+     - 2.10.1
+     - a release number
+   * - ``ROSCO_DIR``
+     - Install prefix of a ROSCO library built beforehand (``Build/setup_rosco.sh``); configure stops if it holds no ``lib/libdiscon``; needs ``ERF_ENABLE_OPENFAST=ON`` with the OpenFAST library
+     - empty
+     - a path
    * - ``ERF_OPENFAST_USE_STUB``
      - Builds the OpenFAST coupling against the bundled stub library instead of OpenFAST, for testing
      - OFF

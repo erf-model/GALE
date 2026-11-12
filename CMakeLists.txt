@@ -198,6 +198,9 @@ option(ERF_ENABLE_WINDFARM "Enable wind farm parameterizations" OFF)
 option(ERF_ENABLE_MOVING_BODIES "Enable the moving-bodies framework (erf.moving_bodies.*), the actuator core and the structure coupling (Source/MovingBodies)" OFF)
 option(ERF_ENABLE_OPENFAST "Enable the OpenFAST turbine coupling (implies ERF_ENABLE_MOVING_BODIES)" OFF)
 option(ERF_OPENFAST_USE_STUB "Build the OpenFAST coupling against the bundled stub library instead of OpenFAST (for testing)" OFF)
+option(ERF_BUILD_ROSCO "Download and build the ROSCO turbine controller library (libdiscon) in the build tree; needs ERF_ENABLE_OPENFAST with the OpenFAST library" OFF)
+set(ERF_ROSCO_VERSION "2.10.1" CACHE STRING "ROSCO release that ERF_BUILD_ROSCO downloads (a tag of https://github.com/NREL/ROSCO without the leading v)")
+set(ROSCO_DIR "" CACHE PATH "Install prefix of a ROSCO controller library built beforehand (Build/setup_rosco.sh): holds lib/libdiscon.so or lib/libdiscon.dylib")
 
 option(ERF_ENABLE_FIRE "Enable the fire coupling (the atmosphere side; fire engines plug into it)" OFF)
 set(ERF_FIRE_ENGINE_DIRS "" CACHE STRING "Fire engine directories (each with ERFFireEngine.cmake) to compile in; needs ERF_ENABLE_FIRE")
@@ -692,6 +695,60 @@ if(ERF_ENABLE_OPENFAST)
   endif()
 
   message(STATUS "OpenFAST configuration complete")
+  list(POP_BACK CMAKE_MESSAGE_CONTEXT)
+endif()
+
+########################## ROSCO ##################################
+
+# The ROSCO turbine controller (https://github.com/NREL/ROSCO, Apache License 2.0). ERF does not link
+# against it: OpenFAST's ServoDyn loads libdiscon at run time when a turbine model names it. The path
+# found or built here (ERF_ROSCO_LIBRARY) is for the tests and cases that run such a model.
+unset(ERF_ROSCO_LIBRARY CACHE)
+unset(ERF_ROSCO_LIBRARY)
+if(ERF_BUILD_ROSCO OR ROSCO_DIR)
+  list(APPEND CMAKE_MESSAGE_CONTEXT "ROSCO")
+  if(NOT ERF_ENABLE_OPENFAST OR ERF_OPENFAST_USE_STUB)
+    message(FATAL_ERROR "ERF_BUILD_ROSCO and ROSCO_DIR need ERF_ENABLE_OPENFAST=ON and ERF_OPENFAST_USE_STUB=OFF: "
+                        "only the OpenFAST library loads the controller")
+  endif()
+  if(ERF_BUILD_ROSCO AND ROSCO_DIR)
+    message(FATAL_ERROR "Give either ERF_BUILD_ROSCO=ON (build ROSCO here) or ROSCO_DIR=${ROSCO_DIR} (use a built one), not both")
+  endif()
+  if(ROSCO_DIR)
+    find_library(ERF_ROSCO_LIBRARY NAMES discon
+                 PATHS "${ROSCO_DIR}/lib" "${ROSCO_DIR}" NO_DEFAULT_PATH)
+    if(NOT ERF_ROSCO_LIBRARY)
+      message(FATAL_ERROR "ROSCO_DIR=${ROSCO_DIR} holds no lib/libdiscon${CMAKE_SHARED_LIBRARY_SUFFIX}; "
+                          "Build/setup_rosco.sh builds one and prints the ROSCO_DIR to give")
+    endif()
+    message(STATUS "Found the ROSCO controller library: ${ERF_ROSCO_LIBRARY}")
+  else()
+    if(NOT ERF_ROSCO_VERSION MATCHES "^[0-9]+[.][0-9]+[.][0-9]+$")
+      message(FATAL_ERROR "ERF_ROSCO_VERSION must look like 2.10.1, not '${ERF_ROSCO_VERSION}'")
+    endif()
+    find_package(Git REQUIRED)
+    include(ExternalProject)
+    set(_erf_rosco_prefix "${CMAKE_BINARY_DIR}/rosco")
+    set(ERF_ROSCO_LIBRARY "${_erf_rosco_prefix}/lib/libdiscon${CMAKE_SHARED_LIBRARY_SUFFIX}")
+    set(_erf_rosco_args -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=${_erf_rosco_prefix})
+    if(CMAKE_Fortran_COMPILER)
+      # the compiler found for OpenFAST's Fortran run-time, so that both use one run-time library
+      list(APPEND _erf_rosco_args -DCMAKE_Fortran_COMPILER=${CMAKE_Fortran_COMPILER})
+    endif()
+    # part of the default target: "cmake --build <dir>" clones the release tag and builds it;
+    # "cmake --build <dir> --target rosco_controller" builds it alone
+    ExternalProject_Add(rosco_controller
+      GIT_REPOSITORY https://github.com/NREL/ROSCO
+      GIT_TAG v${ERF_ROSCO_VERSION}
+      GIT_SHALLOW TRUE
+      PREFIX "${CMAKE_BINARY_DIR}/rosco-build"
+      SOURCE_SUBDIR rosco/controller
+      CMAKE_ARGS ${_erf_rosco_args}
+      BUILD_BYPRODUCTS "${ERF_ROSCO_LIBRARY}"
+      UPDATE_COMMAND ""
+      LOG_CONFIGURE ON LOG_BUILD ON LOG_INSTALL ON)
+    message(STATUS "ROSCO ${ERF_ROSCO_VERSION} will be downloaded and built as ${ERF_ROSCO_LIBRARY}")
+  endif()
   list(POP_BACK CMAKE_MESSAGE_CONTEXT)
 endif()
 
