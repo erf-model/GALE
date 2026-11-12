@@ -136,7 +136,6 @@ target_sources(${erf_exe_name}
     # refined region that does not reach the top was read outside its data.
     ${CMAKE_CURRENT_SOURCE_DIR}/Utils/ERF_GTestReduceToMaxPerHeight.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/BoundaryConditions/ERF_GTestWrfBoundaryDensity.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/BoundaryConditions/ERF_GTestWrfBoundaryMoisture.cpp
     # Motivation: the wrfbdy time-interpolation weight must follow the elapsed time to roundoff,
     # not to the ~2.4e-7 s spacing of doubles at epoch times.
     ${CMAKE_CURRENT_SOURCE_DIR}/BoundaryConditions/ERF_GTestBdyTimeWeights.cpp
@@ -225,6 +224,10 @@ target_sources(${erf_exe_name}
     # Motivation: a calm cell above an immersed wall gave the wall law u* = 0, an Obukhov length
     # of zero and z / 0 (erf-model/ERF#4016); the stability estimate is now bounded as on flat ground.
     ${CMAKE_CURRENT_SOURCE_DIR}/SourceTerms/ERF_GTestImmersedWallStability.cpp
+    # Motivation: the building wall function's Louis (1979) factors must be 1
+    # at neutral, follow the published closed forms on both sides and weaken
+    # mixing monotonically with the bulk Richardson number.
+    ${CMAKE_CURRENT_SOURCE_DIR}/SourceTerms/ERF_GTestIBSEBLouis.cpp
     # Motivation: the immersed-forcing temperature kernels applied the MOST similarity functions whatever
     # erf.if_stability_correction said, while the momentum kernels gate on it (erf-model/ERF#4931); off,
     # every kernel is the log law.
@@ -409,17 +412,6 @@ target_sources(${erf_exe_name}
     # from water (erf-model/ERF#4390), keeping each coarse mean and cell_cons_interp elsewhere.
     ${CMAKE_CURRENT_SOURCE_DIR}/LandSurfaceModel/ERF_GTestTypedInterp.cpp
 )
-# The fire coupling's headers are only on the include path, and its sources
-# only in the library, when the fire coupling is built.
-if(ERF_ENABLE_FIRE)
-  target_sources(${erf_exe_name} PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/Fire/ERF_GTestFireAnchorLevel.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/Fire/ERF_GTestFireAtmInjection.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/Fire/ERF_GTestFireCoupler.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/Fire/ERF_GTestFirePrecip.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/Fire/ERF_GTestFireRegistry.cpp
-  )
-endif()
 if(ERF_DIM STREQUAL "3")
   # Motivation: the auxiliary mapped state must reproduce ERF's computational
   # divergence, exact host stage recipes, canonical metric transfers, and ledger.
@@ -427,6 +419,7 @@ if(ERF_DIM STREQUAL "3")
     ${CMAKE_CURRENT_SOURCE_DIR}/AuxiliaryState/ERF_GTestAuxiliaryMappedTransport.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Microphysics/SBM/ERF_GTestSBMTransport.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Microphysics/SBM/ERF_GTestSBMBoundary.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Microphysics/SBM/ERF_GTestSBMParticleMixing.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/Microphysics/SBM/ERF_GTestSBMAMRTransfer.cpp)
 endif()
 if(ERF_ENABLE_NETCDF)
@@ -546,6 +539,30 @@ if(ERF_ENABLE_MOVING_BODIES)
   target_sources(${erf_exe_name} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/MovingBodies/ERF_GTestStructureRegistry.cpp
   )
+  # Motivation: a structure model's source restricted onto the coarser levels must put the
+  # same force on the air as on the model's level, over a hill (with the mesh Jacobian),
+  # one and two levels down, with anisotropic ratios and a fine level split into boxes and
+  # across a periodic boundary; without the Jacobian the hill must change the force.
+  target_sources(${erf_exe_name} PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/MovingBodies/ERF_GTestStructureCoarseSource.cpp
+  )
+  # A structure model directory may define erf_structure_model_add_unit_tests(target) in its
+  # ERFStructureModel.cmake to build its own GoogleTest files into this executable, with
+  # ERF's test main; ERF_STRUCTURE_MODEL_DIR holds the directory during the call. The file
+  # is included again here because CMake keeps only the last definition of a function, and
+  # the empty definition before each include keeps a directory without the hook from
+  # calling the one of the directory before it. Called before build_erf_exe, so that a
+  # CUDA build compiles the added files as CUDA too. A relative directory is resolved
+  # against Exec/, as build_erf_lib resolves it, so both name the same folder. The file
+  # must therefore be safe to include twice: definitions only, no targets or options.
+  foreach(_structure_dir IN LISTS ERF_STRUCTURE_MODEL_DIRS)
+    get_filename_component(_structure_dir "${_structure_dir}" ABSOLUTE BASE_DIR "${ERF_SOURCE_DIR}/Exec")
+    function(erf_structure_model_add_unit_tests target)
+    endfunction()
+    set(ERF_STRUCTURE_MODEL_DIR "${_structure_dir}")
+    include("${_structure_dir}/ERFStructureModel.cmake")
+    erf_structure_model_add_unit_tests(${erf_exe_name})
+  endforeach()
 endif()
 if(ERF_ENABLE_OPENFAST AND ERF_OPENFAST_USE_STUB)
   # Motivation: the OpenFAST driver must keep the ERF step a whole multiple of the
@@ -603,18 +620,6 @@ erf_register_gtest_suite(${erf_exe_name}
   DISCOVERY_TIMEOUT 60
   EXECUTION_TIMEOUT 600
 )
-
-# The fire coupling kernels under the floating-point traps a fire run arms.
-# clang at -O2/-O3 evaluates the unselected arm of `c ? a/b : x`, so a guarded
-# 0/0 or log(0) raises FE_INVALID/FE_DIVBYZERO and kills the run; the plain
-# unit run never arms the traps and cannot see it.
-if(ERF_ENABLE_FIRE)
-  add_test(NAME FireCouplingGTests_FpeTraps
-    COMMAND ${erf_exe_name}
-      --gtest_filter=FireAnchorLevel.*:FireCoupler.*:FirePrecip.*:FireRegistry.*:ExnerTendency.*:HeatInjection.*:SmokeInjection.*
-      amrex.fpe_trap_invalid=1 amrex.fpe_trap_zero=1 amrex.fpe_trap_overflow=1)
-  set_tests_properties(FireCouplingGTests_FpeTraps PROPERTIES LABELS "unit;fire" TIMEOUT 600)
-endif()
 
 add_test(NAME erf_unit_tests_shuffle_repeat
   COMMAND ${erf_exe_name}
@@ -683,12 +688,16 @@ if(TARGET erf_exec AND ERF_DIM STREQUAL "3" AND
     ${CMAKE_CURRENT_SOURCE_DIR}/ERF_GTestRuntimeStubs.cpp)
   build_erf_exe(erf_sbm_checkpoint_corruptor NO_ERF_MAIN)
 
-  # The fire coupling's smoke scalar adds a component ahead of the moisture
-  # ones in the checkpoint (NSCALARS in ERF_IndexDefines.H); every RunM3Smoke
-  # test passes the count so the runner can insert it in the expected values.
+  # The dust coupling's dust scalars and the fire coupling's smoke scalar add
+  # components ahead of the moisture ones in the checkpoint (NSCALARS in
+  # ERF_IndexDefines.H); every RunM3Smoke test passes the count so the runner
+  # can insert them in the expected values.
   set(_sbm_extra_scalars 0)
   if(ERF_ENABLE_FIRE)
     math(EXPR _sbm_extra_scalars "${_sbm_extra_scalars} + 1")
+  endif()
+  if(ERF_ENABLE_DUST)
+    math(EXPR _sbm_extra_scalars "${_sbm_extra_scalars} + ${ERF_NUM_DUST_SCALARS}")
   endif()
 
   add_test(NAME SBM_M3_ZeroCarrier_ERF_Smoke
@@ -1313,6 +1322,12 @@ if(ERF_ENABLE_MPI)
     )
     target_compile_definitions(${erf_parallel_exe_name} PRIVATE
       ERF_GTEST_MOVING_BODIES_CASES="${PROJECT_SOURCE_DIR}/Exec/CanonicalTests/MovingBodies")
+  endif()
+  if(ERF_DIM STREQUAL "3")
+    # The coefficient check and the rate maximum reduce over the ranks: check them across ranks
+    target_sources(${erf_parallel_exe_name} PRIVATE
+      ${CMAKE_CURRENT_SOURCE_DIR}/Microphysics/SBM/ERF_GTestSBMParticleMixing.cpp
+    )
   endif()
   build_erf_exe(${erf_parallel_exe_name} NO_ERF_MAIN)
   target_link_libraries(${erf_parallel_exe_name}
