@@ -702,8 +702,7 @@ endif()
 
 # The ROSCO turbine controller (https://github.com/NREL/ROSCO, Apache License 2.0). ERF does not link
 # against it: OpenFAST's ServoDyn loads libdiscon at run time when a turbine model names it. The path
-# found or built here (ERF_ROSCO_LIBRARY) is handed to the tests that run such a model
-# (Exec/CanonicalTests/MovingBodies/OpenFAST_IEA15_PowerCurve).
+# found or built here (ERF_ROSCO_LIBRARY) is for the tests and cases that run such a model.
 unset(ERF_ROSCO_LIBRARY CACHE)
 unset(ERF_ROSCO_LIBRARY)
 if(ERF_BUILD_ROSCO OR ROSCO_DIR)

@@ -8,9 +8,8 @@
 # Clones the release tag of https://github.com/NREL/ROSCO into <src>/rosco-<version>, builds the
 # controller (rosco/controller) as a shared library and installs it as <prefix>/lib/libdiscon.so
 # (.dylib on macOS; default prefix $HOME/opt/rosco-<version>). It then prints the -DROSCO_DIR to
-# pass to GALE's cmake and the --libdiscon to pass to
-# Exec/CanonicalTests/MovingBodies/OpenFAST_IEA15_PowerCurve/prepare.py. Re-running is safe: an
-# existing clone is reused and an existing install is left alone unless --force is given.
+# pass to GALE's cmake and the library path to name in a ServoDyn file (DLL_FileName). Re-running
+# is safe: an existing clone is reused and an existing install is left alone unless --force is given.
 # GALE does not link against ROSCO; only the turbine models that name it in their ServoDyn file
 # need it. 2.10.1 is the tested version. Build it with the Fortran compiler OpenFAST was built with.
 set -euo pipefail
@@ -52,7 +51,7 @@ installed_library() {
 }
 report() {
     echo "  GALE: cmake ... -DERF_ENABLE_OPENFAST=ON -DOPENFAST_DIR=<OpenFAST prefix> -DROSCO_DIR=$prefix"
-    echo "  power-curve case: python3 prepare.py --libdiscon $1"
+    echo "  ServoDyn DLL_FileName: $1"
 }
 
 src="${src_root}/rosco-${version}"

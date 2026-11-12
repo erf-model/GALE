@@ -154,11 +154,10 @@ For real turbines, install OpenFAST once and point the build at it::
          -DERF_ENABLE_OPENFAST=ON -DOPENFAST_DIR=<install prefix>
    cmake --build cmake-build -j
 
-A turbine model with a controller, such as the IEA 15 MW with ROSCO in
-``Exec/CanonicalTests/MovingBodies/OpenFAST_IEA15_PowerCurve``, also needs the
-`ROSCO <https://github.com/NREL/ROSCO>`_ controller library (``libdiscon``),
-which OpenFAST loads at run time. GALE does not link against it. There are two
-ways to get it:
+A turbine model with a controller also needs the controller library, which
+OpenFAST loads at run time from the path in its ServoDyn file
+(``DLL_FileName``). For `ROSCO <https://github.com/NREL/ROSCO>`_
+(``libdiscon``) there are two ways to get it; GALE does not link against it:
 
 * a script that downloads, builds and installs ROSCO 2.10.1 once::
 
@@ -171,8 +170,9 @@ ways to get it:
      cmake --build cmake-build -j                  # also builds cmake-build/rosco/lib/libdiscon
 
 Both need ``git``, a network connection and a Fortran compiler (the one
-OpenFAST was built with). With either option CTest also runs four short tests
-of the power-curve case (label ``rosco``).
+OpenFAST was built with).
+With either option CTest also checks that the library loads and runs four
+short tests of the power-curve case (label ``rosco``).
 
 ``ERF_ENABLE_MOVING_BODIES=ON`` alone builds the framework with the ``ct_disk``
 body and no OpenFAST. A deck turns the bodies on by listing them in
@@ -192,7 +192,8 @@ case checks. The cases run under CTest:
   Askervein hill, against the OpenFAST library;
 * label ``rosco``: the IEA 15 MW turbine with the ROSCO controller on a flat
   domain, as a disk on one and two levels and as a line on two and three, for
-  ten steps. They are registered when the build is given ``ROSCO_DIR`` or
+  ten steps, and ``ROSCO_Library``, which checks that the controller library
+  loads. They are registered when the build is given ``ROSCO_DIR`` or
   ``ERF_BUILD_ROSCO=ON``.
 
 The unit tests of the samplers, the force spreading, the body exchange and the

@@ -55,9 +55,12 @@ that library at run time. For the ROSCO controller
 ``-DROSCO_DIR=<prefix>`` then tells the build where it is. Alternatively
 ``-DERF_BUILD_ROSCO=ON`` downloads and builds it inside the build folder
 (``<build>/rosco/lib``; ``ERF_ROSCO_VERSION`` picks the release). ERF does not
-link against ROSCO; the two options make its path known to the tests of
+link against ROSCO: the ServoDyn file names the library (``DLL_FileName``), and
+the two options make its path known to tests that run such a model. Both need
+the OpenFAST library, not the stub.
+The tests of
 ``Exec/CanonicalTests/MovingBodies/OpenFAST_IEA15_PowerCurve`` (label
-``rosco``), and both need the OpenFAST library, not the stub.
+``rosco``) use it.
 
 Floating-point traps must stay off in a run with an OpenFAST turbine
 (``amrex.fpe_trap_invalid``, ``amrex.fpe_trap_zero`` and
