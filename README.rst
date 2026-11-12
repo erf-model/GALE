@@ -51,12 +51,21 @@ with the ``erf_exec`` of a build described under `Building and running`_.
        widths, the filtered lifting-line correction, restart.
    * - ``OpenFAST_ADM_Askervein``, ``OpenFAST_ALM_Askervein``
      - The IEA 15 MW turbine on the Askervein hill, with the OpenFAST library.
+   * - ``OpenFAST_IEA15_PowerCurve``
+     - The IEA 15 MW turbine with its ROSCO controller on a flat domain with
+       refinement levels, as a disk and as a line, compared with OpenFAST
+       alone at five wind speeds. Needs the OpenFAST and ROSCO libraries; not
+       run by CTest.
    * - ``IEA15_land_model``
-     - The OpenFAST model of the IEA 15 MW turbine used by the Askervein cases.
+     - The OpenFAST model of the IEA 15 MW turbine used by the Askervein and
+       power-curve cases.
    * - ``ScalingFarm``
      - Tools that write and time farms of 16 to more than 1024 turbines.
 
-Every case except the two Askervein cases runs with the bundled OpenFAST stub.
+Every case except the two Askervein cases and the power-curve case runs with
+the bundled OpenFAST stub. The Askervein decks expect the ``IEA15_land_model``
+folder and the terrain file of ``Exec/CanonicalTests/Real_Terrain/Askervein``
+next to them; CTest copies both.
 The `cases README <Exec/CanonicalTests/MovingBodies/README.md>`_ lists each
 case, its body and what it checks.
 

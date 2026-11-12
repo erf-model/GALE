@@ -93,3 +93,4 @@ Backtrace.*
 # Build trees next to the source (build/, build-cuda/, ...), at any depth
 build/
 build-*/
+Exec/CanonicalTests/MovingBodies/OpenFAST_IEA15_PowerCurve/runs/
