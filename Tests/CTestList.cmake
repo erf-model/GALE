@@ -2745,6 +2745,47 @@ if(ERF_ENABLE_OPENFAST AND NOT ERF_OPENFAST_USE_STUB AND ERF_ENABLE_FFT AND ERF_
       message(WARNING "OpenFAST_ADM_Askervein is not registered: its load check needs a Python 3 interpreter")
   endif()
   add_test_openfast_real(OpenFAST_ALM_Askervein "T1_flow.csv" "load_x")
+
+  # The IEA 15 MW turbine under its ROSCO controller (Exec/CanonicalTests/MovingBodies/OpenFAST_IEA15_PowerCurve)
+  # on a flat domain at 9 m/s, for ten steps: the disk on one level and the line on two. Registered when the
+  # build knows a ROSCO library (ROSCO_DIR or ERF_BUILD_ROSCO). Each test makes its run folder with the case's
+  # prepare.py, requires that ServoDyn loaded ROSCO, and compares the turbine's rotor speed, thrust, torque and
+  # power with a gold made on macOS arm64 with OpenFAST 5.0.0 and ROSCO 2.10.1, to six digits as for the
+  # Askervein tests. The torque is the controller's answer, so a run without the controller fails both checks.
+  if(ERF_ROSCO_LIBRARY AND NOT "${ERF_TEST_PYTHON}" STREQUAL "")
+      function(add_test_iea15_power_curve DECK)
+          set(TEST_NAME OpenFAST_IEA15_PowerCurve_${DECK})
+          set(_case_dir ${TEST_SOURCE_ROOT}/OpenFAST_IEA15_PowerCurve)
+          set(_bin_dir ${CMAKE_CURRENT_BINARY_DIR}/test_files/${TEST_NAME})
+          file(MAKE_DIRECTORY ${_bin_dir})
+          resolve_test_exe("" "erf_exec" TEST_EXE)
+          add_test(NAME ${TEST_NAME} COMMAND ${CMAKE_COMMAND}
+              "-DMPIEXEC=${MPIEXEC_EXECUTABLE}"
+              "-DMPIEXEC_NUMPROC_FLAG=${MPIEXEC_NUMPROC_FLAG}"
+              "-DMPIEXEC_PREFLAGS=${MPIEXEC_PREFLAGS}"
+              "-DNRANKS=2"
+              "-DTEST_EXE=${TEST_EXE}"
+              "-DCONFIG=$<CONFIG>"
+              "-DCASE_DIR=${_case_dir}"
+              "-DDECK=${DECK}"
+              "-DLIBDISCON=${ERF_ROSCO_LIBRARY}"
+              "-DPYTHON_EXE=${ERF_TEST_PYTHON}"
+              "-DWORKING_DIRECTORY=${_bin_dir}"
+              "-DTURBINE_GOLD=${_case_dir}/gold/${DECK}_T1_erf.csv.gold"
+              -P ${PROJECT_SOURCE_DIR}/Tests/RunIEA15PowerCurve.cmake)
+          set_tests_properties(${TEST_NAME}
+              PROPERTIES
+              TIMEOUT 900
+              PROCESSORS 2
+              WORKING_DIRECTORY "${_bin_dir}/"
+              LABELS "regression;moving-bodies;openfast-real;rosco"
+              ATTACHED_FILES_ON_FAIL "${_bin_dir}/simulation.log")
+      endfunction()
+      add_test_iea15_power_curve(adm_20m)
+      add_test_iea15_power_curve(alm_10m)
+  elseif(ERF_ROSCO_LIBRARY)
+      message(WARNING "The OpenFAST_IEA15_PowerCurve tests are not registered: prepare.py needs a Python 3 interpreter")
+  endif()
 endif()
 
 if(ERF_ENABLE_MOVING_BODIES AND NOT "${ERF_TEST_PYTHON}" STREQUAL "")

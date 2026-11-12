@@ -9,10 +9,10 @@ the same wind. Below the rated wind speed (10.59 m/s) the power shows whether th
 sees the right wind; above it the controller holds the power, so the thrust and the blade
 pitch are the measures.
 
-It is an example, not a regression test: a run takes from a quarter of an hour to an hour
-on four ranks, and it needs the ROSCO controller library, which the repository does not
-hold. The short real-OpenFAST tests are `../OpenFAST_ADM_Askervein` and
-`../OpenFAST_ALM_Askervein`.
+A full run takes from a quarter of an hour to an hour on four ranks, so the comparison is
+made by hand. It needs the ROSCO controller library, which the repository does not hold;
+`Build/setup_rosco.sh` or the CMake option `ERF_BUILD_ROSCO` downloads and builds it. With
+ROSCO available, CTest runs the first ten steps of two of the decks (see CTest below).
 
 ## Files
 
@@ -27,6 +27,7 @@ hold. The short real-OpenFAST tests are `../OpenFAST_ADM_Askervein` and
 | `plot.py` | averages the runs, compares them with OpenFAST alone, writes a table and a figure |
 | `reference.csv` | the averages of the runs described under Expected Results |
 | `erf_vs_openfast.png` | the figure made from `reference.csv` (`python3 plot.py --reference`) |
+| `gold/` | the turbine logs of the two ten-step tests |
 
 The decks are written for 9 m/s; `prepare.py` sets the wind speed. All four share the
 domain (2400 x 1920 x 1280 m, 20 m cells on level 0), the inflow and outflow boundaries in
@@ -70,7 +71,8 @@ Task 37 authors for making the model and its controller tuning available.
 
 **ROSCO controller.** NREL Reference OpenSource Controller,
 https://github.com/NREL/ROSCO, Apache License 2.0, version 2.10.1. We thank the ROSCO
-developers. The library is not redistributed: build it yourself (below).
+developers. The library is not redistributed: `Build/setup_rosco.sh` and `ERF_BUILD_ROSCO`
+download the release from the ROSCO repository and build it on your machine.
 
 **OpenFAST.** https://github.com/OpenFAST/openfast, Apache License 2.0, version 5.0.0. We
 thank the OpenFAST developers for the external-inflow interface.
@@ -88,8 +90,12 @@ contain no third-party data.
 1. Build OpenFAST 5.0.0 and GALE against it, as in the top-level README
    (`Build/setup_openfast.sh --no-cpp-api`, then `-DERF_ENABLE_OPENFAST=ON
    -DOPENFAST_DIR=<install prefix>` with MPI and FFT on).
-2. Build the ROSCO 2.10.1 controller library (`libdiscon.so`, or `.dylib` on macOS)
-   following the ROSCO documentation.
+2. Get the ROSCO 2.10.1 controller library (`libdiscon.so`, or `.dylib` on macOS), one of:
+   - `Build/setup_rosco.sh` clones the release, builds it and installs it under
+     `$HOME/opt/rosco-2.10.1` (`--prefix`, `--src`, `--version`, `--jobs`, `--fortran`,
+     `--force`). It prints the path to give `prepare.py` and the `-DROSCO_DIR` for CMake.
+   - `-DERF_BUILD_ROSCO=ON` at configure time: the build clones and builds it as
+     `<build folder>/rosco/lib/libdiscon.so`.
 3. Make the run folders, here for one deck at one speed (leave the two options out for all
    four decks at all five speeds):
 
@@ -159,6 +165,14 @@ difference from OpenFAST alone in power / thrust.
 
 ## CTest
 
-None. The case is not registered with CTest: it needs the ROSCO library and its runs are
-long. `prepare.py` and `plot.py --reference` need only Python 3 (and matplotlib for the
-figure).
+Two tests, registered when the build has the real OpenFAST library, MPI, FFT, Python 3
+and a ROSCO library (`-DROSCO_DIR=<prefix>` or `-DERF_BUILD_ROSCO=ON`); label `rosco`:
+
+| test | deck | what it checks |
+| --- | --- | --- |
+| `OpenFAST_IEA15_PowerCurve_adm_20m` | `adm_20m.i`, 9 m/s, ten steps, two ranks | `prepare.py` makes the run folder; the log shows ROSCO was loaded; rotor speed, thrust, torque and power of `T1_erf.csv` agree with `gold/adm_20m_T1_erf.csv.gold` to six digits |
+| `OpenFAST_IEA15_PowerCurve_alm_10m` | `alm_10m.i`, the same on two levels | the same, against `gold/alm_10m_T1_erf.csv.gold` |
+
+The golds were made on macOS arm64 with OpenFAST 5.0.0 and ROSCO 2.10.1. The full 360 s
+runs and the comparison with OpenFAST alone are not run by CTest. `prepare.py` and
+`plot.py --reference` need only Python 3 (and matplotlib for the figure).

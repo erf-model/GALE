@@ -54,8 +54,9 @@ with the ``erf_exec`` of a build described under `Building and running`_.
    * - ``OpenFAST_IEA15_PowerCurve``
      - The IEA 15 MW turbine with its ROSCO controller on a flat domain with
        refinement levels, as a disk and as a line, compared with OpenFAST
-       alone at five wind speeds. Needs the OpenFAST and ROSCO libraries; not
-       run by CTest.
+       alone at five wind speeds. Needs the OpenFAST and ROSCO libraries
+       (``Build/setup_rosco.sh`` or ``-DERF_BUILD_ROSCO=ON``). CTest runs ten
+       steps of two of its decks; the full runs are made by hand.
    * - ``IEA15_land_model``
      - The OpenFAST model of the IEA 15 MW turbine used by the Askervein and
        power-curve cases.
@@ -153,6 +154,26 @@ For real turbines, install OpenFAST once and point the build at it::
          -DERF_ENABLE_OPENFAST=ON -DOPENFAST_DIR=<install prefix>
    cmake --build cmake-build -j
 
+A turbine model with a controller, such as the IEA 15 MW with ROSCO in
+``Exec/CanonicalTests/MovingBodies/OpenFAST_IEA15_PowerCurve``, also needs the
+`ROSCO <https://github.com/NREL/ROSCO>`_ controller library (``libdiscon``),
+which OpenFAST loads at run time. GALE does not link against it. There are two
+ways to get it:
+
+* a script that downloads, builds and installs ROSCO 2.10.1 once::
+
+     Build/setup_rosco.sh                          # prints the ROSCO_DIR to use
+     cmake -S . -B cmake-build ... -DOPENFAST_DIR=<install prefix> -DROSCO_DIR=<ROSCO prefix>
+
+* or a CMake option that downloads and builds it inside the build folder::
+
+     cmake -S . -B cmake-build ... -DOPENFAST_DIR=<install prefix> -DERF_BUILD_ROSCO=ON
+     cmake --build cmake-build -j                  # also builds cmake-build/rosco/lib/libdiscon
+
+Both need ``git``, a network connection and a Fortran compiler (the one
+OpenFAST was built with). With either option CTest also runs two short tests
+of the power-curve case (label ``rosco``).
+
 ``ERF_ENABLE_MOVING_BODIES=ON`` alone builds the framework with the ``ct_disk``
 body and no OpenFAST. A deck turns the bodies on by listing them in
 ``erf.moving_bodies.bodies``; every ``erf.moving_bodies.*`` key is in the inputs
@@ -168,7 +189,10 @@ case checks. The cases run under CTest:
 * label ``moving-bodies``: the stub and ``ct_disk`` cases, their restart and
   box-parity twins, and one abort test per start-up check;
 * label ``openfast-real``: the IEA 15 MW turbine as a disk and as a line on the
-  Askervein hill, against the OpenFAST library.
+  Askervein hill, against the OpenFAST library;
+* label ``rosco``: the IEA 15 MW turbine with the ROSCO controller on a flat
+  domain, as a disk on one level and as a line on two, for ten steps. They are
+  registered when the build is given ``ROSCO_DIR`` or ``ERF_BUILD_ROSCO=ON``.
 
 The unit tests of the samplers, the force spreading, the body exchange and the
 OpenFAST driver are in ``Tests/Unit/MovingBodies``.
