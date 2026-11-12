@@ -116,6 +116,9 @@ void spread_partial_norms (const std::vector<amrex::Real>& pos,
  * difference of a few ulps). Returns false, leaving norm alone, when the boxes of ba (cell-centred,
  * the level's) do not cover every cell the kernel can reach: on a refined level the faces outside
  * them get no source, and spread_partial_norms() must be summed over the ranks instead.
+ * A sum on the host: a caller whose source is added by a device kernel (add_scaled_kernels() on a GPU)
+ * must not pair it with that source, since the two may disagree on a face at the 3 epsilon cut-off
+ * (BodyExchange does not use it on a GPU build).
  * @param[out] norm the 3 components of S_p (m^3)
  */
 bool uniform_mesh_norm (amrex::Real px, amrex::Real py, amrex::Real pz, amrex::Real eps,

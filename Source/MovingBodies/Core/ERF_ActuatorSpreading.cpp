@@ -404,9 +404,11 @@ spread_partial_norms (const std::vector<Real>& pos, const std::vector<Real>& eps
     // boxes, boundary faces excluded). One launch per box and face grid, one thread per point (a
     // segment of the images): a thread adds its point's terms in the order of the images and, for an
     // image, of the faces (k, then j, then i), with no atomics, so that the sum does not depend on
-    // the device's scheduling
+    // the device's scheduling. A point whose kernel reaches two boxes is updated by both launches,
+    // which read and write its slot of p_norm without atomics: the boxes therefore share one device
+    // stream, so that their launches run one after the other, in box order
     int ib = 0;
-    for (MFIter mfi(src_x, false); mfi.isValid(); ++mfi, ++ib) {
+    for (MFIter mfi(src_x, MFItInfo().SetNumStreams(1)); mfi.isValid(); ++mfi, ++ib) {
         const Box vbx = amrex::enclosedCells(mfi.validbox());
         Array4<Real const> znd = has_znd ? z_phys_nd->const_array(mfi) : Array4<Real const>{};
         Array4<Real const> detj = has_detj ? detJ_cc->const_array(mfi) : Array4<Real const>{};
