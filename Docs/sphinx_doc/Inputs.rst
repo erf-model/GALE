@@ -40,7 +40,7 @@ Governing Equations
 |                                 | and never substeps acoustically. The stored              |                    |                  |
 |                                 | ``buoyancy_type=3`` does not select the buoyancy         |                    |                  |
 |                                 | kernel. PseudoIncompressible evolves the density,        |                    |                  |
-|                                 | enforces div(rho_0 theta_0 u) = 0 with a                 |                    |                  |
+|                                 | enforces div(rho_0 theta_0 u) = S with a                 |                    |                  |
 |                                 | variable-coefficient projection, and sets                |                    |                  |
 |                                 | ``project_initial_velocity=1``, ``fixed_density=0``      |                    |                  |
 |                                 | and ``buoyancy_type=1``; see                             |                    |                  |
@@ -1041,6 +1041,13 @@ List of Parameters
 +--------------------------------------+----------------------------------------------------------+--------------------+-------------------+
 | **erf.poisson_reltol**               | relative tolerance for the Poisson solve; raised to      | Real > 0           | 1.e-8             |
 |                                      | 1.e-6 in single precision builds                         |                    |                   |
++--------------------------------------+----------------------------------------------------------+--------------------+-------------------+
+| **erf.pi_drift_factor**              | drift correction c of a PseudoIncompressible level:      | Real >= 0          | 0.5               |
+|                                      | the constraint is div(rho_0 theta_0 u) = Q + c (rho      |                    |                   |
+|                                      | theta - rho_0 theta_0) / dt, with Q the non-advective    |                    |                   |
+|                                      | tendency of rho theta; 0 turns the correction off,       |                    |                   |
+|                                      | and values above about 1 can be unstable; see            |                    |                   |
+|                                      | :ref:`PseudoIncompressibleEquations`                     |                    |                   |
 +--------------------------------------+----------------------------------------------------------+--------------------+-------------------+
 | **erf.terrain_poisson_solver**       | solver for the projection on a terrain-fitted mesh       | "gmres_fft",       | "gmres_fft"       |
 |                                      | (anelastic, and the initial projection). ``gmres_fft``:  | "mlmg",            |                   |
@@ -2779,6 +2786,12 @@ List of Parameters
 | **erf.pbl_mrf_highres_bounds**           | Enable alternative high-resolution grid-dependent        | Boolean            | false            |
 |                                          | diffusivity bounds                                       |                    |                  |
 +------------------------------------------+----------------------------------------------------------+--------------------+------------------+
+| **erf.pbl_mrf_Sc_t**                     | MRF only: turbulent Schmidt number of the passive        | Real >= 0          | 0                |
+|                                          | scalars. Their vertical diffusivity is the heat one      |                    |                  |
+|                                          | times erf.Pr_t / Sc_t; 0 leaves it equal to the heat     |                    |                  |
+|                                          | one. The same for every passive scalar (base, dust,      |                    |                  |
+|                                          | smoke); see erf-model/ERF#5080                           |                    |                  |
++------------------------------------------+----------------------------------------------------------+--------------------+------------------+
 | **erf.enable_mrf_unbounded_vpert**       | Enable physically superior unbounded VPERT in MRF PBL    | Boolean            | false            |
 |                                          | scheme                                                   |                    |                  |
 +------------------------------------------+----------------------------------------------------------+--------------------+------------------+
@@ -3687,26 +3700,20 @@ Lateral Boundary Nudging
 | **erf.bdy_rho_nudge_factor**  | Davies factor used for density specifically; a           | Real               | -1.0 (use                  |
 |                               | non-positive value means ``bdy_nudge_factor`` is used    |                    | ``erf.bdy_nudge_factor``)  |
 +-------------------------------+----------------------------------------------------------+--------------------+----------------------------+
-| **erf.bdy_moist_nudge_type**  | which approach is used to nudge the moist variables in   | 0, 1, 2, 3         | 1                          |
-|                               | the boundary region; 3 requires ``use_wrf_bdy_qc_qi`` =  |                    |                            |
-|                               | true                                                     |                    |                            |
+| **erf.bdy_moist_nudge_type**  | which approach is used to nudge the moist variables in   | 0, 1, 2            | 1                          |
+|                               | the boundary region                                      |                    |                            |
 +-------------------------------+----------------------------------------------------------+--------------------+----------------------------+
 | **erf.use_wrf_bdy_density**   | use the dry-air density reconstructed from the           | Boolean            | true                       |
 |                               | ``wrfbdy`` data.  Ignored (set to false) unless real     |                    |                            |
 |                               | boundary conditions are used with ``init_type`` =        |                    |                            |
 |                               | ``WRFInput``                                             |                    |                            |
 +-------------------------------+----------------------------------------------------------+--------------------+----------------------------+
-| **erf.use_wrf_bdy_qc_qi**     | ingest cloud water and cloud ice from ``wrfinput`` and   | Boolean            | false                      |
-|                               | ``wrfbdy``; requires an active moisture model and real   |                    |                            |
-|                               | boundary conditions with ``init_type`` = ``WRFInput``    |                    |                            |
-+-------------------------------+----------------------------------------------------------+--------------------+----------------------------+
 
 For WRF real boundaries, moisture nudging type 0 relaxes only ``qv`` toward
 ``QVAPOR``. Type 1 applies a ``qv`` tendency based on ERF ``qv+qc+qi`` versus
 WRF ``QVAPOR``. Type 2 relaxes ``qv`` toward ``QVAPOR`` and active ``qc``/``qi``
-toward zero with the existing latent-heat terms. Type 3 directly relaxes active
-``qv``, ``qc``, and ``qi`` toward ``QVAPOR``, ``QCLOUD``, and ``QICE`` without
-an added latent-heat term. Type 3 requires ``erf.use_wrf_bdy_qc_qi = true``.
+toward zero with the existing latent-heat terms. Hydrometeors are not read
+from ``wrfbdy``, so no type nudges ``qc``/``qi`` toward WRF values.
 
 .. _sec:CustomForcingInputs:
 
@@ -4944,10 +4951,15 @@ the ones marked **Required** abort the run if they are not given.
 |                                       | ``erf.most.pblh_calc`` to be set                         |                     |                  |
 +---------------------------------------+----------------------------------------------------------+---------------------+------------------+
 | **erf.most.pblh_calc**                | which scheme diagnoses the PBL height used by the *w*\*  | none, MYNN25,       | none             |
-|                                       | correction                                               | MYNNEDMF, YSU, MRF  |                  |
+|                                       | correction                                               | MYNNEDMF, YSU,      |                  |
+|                                       |                                                          | YSUNew, MRF         |                  |
 +---------------------------------------+----------------------------------------------------------+---------------------+------------------+
 | **erf.most.pot_surf_temp**            | prescribed surface potential temperature [K]; a positive | Real > 0            | -1.0 (not set)   |
-|                                       | value selects the surface-temperature formulation        |                     |                  |
+|                                       | value selects the surface-temperature formulation.       |                     |                  |
+|                                       | **Required** when ``flux_type`` = ``bulk_coeff`` (the    |                     |                  |
+|                                       | surface value of the ``Ch`` form); with                  |                     |                  |
+|                                       | ``erf.most.surf_temp_flux`` it is still read but no      |                     |                  |
+|                                       | longer sets the heat flux                                |                     |                  |
 +---------------------------------------+----------------------------------------------------------+---------------------+------------------+
 | **erf.most.abs_surf_temp**            | prescribed surface absolute temperature [K], converted   | Real > 0            | -1.0 (not set)   |
 |                                       | to potential temperature each step with the surface      |                     |                  |
@@ -4961,15 +4973,29 @@ the ones marked **Required** abort the run if they are not given.
 |                                       | given must be positive                                   |                     |                  |
 +---------------------------------------+----------------------------------------------------------+---------------------+------------------+
 | **erf.most.surf_moist**               | prescribed surface moisture [kg/kg]; read only with an   | Real >= 0           | -1.0 (not set)   |
-|                                       | active moisture model                                    |                     |                  |
+|                                       | active moisture model, except with ``flux_type`` =       |                     |                  |
+|                                       | ``bulk_coeff``, where it is **Required** in every run    |                     |                  |
 +---------------------------------------+----------------------------------------------------------+---------------------+------------------+
 | **erf.most.surf_heating_rate**        | rate of change [K/h] applied to the prescribed surface   | Real                | 0.0              |
 |                                       | temperature (absolute with ``abs_surf_temp``) from the   |                     |                  |
 |                                       | start of the simulation; may not be combined with        |                     |                  |
-|                                       | ``erf.most.surf_temp_flux``                              |                     |                  |
+|                                       | ``erf.most.surf_temp_flux`` (an abort with               |                     |                  |
+|                                       | ``bulk_coeff``); not read by the ``bulk_coeff`` ``Ch``   |                     |                  |
+|                                       | form                                                     |                     |                  |
 +---------------------------------------+----------------------------------------------------------+---------------------+------------------+
-| **erf.most.surf_temp_flux**           | prescribed surface heat flux [K m/s]; may not be         | Real                | 0.0              |
-|                                       | combined with ``erf.most.surf_heating_rate``             |                     |                  |
+| **erf.most.surf_temp_flux**           | prescribed surface heat flux <theta'w'> [K m/s],         | Real (finite with   | 0.0 (bulk_coeff: |
+|                                       | positive upward; may not be combined with                | ``bulk_coeff``)     | not set)         |
+|                                       | ``erf.most.surf_heating_rate``.  With ``flux_type`` =    |                     |                  |
+|                                       | ``bulk_coeff`` it is optional and, when given, imposes   |                     |                  |
+|                                       | the heat flux rho*F in place of the ``Ch`` form (WRF's   |                     |                  |
+|                                       | ``isfflx = 0`` with ``tke_heat_flux``), at any wind; it  |                     |                  |
+|                                       | then may not be combined with SST/TSK data,              |                     |                  |
+|                                       | ``most.use_sfc_fluxes``, ``most.use_sfc_sst``, a         |                     |                  |
+|                                       | land-surface or surface model or a coupled ocean.  In    |                     |                  |
+|                                       | calm air t*, q* and the Obukhov length then use u*       |                     |                  |
+|                                       | floored at 0.001 m/s (as the MOST imposed-flux path      |                     |                  |
+|                                       | does), so t* = -F/0.001 there: finite, but not a         |                     |                  |
+|                                       | meaningful stability scale for a PBL scheme              |                     |                  |
 +---------------------------------------+----------------------------------------------------------+---------------------+------------------+
 | **erf.most.surf_moist_flux**          | prescribed surface moisture flux; used when              | Real                | 0.0              |
 |                                       | ``erf.most.surf_moist`` is not set                       |                     |                  |
@@ -5016,7 +5042,9 @@ the ones marked **Required** abort the run if they are not given.
 |                                       | when ``flux_type`` = ``bulk_coeff``                      |                     |                  |
 +---------------------------------------+----------------------------------------------------------+---------------------+------------------+
 | **erf.most.Ch**                       | bulk transfer coefficient for heat.  **Required** when   | Real                | must be set      |
-|                                       | ``flux_type`` = ``bulk_coeff``                           |                     |                  |
+|                                       | ``flux_type`` = ``bulk_coeff``, unless                   |                     |                  |
+|                                       | ``erf.most.surf_temp_flux`` is given: then it is not     |                     |                  |
+|                                       | used, and a warning says so if it is set                 |                     |                  |
 +---------------------------------------+----------------------------------------------------------+---------------------+------------------+
 | **erf.most.Cq**                       | bulk transfer coefficient for moisture.  **Required**    | Real                | must be set      |
 |                                       | when ``flux_type`` = ``bulk_coeff``                      |                     |                  |
@@ -6770,8 +6798,7 @@ Lateral Boundary Nudging for Real-Data Runs
 -------------------------------------------
 
 * :ref:`Forcing Terms <inputs-forcing-terms>` -- ``erf.bdy_moist_nudge_type``,
-  ``erf.bdy_nudge_factor``, ``erf.bdy_rho_nudge_factor``, ``erf.use_wrf_bdy_density``,
-  ``erf.use_wrf_bdy_qc_qi``
+  ``erf.bdy_nudge_factor``, ``erf.bdy_rho_nudge_factor``, ``erf.use_wrf_bdy_density``
 
 Inflow Perturbation
 -------------------
