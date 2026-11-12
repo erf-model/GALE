@@ -5,8 +5,13 @@
 // kernel's reach; over a hill taller than the kernel's reach the source is centred on the point
 // (the faces are found by their physical heights, not their index times dz); each point is spread
 // with its own kernel width; and a non-finite position or force, or a width that is not positive,
-// aborts, naming the point.
+// aborts, naming the point. The two passes on their own (spread_partial_norms, add_scaled_kernels) give
+// spread_forces' source term by term, against a point-by-point reference, with the columns split in z and
+// on a rank holding only boxes aloft;
+// add_spread_forces adds to what the sources hold.
 
+#include <AMReX_ParallelReduce.H>
+#include "ERF_ActuatorGeometry.H"
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -20,12 +25,10 @@
 #include <AMReX_Geometry.H>
 #include <AMReX_MultiFab.H>
 #include <AMReX_ParallelDescriptor.H>
-#include <AMReX_ParallelReduce.H>
 #include <AMReX_RealBox.H>
 
 #include <gtest/gtest.h>
 
-#include "ERF_ActuatorGeometry.H"
 #include "ERF_ActuatorSpreading.H"
 #include "ERF_GTestThrowOnAbort.H"
 
@@ -47,9 +50,19 @@ struct Mesh {
         constexpr Real pi = 3.14159265358979323846;
         return hill * (0.5 + 0.5 * std::cos(2.0 * pi * x / Lx)) * (0.5 + 0.5 * std::sin(2.0 * pi * y / Ly));
     }
+    // the horizontal spacings, divided once for the loops that fill or read a field. Called inside those loops,
+    // dx() and dy() let clang -O2 divide two-lane vectors with an unused lane: {Lx, 0} / {nx, 0} and
+    // {Ly, H} / {ny, 0}. The unused lanes' 0 / 0 and H / 0 are discarded, but they raise the flags that
+    // amrex.fpe_trap_invalid and fpe_trap_zero stop on
+    struct Spacing { Real dx, dy; };
+    Spacing spacing () const { return {dx(), dy()}; }
     // basic terrain-following (BTF) with uniform nominal levels: the Jacobian of a column is (H - h) / H
-    Real z_node (int i, int j, int k) const { const Real hs = h(i * dx(), j * dy()); return hs + (H - hs) * k / nz; }
-    Real detj (int i, int j) const { return (H - h((i + 0.5) * dx(), (j + 0.5) * dy())) / H; }
+    Real z_node (const Spacing& s, int i, int j, int k) const
+    {
+        const Real hs = h(i * s.dx, j * s.dy);
+        return hs + (H - hs) * k / nz;
+    }
+    Real detj (const Spacing& s, int i, int j) const { return (H - h((i + 0.5) * s.dx, (j + 0.5) * s.dy)) / H; }
 };
 
 struct Sources {
@@ -77,12 +90,14 @@ struct Sources {
             const int ng = 1;
             znd = std::make_unique<amrex::MultiFab>(amrex::convert(ba, amrex::IntVect(1,1,1)), dm, 1, ng);
             detj = std::make_unique<amrex::MultiFab>(ba, dm, 1, ng);
+            const Mesh::Spacing sp = m.spacing();
             for (amrex::MFIter mfi(*detj, false); mfi.isValid(); ++mfi) {
                 auto za = znd->array(mfi);
                 auto ja = detj->array(mfi);
                 const amrex::Box gbx = amrex::grow(mfi.validbox(), ng);
-                amrex::LoopOnCpu(amrex::surroundingNodes(gbx), [&](int i, int j, int k) { za(i,j,k) = m.z_node(i, j, k); });
-                amrex::LoopOnCpu(gbx, [&](int i, int j, int k) { ja(i,j,k) = m.detj(i, j); (void) k; });
+                amrex::LoopOnCpu(amrex::surroundingNodes(gbx),
+                                 [&](int i, int j, int k) { za(i,j,k) = m.z_node(sp, i, j, k); });
+                amrex::LoopOnCpu(gbx, [&](int i, int j, int k) { ja(i,j,k) = m.detj(sp, i, j); (void) k; });
             }
         }
     }
@@ -155,10 +170,11 @@ TEST(ActuatorSpreading, SourceIsZeroBeyondThreeEpsilon)
     s.spread(pos, force, eps);
     int nonzero_far = 0, nonzero_near = 0;
     std::string first_far;
+    const Mesh::Spacing sp = m.spacing();
     for (amrex::MFIter mfi(s.sx, false); mfi.isValid(); ++mfi) {
         auto a = s.sx.const_array(mfi);
         amrex::LoopOnCpu(mfi.validbox(), [&](int i, int j, int k) {
-            const Real x = i * m.dx(), y = (j + 0.5) * m.dy(), z = (k + 0.5) * m.H / m.nz;
+            const Real x = i * sp.dx, y = (j + 0.5) * sp.dy, z = (k + 0.5) * m.H / m.nz;
             // minimum-image distance: the domain is periodic in x and y
             Real ddx = x - pos[0], ddy = y - pos[1];
             ddx -= m.Lx * std::round(ddx / m.Lx);
@@ -195,6 +211,54 @@ TEST(ActuatorSpreading, PointForceIntegratesBackOverTerrain)
     expect_total(s.spread(pos, force, eps), {{force[0], force[1], force[2]}}, abs_sum(force));
 }
 
+// The face volumes are half of each neighbouring cell's dx dy dz detJ: with a detJ that varies in
+// k as well as in x and y, the source summed with the test's own face volumes equals the force.
+// integrate_source is not used here, so a wrong neighbour in face_volume (the cell above instead
+// of the cell below a z face, a single cell instead of the average) would not cancel out.
+TEST(ActuatorSpreading, TerrainVolumesAreTheFaceAveragesOfDetJ)
+{
+    Mesh m;
+    m.hill = 100.0;
+    Sources s(m, true);
+    const Mesh::Spacing sp = m.spacing();
+    auto dj = [&](int i, int j, int k) { return m.detj(sp, i, j) * (Real(1.0) + Real(0.5) * k / m.nz); };
+    for (amrex::MFIter mfi(*s.detj, false); mfi.isValid(); ++mfi) {
+        auto ja = s.detj->array(mfi);
+        amrex::LoopOnCpu(amrex::grow(mfi.validbox(), 1), [&](int i, int j, int k) { ja(i,j,k) = dj(i, j, k); });
+    }
+    const Real eps = 2.0 * m.dx();
+    const std::vector<Real> pos = xyz(0.2 * m.Lx, 0.3 * m.Ly, 0.4 * m.H);
+    const std::vector<Real> force = xyz(-1.5e6, 2.0e5, 4.0e4);
+    erf_actuator::spread_forces(pos, force, eps, s.znd.get(), s.detj.get(), s.geom, s.sx, s.sy, s.sz);
+    const double dv = static_cast<double>(sp.dx) * static_cast<double>(sp.dy) * static_cast<double>(m.H / m.nz);
+    std::array<double,3> total{{0.0, 0.0, 0.0}};
+    for (amrex::MFIter mfi(s.sx, false); mfi.isValid(); ++mfi) {
+        const auto a = s.sx.const_array(mfi);
+        amrex::LoopOnCpu(mfi.validbox(), [&](int i, int j, int k) {
+            if (i == m.nx) { return; }                                   // the periodic image of face 0
+            total[0] += static_cast<double>(a(i,j,k)) * 0.5 * (dj(i-1,j,k) + dj(i,j,k)) * dv;
+        });
+    }
+    for (amrex::MFIter mfi(s.sy, false); mfi.isValid(); ++mfi) {
+        const auto a = s.sy.const_array(mfi);
+        amrex::LoopOnCpu(mfi.validbox(), [&](int i, int j, int k) {
+            if (j == m.ny) { return; }
+            total[1] += static_cast<double>(a(i,j,k)) * 0.5 * (dj(i,j-1,k) + dj(i,j,k)) * dv;
+        });
+    }
+    for (amrex::MFIter mfi(s.sz, false); mfi.isValid(); ++mfi) {
+        const auto a = s.sz.const_array(mfi);
+        amrex::LoopOnCpu(mfi.validbox(), [&](int i, int j, int k) {
+            total[2] += static_cast<double>(a(i,j,k)) * 0.5 * (dj(i,j,k-1) + dj(i,j,k)) * dv;   // boundary faces hold no source
+        });
+    }
+    amrex::ParallelDescriptor::ReduceRealSum(total.data(), 3);
+    const std::array<Real,3> scale = abs_sum(force);
+    for (int d = 0; d < 3; ++d) {
+        EXPECT_NEAR(static_cast<Real>(total[d]), force[d], rel_tol * std::max(Real(1.0), scale[d])) << "component " << d;
+    }
+}
+
 // Over a 400 m hill on 40 levels (15 m apart at its crest, 25 m nominal) a point 120 m above the crest
 // sits at nominal index 20 but between the crest's levels 7 and 8: the kernel's faces are those within
 // 3 eps of it in physical height, so the source's centroid is the point's height
@@ -211,21 +275,24 @@ TEST(ActuatorSpreading, OverATallHillTheSourceIsCentredOnThePoint)
     const std::vector<Real> pos = xyz(0.0, 0.25 * m.Ly, zp);
     const std::vector<Real> force = xyz(-1.0e5, 0.0, 0.0);
     expect_total(s.spread(pos, force, eps), {{force[0], force[1], force[2]}}, abs_sum(force));
-    // the x source's centroid in physical height, each face at the mean of its four nodes, weighted by its volume
+    // the x source's centroid in physical height, each face at the mean of its four nodes, its weight scaled by
+    // the column's Jacobian
     double num = 0.0, den = 0.0;
+    const Mesh::Spacing sp = m.spacing();
     for (amrex::MFIter mfi(s.sx, false); mfi.isValid(); ++mfi) {
         const auto a = s.sx.const_array(mfi);
         amrex::LoopOnCpu(mfi.validbox(), [&](int i, int j, int k) {
             if (i == m.nx) { return; }   // the periodic image of face 0
-            const double zc = 0.25 * (m.z_node(i, j, k) + m.z_node(i, j + 1, k) + m.z_node(i, j, k + 1) + m.z_node(i, j + 1, k + 1));
-            const double wv = static_cast<double>(a(i,j,k)) * static_cast<double>(m.detj(i, j));
+            const double zc = 0.25 * (m.z_node(sp, i, j, k) + m.z_node(sp, i, j + 1, k)
+                                      + m.z_node(sp, i, j, k + 1) + m.z_node(sp, i, j + 1, k + 1));
+            const double wv = static_cast<double>(a(i,j,k)) * static_cast<double>(m.detj(sp, i, j));
             num += wv * zc;
             den += wv;
         });
     }
-    // the boxes are spread over the ranks: sum their shares
-    amrex::ParallelAllReduce::Sum(num, amrex::ParallelDescriptor::Communicator());
-    amrex::ParallelAllReduce::Sum(den, amrex::ParallelDescriptor::Communicator());
+    // every rank's boxes: a rank may hold none near the point
+    amrex::ParallelDescriptor::ReduceRealSum(num);
+    amrex::ParallelDescriptor::ReduceRealSum(den);
     ASSERT_NE(den, 0.0);
     EXPECT_NEAR(num / den, static_cast<double>(zp), 0.1 * static_cast<double>(eps));
 }
@@ -416,67 +483,14 @@ TEST(ActuatorSpreading, AWidthThatIsMissingOrNotPositiveIsRefused)
         msg = erf_gtest::abort_message([&] { s.spread(pos, force, std::vector<Real>{Real(2.0 * m.dx()), bad}); });
         EXPECT_NE(msg.find("point 1 (0-based) has the kernel width"), std::string::npos) << msg;
     }
-}
-
-TEST(ActuatorSpreading, UniformMeshNormIsTheSummedNorm)
-{
-    // the normalisation one rank finds alone on a uniform mesh is the one the ranks' partial sums add up
-    // to, to 1e-12 relative: inside, across the periodic seams in x, in y and at their corner, cut by the
-    // ground and by the top, on box faces, and for a kernel wider than the domain in y (several images)
-    Mesh m;
-    m.max_grid = {{8, 8, 4}};   // several boxes, so the partial sums come from several of them (and ranks)
-    Sources s(m, false);
-    const Real dx = m.dx(), dz = m.H / m.nz;
-    std::vector<Real> pos, eps;
-    auto add = [&] (Real x, Real y, Real z, Real e) { pos.insert(pos.end(), {x, y, z}); eps.push_back(e); };
-    add(Real(0.37) * m.Lx, Real(0.41) * m.Ly, Real(0.5) * m.H, Real(2.0) * dx);           // inside
-    add(Real(0.1) * dx, Real(0.5) * m.Ly, Real(0.5) * m.H, Real(2.0) * dx);               // x seam
-    add(Real(0.5) * m.Lx, m.Ly - Real(0.2) * m.dy(), Real(0.5) * m.H, Real(1.5) * dx);    // y seam
-    add(m.Lx - Real(0.3) * dx, Real(0.05) * m.dy(), Real(0.45) * m.H, Real(2.5) * dx);    // corner
-    add(Real(0.6) * m.Lx, Real(0.3) * m.Ly, Real(0.3) * dz, Real(2.0) * dx);              // ground
-    add(Real(0.2) * m.Lx, Real(0.7) * m.Ly, m.H - Real(0.4) * dz, Real(1.0) * dx);        // top
-    add(Real(8.0) * dx, Real(4.0) * m.dy(), Real(4.0) * dz, Real(2.0) * dx);              // on box faces
-    add(Real(0.5) * m.Lx, Real(0.5) * m.Ly, Real(0.5) * m.H, Real(0.6) * m.Ly);           // wider than y
-    std::vector<Real> summed;
-    erf_actuator::spread_partial_norms(pos, eps, nullptr, nullptr, s.geom, s.sx, summed);
-    amrex::ParallelDescriptor::ReduceRealSum(summed.data(), static_cast<int>(summed.size()));
-    for (std::size_t p = 0; p < eps.size(); ++p) {
-        Real local[3] = {Real(-1.0), Real(-1.0), Real(-1.0)};
-        ASSERT_TRUE(erf_actuator::uniform_mesh_norm(pos[3*p], pos[3*p+1], pos[3*p+2], eps[p], s.geom, s.ba, local)) << "point " << p;
-        for (int d = 0; d < 3; ++d) {
-            ASSERT_GT(summed[3*p+d], Real(0.0));
-            const Real tol = (sizeof(Real) == 8) ? Real(1.0e-12) : Real(1.0e-5);
-            EXPECT_LE(std::abs(local[d] - summed[3*p+d]), tol * summed[3*p+d]) << "point " << p << " component " << d;
-        }
+    // one width for every point: refused when it is not positive, without points too
+    for (const Real bad : {Real(0.0), Real(-1.0)}) {
+        msg = erf_gtest::abort_message([&] { s.spread({}, {}, bad); });
+        EXPECT_NE(msg.find("the kernel width"), std::string::npos) << msg;
     }
-    // a refined level that does not cover a kernel's reach: no local normalisation (the faces outside its
-    // boxes get no source), and the norm is left alone
-    amrex::BoxArray part(amrex::Box(amrex::IntVect(0, 0, 0), amrex::IntVect(m.nx / 2 - 1, m.ny - 1, m.nz - 1)));
-    Real untouched[3] = {Real(7.0), Real(7.0), Real(7.0)};
-    EXPECT_FALSE(erf_actuator::uniform_mesh_norm(Real(0.5) * m.Lx, Real(0.5) * m.Ly, Real(0.5) * m.H, Real(2.0) * dx, s.geom, part,
-                                                 untouched));
-    EXPECT_EQ(untouched[0], Real(7.0));
-    // but a kernel well inside its boxes is
-    EXPECT_TRUE(erf_actuator::uniform_mesh_norm(Real(0.2) * m.Lx, Real(0.5) * m.Ly, Real(0.5) * m.H, Real(1.0) * dx, s.geom, part,
-                                                untouched));
 }
 
 namespace {
-
-// The kernel weight of face (i,j,k) of grid dir for one image of a point, as the spreader defines it
-Real reference_weight (int dir, int i, int j, int k, const std::array<Real,3>& q, const amrex::Geometry& geom,
-                       amrex::Array4<Real const> const& znd, bool has_znd, Real eps)
-{
-    const auto plo = geom.ProbLoArray();
-    const auto dx = geom.CellSizeArray();
-    const Real inv_eps2 = Real(1.0) / (eps * eps);
-    const Real reach2 = Real(9.0) * eps * eps;
-    const Real ddx = plo[0] + (i + ((dir == 0) ? Real(0.0) : Real(0.5))) * dx[0] - q[0];
-    const Real ddy = plo[1] + (j + ((dir == 1) ? Real(0.0) : Real(0.5))) * dx[1] - q[1];
-    const Real ddz = erf_actuator::face_height(dir, i, j, k, znd, has_znd, plo[2], dx[2]) - q[2];
-    const Real r2 = ddx*ddx + ddy*ddy + ddz*ddz;
-    return (r2 > reach2) ? Real(0.0) : std::exp(-r2 * inv_eps2);
-}
 
 // A point's periodic images, in the spreader's order
 std::vector<std::array<Real,3>> reference_images (const amrex::Geometry& geom, Real px, Real py, Real pz, Real eps)
@@ -494,6 +508,21 @@ std::vector<std::array<Real,3>> reference_images (const amrex::Geometry& geom, R
         for (int sy = -n[1]; sy <= n[1]; ++sy) { q.push_back({{px + sx * len[0], py + sy * len[1], pz}}); }
     }
     return q;
+}
+
+// The kernel weight of face (i,j,k) of grid dir for one image of a point, as the spreader defines it
+Real reference_weight (int dir, int i, int j, int k, const std::array<Real,3>& q, const amrex::Geometry& geom,
+                       amrex::Array4<Real const> const& znd, bool has_znd, Real eps)
+{
+    const auto plo = geom.ProbLoArray();
+    const auto dx = geom.CellSizeArray();
+    const Real inv_eps2 = Real(1.0) / (eps * eps);
+    const Real reach2 = Real(9.0) * eps * eps;
+    const Real ddx = plo[0] + (i + ((dir == 0) ? Real(0.0) : Real(0.5))) * dx[0] - q[0];
+    const Real ddy = plo[1] + (j + ((dir == 1) ? Real(0.0) : Real(0.5))) * dx[1] - q[1];
+    const Real ddz = erf_actuator::face_height(dir, i, j, k, znd, has_znd, plo[2], dx[2]) - q[2];
+    const Real r2 = ddx*ddx + ddy*ddy + ddz*ddz;
+    return (r2 > reach2) ? Real(0.0) : std::exp(-r2 * inv_eps2);
 }
 
 bool reference_boundary_face (int dir, int i, int j, int k, const amrex::Geometry& geom)
@@ -528,7 +557,7 @@ void reference_spread (const std::vector<Real>& pos, const std::vector<Real>& fo
                     amrex::LoopOnCpu(fbx, [&](int i, int j, int k) {
                         if (reference_boundary_face(dir, i, j, k, s.geom)) { return; }
                         const Real w = reference_weight(dir, i, j, k, q, s.geom, znd, has_znd, eps[p]);
-                        if (w > Real(0.0)) { norm[3*p+dir] += w * erf_actuator::face_volume(dir, i, j, k, detj, has_znd, dxdydz); }
+                        if (w > Real(0.0)) { const Real term = w * erf_actuator::face_volume(dir, i, j, k, detj, has_znd, dxdydz); norm[3*p+dir] += term; }
                     });
                 }
             }
@@ -548,7 +577,7 @@ void reference_spread (const std::vector<Real>& pos, const std::vector<Real>& fo
                     amrex::LoopOnCpu(fbx, [&](int i, int j, int k) {
                         if (reference_boundary_face(dir, i, j, k, s.geom)) { return; }
                         const Real w = reference_weight(dir, i, j, k, q, s.geom, znd, has_znd, eps[p]);
-                        if (w > Real(0.0)) { a(i,j,k) += scale * w; }
+                        if (w > Real(0.0)) { const Real term = scale * w; a(i,j,k) += term; }
                     });
                 }
             }
@@ -580,85 +609,6 @@ std::vector<Real> many_points (const Mesh& m, std::vector<Real>& force, std::vec
 }
 
 } // namespace
-
-// The batched kernels (one per box and face grid in each pass, no atomics) give the sources of the
-// point-by-point reference: to the last bit on the host, where the reference adds its terms in the
-// batched kernels' order, and integrate back to the forces. With buffers kept from call to call, each
-// pass launches at most one kernel per box and face grid, however many points and images, and a second
-// call with fewer points after the first (the buffers keep their size) is unaffected by the first's.
-TEST(ActuatorSpreading, BatchedKernelsMatchThePointByPointReference)
-{
-    Mesh m;
-    m.hill = 60.0;
-    m.max_grid = {{8, 5, 1024}};
-    std::vector<Real> force, eps;
-    const std::vector<Real> pos = many_points(m, force, eps);
-    Sources s(m, true);
-    Sources ref(m, true, &s.dm);
-    int nlocal = 0;
-    for (amrex::MFIter mfi(s.sx, false); mfi.isValid(); ++mfi) { ++nlocal; }
-
-    erf_actuator::ActuatorDeviceBuffers buf;
-    for (const int n : {40, 9, 40}) {
-        SCOPED_TRACE(std::to_string(n) + " points");
-        const std::vector<Real> p_pos(pos.begin(), pos.begin() + 3 * n), p_force(force.begin(), force.begin() + 3 * n);
-        const std::vector<Real> p_eps(eps.begin(), eps.begin() + n);
-        // the two passes of add_spread_forces, through the kept buffers
-        s.sx.setVal(0.0);
-        s.sy.setVal(0.0);
-        s.sz.setVal(0.0);
-        std::vector<Real> norm;
-        long before = buf.kernel_launches;
-        erf_actuator::spread_partial_norms(p_pos, p_eps, s.znd.get(), s.detj.get(), s.geom, s.sx, norm, nullptr, &buf);
-        EXPECT_LE(buf.kernel_launches - before, 3 * nlocal);
-        amrex::ParallelDescriptor::ReduceRealSum(norm.data(), static_cast<int>(norm.size()));
-        std::vector<Real> f_over_s(norm.size());
-        for (std::size_t q = 0; q < norm.size(); ++q) { f_over_s[q] = p_force[q] / norm[q]; }
-        before = buf.kernel_launches;
-        // the face-by-face pass, whose launches this counts (on the host the images scatter without kernels)
-        buf.force_face_major = true;
-        erf_actuator::add_scaled_kernels(p_pos, f_over_s, p_eps, s.znd.get(), s.detj.get(), s.geom, s.sx, s.sy, s.sz, nullptr, &buf);
-        buf.force_face_major = false;
-        EXPECT_GT(buf.kernel_launches - before, 0);
-        EXPECT_LE(buf.kernel_launches - before, 3 * nlocal);
-        EXPECT_GE(buf.image_pos.device.size(), 3 * p_eps.size());
-
-        reference_spread(p_pos, p_force, p_eps, ref);
-        std::array<Real,3> p_total{{0.0, 0.0, 0.0}};
-        for (std::size_t q = 0; q < p_force.size(); ++q) { p_total[q % 3] += p_force[q]; }
-        expect_total(s.totals(), p_total, abs_sum(p_force));
-        expect_total(ref.totals(), p_total, abs_sum(p_force));
-        int differ = 0, nonzero = 0;
-        Real worst = 0.0;
-        for (int dir = 0; dir < 3; ++dir) {
-            const amrex::MultiFab& got = (dir == 0) ? s.sx : ((dir == 1) ? s.sy : s.sz);
-            const amrex::MultiFab& want = (dir == 0) ? ref.sx : ((dir == 1) ? ref.sy : ref.sz);
-            const Real scale = want.norminf(0);
-            for (amrex::MFIter mfi(got, false); mfi.isValid(); ++mfi) {
-                const auto a = got.const_array(mfi);
-                const auto b = want.const_array(mfi);
-                amrex::LoopOnCpu(mfi.validbox(), [&](int i, int j, int k) {
-                    if (b(i,j,k) != Real(0.0)) { ++nonzero; }
-                    if (a(i,j,k) != b(i,j,k)) {
-                        ++differ;
-                        worst = std::max(worst, std::abs(a(i,j,k) - b(i,j,k)) / scale);
-                    }
-                });
-            }
-        }
-        amrex::ParallelDescriptor::ReduceIntSum(nonzero);
-        amrex::ParallelDescriptor::ReduceIntSum(differ);
-        amrex::ParallelDescriptor::ReduceRealMax(worst);
-        EXPECT_GT(nonzero, 1000);
-#if !defined(AMREX_USE_GPU) && (defined(__x86_64__) || defined(_M_X64))
-        // the same operations in the same order
-        EXPECT_EQ(differ, 0) << "worst relative difference " << worst;
-#else
-        // the device may round its operations otherwise (fused multiply-adds)
-        EXPECT_LE(worst, rel_tol);
-#endif
-    }
-}
 
 // Columns split in z (boxes stacked over the same columns, some aloft): the spreading bounds each kernel's
 // cells from the table of this rank's node heights, where without it the whole column was swept. Only
@@ -747,12 +697,13 @@ TEST(ActuatorSpreading, ARankHoldingOnlyBoxesAloftSkipsTheKernelsBelowThem)
     amrex::MultiFab znd(amrex::convert(ba, amrex::IntVect(1,1,1)), dm, 1, 1);
     amrex::MultiFab detj(ba, dm, 1, 1);
     amrex::MultiFab sx(amrex::convert(ba, amrex::IntVect(1,0,0)), dm, 1, 0);
+    const Mesh::Spacing sp = m.spacing();
     for (amrex::MFIter mfi(detj, false); mfi.isValid(); ++mfi) {
         auto za = znd.array(mfi);
         auto ja = detj.array(mfi);
         const amrex::Box gbx = amrex::grow(mfi.validbox(), 1);
-        amrex::LoopOnCpu(amrex::surroundingNodes(gbx), [&](int i, int j, int k) { za(i,j,k) = m.z_node(i, j, k); });
-        amrex::LoopOnCpu(gbx, [&](int i, int j, int k) { ja(i,j,k) = m.detj(i, j); (void) k; });
+        amrex::LoopOnCpu(amrex::surroundingNodes(gbx), [&](int i, int j, int k) { za(i,j,k) = m.z_node(sp, i, j, k); });
+        amrex::LoopOnCpu(gbx, [&](int i, int j, int k) { ja(i,j,k) = m.detj(sp, i, j); (void) k; });
     }
     // the rank that holds the box (the others hold none: no table, and nothing to spread); every call
     // below is this rank's alone (no collective)
@@ -777,6 +728,88 @@ TEST(ActuatorSpreading, ARankHoldingOnlyBoxesAloftSkipsTheKernelsBelowThem)
         EXPECT_EQ(without[d], Real(0.0)) << "low point, dir " << d;
         EXPECT_GT(with[3+d], Real(0.0)) << "high point, dir " << d;
         EXPECT_EQ(with[3+d], without[3+d]) << "high point, dir " << d;
+    }
+}
+
+// The batched kernels (one per box and face grid in each pass, no atomics) give the sources of the
+// point-by-point reference: to the last bit on the host, where the reference adds its terms in the
+// batched kernels' order, and integrate back to the forces. With buffers kept from call to call, each
+// pass launches at most one kernel per box and face grid, however many points and images, and a second
+// call with fewer points after the first (the buffers keep their size) is unaffected by the first's.
+TEST(ActuatorSpreading, BatchedKernelsMatchThePointByPointReference)
+{
+    Mesh m;
+    m.hill = 60.0;
+    m.max_grid = {{8, 5, 1024}};
+    std::vector<Real> force, eps;
+    const std::vector<Real> pos = many_points(m, force, eps);
+    Sources s(m, true);
+    Sources ref(m, true, &s.dm);
+    int nlocal = 0;
+    for (amrex::MFIter mfi(s.sx, false); mfi.isValid(); ++mfi) { ++nlocal; }
+
+    erf_actuator::ActuatorDeviceBuffers buf;
+    for (const int n : {40, 9, 40}) {
+        SCOPED_TRACE(std::to_string(n) + " points");
+        const std::vector<Real> p_pos(pos.begin(), pos.begin() + 3 * n), p_force(force.begin(), force.begin() + 3 * n);
+        const std::vector<Real> p_eps(eps.begin(), eps.begin() + n);
+        // the two passes of add_spread_forces, through the kept buffers
+        s.sx.setVal(0.0);
+        s.sy.setVal(0.0);
+        s.sz.setVal(0.0);
+        std::vector<Real> norm;
+        long before = buf.kernel_launches;
+        erf_actuator::spread_partial_norms(p_pos, p_eps, s.znd.get(), s.detj.get(), s.geom, s.sx, norm, nullptr, &buf);
+        EXPECT_LE(buf.kernel_launches - before, 3 * nlocal);
+        amrex::ParallelDescriptor::ReduceRealSum(norm.data(), static_cast<int>(norm.size()));
+        std::vector<Real> f_over_s(norm.size());
+        for (std::size_t q = 0; q < norm.size(); ++q) { f_over_s[q] = p_force[q] / norm[q]; }
+        before = buf.kernel_launches;
+        // the face-by-face pass, whose launches this counts (on the host the images scatter without kernels)
+        buf.force_face_major = true;
+        erf_actuator::add_scaled_kernels(p_pos, f_over_s, p_eps, s.znd.get(), s.detj.get(), s.geom, s.sx, s.sy, s.sz, nullptr, &buf);
+        buf.force_face_major = false;
+        EXPECT_GT(buf.kernel_launches - before, 0);
+        EXPECT_LE(buf.kernel_launches - before, 3 * nlocal);
+        EXPECT_GE(buf.image_pos.device.size(), 3 * p_eps.size());
+
+        reference_spread(p_pos, p_force, p_eps, ref);
+        std::array<Real,3> p_total{{0.0, 0.0, 0.0}};
+        for (std::size_t q = 0; q < p_force.size(); ++q) { p_total[q % 3] += p_force[q]; }
+        expect_total(s.totals(), p_total, abs_sum(p_force));
+        expect_total(ref.totals(), p_total, abs_sum(p_force));
+        int differ = 0, nonzero = 0;
+        Real worst = 0.0;
+        for (int dir = 0; dir < 3; ++dir) {
+            const amrex::MultiFab& got = (dir == 0) ? s.sx : ((dir == 1) ? s.sy : s.sz);
+            const amrex::MultiFab& want = (dir == 0) ? ref.sx : ((dir == 1) ? ref.sy : ref.sz);
+            const Real scale = want.norminf(0);
+            for (amrex::MFIter mfi(got, false); mfi.isValid(); ++mfi) {
+                const auto a = got.const_array(mfi);
+                const auto b = want.const_array(mfi);
+                amrex::LoopOnCpu(mfi.validbox(), [&](int i, int j, int k) {
+                    if (b(i,j,k) != Real(0.0)) { ++nonzero; }
+                    if (a(i,j,k) != b(i,j,k)) {
+                        ++differ;
+                        worst = std::max(worst, std::abs(a(i,j,k) - b(i,j,k)) / scale);
+                    }
+                });
+            }
+        }
+        amrex::ParallelDescriptor::ReduceIntSum(nonzero);
+        amrex::ParallelDescriptor::ReduceIntSum(differ);
+        amrex::ParallelDescriptor::ReduceRealMax(worst);
+        EXPECT_GT(nonzero, 1000);
+#if !defined(AMREX_USE_GPU) && (!defined(__FP_FAST_FMA) || (defined(__clang__) && !defined(__INTEL_LLVM_COMPILER)))
+        // The same operations in the same order: bit for bit on any host build whose compiler keeps a multiply
+        // and an add of two statements apart. That is every target without a fused multiply-add, and clang on
+        // any target (it fuses within one expression only).
+        EXPECT_EQ(differ, 0) << "worst relative difference " << worst;
+#else
+        // A device, or a compiler that fuses a multiply and an add across statements where the target has the
+        // instruction (GCC and the Intel compiler by default), may round otherwise.
+        EXPECT_LE(worst, rel_tol);
+#endif
     }
 }
 
@@ -844,48 +877,75 @@ TEST(ActuatorSpreading, TheHostScatterIsTheFaceByFacePassBitForBit)
 #endif
 }
 
-// from erf-model/ERF#5002: the source summed with the test's own face volumes, for a detJ that
-// varies in k as well (integrate_source shares face_volume with the spreader, so a wrong neighbour
-// there would cancel out in the other terrain tests)
-TEST(ActuatorSpreading, TerrainVolumesAreTheFaceAveragesOfDetJ)
+
+// add_spread_forces adds to what the sources hold: two sets spread one after the other give the sum of the
+// two sets spread alone, and the integral of the sum is the sum of the forces
+TEST(ActuatorSpreading, AddingASecondSetLeavesTheFirstInPlace)
 {
     Mesh m;
-    m.hill = 100.0;
-    Sources s(m, true);
-    auto dj = [&](int i, int j, int k) { return m.detj(i, j) * (Real(1.0) + Real(0.5) * k / m.nz); };
-    for (amrex::MFIter mfi(*s.detj, false); mfi.isValid(); ++mfi) {
-        auto ja = s.detj->array(mfi);
-        amrex::LoopOnCpu(amrex::grow(mfi.validbox(), 1), [&](int i, int j, int k) { ja(i,j,k) = dj(i, j, k); });
-    }
-    const Real eps = 2.0 * m.dx();
-    const std::vector<Real> pos = xyz(0.2 * m.Lx, 0.3 * m.Ly, 0.4 * m.H);
-    const std::vector<Real> force = xyz(-1.5e6, 2.0e5, 4.0e4);
-    erf_actuator::spread_forces(pos, force, eps, s.znd.get(), s.detj.get(), s.geom, s.sx, s.sy, s.sz);
-    const double dv = static_cast<double>(m.dx()) * static_cast<double>(m.dy()) * static_cast<double>(m.H / m.nz);
-    std::array<double,3> total{{0.0, 0.0, 0.0}};
-    for (amrex::MFIter mfi(s.sx, false); mfi.isValid(); ++mfi) {
-        const auto a = s.sx.const_array(mfi);
-        amrex::LoopOnCpu(mfi.validbox(), [&](int i, int j, int k) {
-            if (i == m.nx) { return; }                                   // the periodic image of face 0
-            total[0] += static_cast<double>(a(i,j,k)) * 0.5 * (dj(i-1,j,k) + dj(i,j,k)) * dv;
-        });
-    }
-    for (amrex::MFIter mfi(s.sy, false); mfi.isValid(); ++mfi) {
-        const auto a = s.sy.const_array(mfi);
-        amrex::LoopOnCpu(mfi.validbox(), [&](int i, int j, int k) {
-            if (j == m.ny) { return; }
-            total[1] += static_cast<double>(a(i,j,k)) * 0.5 * (dj(i,j-1,k) + dj(i,j,k)) * dv;
-        });
-    }
-    for (amrex::MFIter mfi(s.sz, false); mfi.isValid(); ++mfi) {
-        const auto a = s.sz.const_array(mfi);
-        amrex::LoopOnCpu(mfi.validbox(), [&](int i, int j, int k) {
-            total[2] += static_cast<double>(a(i,j,k)) * 0.5 * (dj(i,j,k-1) + dj(i,j,k)) * dv;   // boundary faces hold no source
-        });
-    }
-    amrex::ParallelDescriptor::ReduceRealSum(total.data(), 3);
-    const std::array<Real,3> scale = abs_sum(force);
+    m.hill = 80.0;
+    m.max_grid = {{8, 6, 1024}};
+    Sources a(m, true), b(m, true, &a.dm), both(m, true, &a.dm);
+    const std::vector<Real> p1 = xyz(0.3 * m.Lx, 0.4 * m.Ly, 0.5 * m.H), f1 = xyz(-2.0e6, 3.0e5, 1.0e5);
+    const std::vector<Real> p2 = xyz(0.36 * m.Lx, 0.45 * m.Ly, 0.55 * m.H), f2 = xyz(4.0e5, -1.0e5, 2.0e5);
+    const std::vector<Real> e1{Real(2.0 * m.dx())}, e2{Real(1.5 * m.dx())};
+    erf_actuator::spread_forces(p1, f1, e1, a.znd.get(), a.detj.get(), a.geom, a.sx, a.sy, a.sz);
+    erf_actuator::spread_forces(p2, f2, e2, b.znd.get(), b.detj.get(), b.geom, b.sx, b.sy, b.sz);
+    erf_actuator::spread_forces(p1, f1, e1, both.znd.get(), both.detj.get(), both.geom, both.sx, both.sy, both.sz);
+    erf_actuator::add_spread_forces(p2, f2, e2, both.znd.get(), both.detj.get(), both.geom, both.sx, both.sy, both.sz);
+    amrex::MultiFab* sa[3] = {&a.sx, &a.sy, &a.sz};
+    amrex::MultiFab* sb[3] = {&b.sx, &b.sy, &b.sz};
+    amrex::MultiFab* sc[3] = {&both.sx, &both.sy, &both.sz};
     for (int d = 0; d < 3; ++d) {
-        EXPECT_NEAR(static_cast<Real>(total[d]), force[d], rel_tol * std::max(Real(1.0), scale[d])) << "component " << d;
+        ASSERT_GT(sb[d]->norm0(), Real(0.0));
+        // the second set alone is what was added: the same additions onto a zero and onto the first set
+        amrex::MultiFab::Subtract(*sc[d], *sa[d], 0, 0, 1, 0);
+        amrex::MultiFab::Subtract(*sc[d], *sb[d], 0, 0, 1, 0);
+        // to rounding: a face of both kernels takes (first + second) - first - second
+        EXPECT_LE(sc[d]->norm0(), Real(16.0) * std::numeric_limits<Real>::epsilon() * (sa[d]->norm0() + sb[d]->norm0()))
+            << "component " << d;
     }
+}
+
+TEST(ActuatorSpreading, UniformMeshNormIsTheSummedNorm)
+{
+    // the normalisation one rank finds alone on a uniform mesh is the one the ranks' partial sums add up
+    // to, to 1e-12 relative: inside, across the periodic seams in x, in y and at their corner, cut by the
+    // ground and by the top, on box faces, and for a kernel wider than the domain in y (several images)
+    Mesh m;
+    m.max_grid = {{8, 8, 4}};   // several boxes, so the partial sums come from several of them (and ranks)
+    Sources s(m, false);
+    const Real dx = m.dx(), dz = m.H / m.nz;
+    std::vector<Real> pos, eps;
+    auto add = [&] (Real x, Real y, Real z, Real e) { pos.insert(pos.end(), {x, y, z}); eps.push_back(e); };
+    add(Real(0.37) * m.Lx, Real(0.41) * m.Ly, Real(0.5) * m.H, Real(2.0) * dx);           // inside
+    add(Real(0.1) * dx, Real(0.5) * m.Ly, Real(0.5) * m.H, Real(2.0) * dx);               // x seam
+    add(Real(0.5) * m.Lx, m.Ly - Real(0.2) * m.dy(), Real(0.5) * m.H, Real(1.5) * dx);    // y seam
+    add(m.Lx - Real(0.3) * dx, Real(0.05) * m.dy(), Real(0.45) * m.H, Real(2.5) * dx);    // corner
+    add(Real(0.6) * m.Lx, Real(0.3) * m.Ly, Real(0.3) * dz, Real(2.0) * dx);              // ground
+    add(Real(0.2) * m.Lx, Real(0.7) * m.Ly, m.H - Real(0.4) * dz, Real(1.0) * dx);        // top
+    add(Real(8.0) * dx, Real(4.0) * m.dy(), Real(4.0) * dz, Real(2.0) * dx);              // on box faces
+    add(Real(0.5) * m.Lx, Real(0.5) * m.Ly, Real(0.5) * m.H, Real(0.6) * m.Ly);           // wider than y
+    std::vector<Real> summed;
+    erf_actuator::spread_partial_norms(pos, eps, nullptr, nullptr, s.geom, s.sx, summed);
+    amrex::ParallelDescriptor::ReduceRealSum(summed.data(), static_cast<int>(summed.size()));
+    for (std::size_t p = 0; p < eps.size(); ++p) {
+        Real local[3] = {Real(-1.0), Real(-1.0), Real(-1.0)};
+        ASSERT_TRUE(erf_actuator::uniform_mesh_norm(pos[3*p], pos[3*p+1], pos[3*p+2], eps[p], s.geom, s.ba, local)) << "point " << p;
+        for (int d = 0; d < 3; ++d) {
+            ASSERT_GT(summed[3*p+d], Real(0.0));
+            const Real tol = (sizeof(Real) == 8) ? Real(1.0e-12) : Real(1.0e-5);
+            EXPECT_LE(std::abs(local[d] - summed[3*p+d]), tol * summed[3*p+d]) << "point " << p << " component " << d;
+        }
+    }
+    // a refined level that does not cover a kernel's reach: no local normalisation (the faces outside its
+    // boxes get no source), and the norm is left alone
+    amrex::BoxArray part(amrex::Box(amrex::IntVect(0, 0, 0), amrex::IntVect(m.nx / 2 - 1, m.ny - 1, m.nz - 1)));
+    Real untouched[3] = {Real(7.0), Real(7.0), Real(7.0)};
+    EXPECT_FALSE(erf_actuator::uniform_mesh_norm(Real(0.5) * m.Lx, Real(0.5) * m.Ly, Real(0.5) * m.H, Real(2.0) * dx, s.geom, part,
+                                                 untouched));
+    EXPECT_EQ(untouched[0], Real(7.0));
+    // but a kernel well inside its boxes is
+    EXPECT_TRUE(erf_actuator::uniform_mesh_norm(Real(0.2) * m.Lx, Real(0.5) * m.Ly, Real(0.5) * m.H, Real(1.0) * dx, s.geom, part,
+                                                untouched));
 }

@@ -52,6 +52,11 @@ Floating-point traps must stay off in a run with an OpenFAST turbine
 (``amrex.fpe_trap_invalid``, ``amrex.fpe_trap_zero`` and
 ``amrex.fpe_trap_overflow`` all 0): OpenFAST's own arithmetic raises them.
 
+The bodies need a mesh whose map factors are all 1: their forces are spread
+and the velocities sampled at ``prob_lo + i dx`` with the cell volumes
+``dx dy dz detJ``. A run whose anchor level has a map factor other than 1
+stops with a message that says so (checked at every step of that level).
+
 Preparing the turbine model
 ---------------------------
 

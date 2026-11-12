@@ -88,6 +88,7 @@
 #ifdef ERF_USE_MOVING_BODIES
 #include "ERF_MovingBodies.H"
 #include "ERF_StructureModel.H"
+#include "ERF_ActuatorSampling.H"
 #endif
 #include <ERF_SurfaceModel.H>
 
@@ -638,6 +639,12 @@ public:
     [[nodiscard]] std::vector<amrex::Real>
     sbm_qualification_composite_inventory () const;
 
+    // SBM leaf-domain inventory and its boundary budget
+    // (Microphysics/SBM/ERF_SBMAMRCoupling.cpp); public because they launch device lambdas.
+    [[nodiscard]] std::vector<amrex::Real> sbm_composite_inventory () const;
+    void sbm_record_budget_reference ();
+    void sbm_check_budget (int nstep);
+
     // Do whatever writing needs to be done at intermediate times
     void WriteAtIntermediateTime (int nstep, double time);
 
@@ -665,6 +672,9 @@ public:
     // The volume fraction of each level for line and plane sampling, or nullptr without
     // immersed terrain
     amrex::Vector<const amrex::MultiFab*> sampling_volfrac () const;
+    // The ground of each level for line sampling (station_ground), or nullptr where the
+    // sampler does not need it
+    amrex::Vector<const amrex::MultiFab*> sampling_ground (const LineSampler& sampler);
 
     void derive_diag_profiles (double time,
                                amrex::Gpu::HostVector<amrex::Real>& h_avg_u   , amrex::Gpu::HostVector<amrex::Real>& h_avg_v,
@@ -993,6 +1003,7 @@ public:
     void ibseb_check_two_stream_provider () const;
     void ibseb_check_two_stream_buildings () const;
     void ibseb_give_ground_walls (int lev);
+    void ibseb_give_roofs (int lev);
     [[nodiscard]] bool ibseb_two_stream_buildings () const {
         return ibseb_params.enable && ibseb_params.two_stream_buildings && solverChoice.rad_type == RadiationType::TwoStream;
     }
@@ -1274,6 +1285,7 @@ private:
                            const amrex::BoxArray& ba,
                            const amrex::DistributionMapping& dm);
     void sbm_synchronize_levels (int nstep);
+    void configure_sbm_physical_boundaries ();
 
     void Construct_ERFFillPatchers (int lev);
 
@@ -1568,6 +1580,21 @@ private:
     // Used for anelastic or when we impose an initial projection
     amrex::Vector<amrex::MultiFab> pp_inc;
 
+    // Pseudo-incompressible (non-EB) levels: the upwind direction on each face (+1, -1, or 0 for
+    // a zero momentum, which selects the centered blend), the sign of the momentum the latest
+    // projection on the level started from.  The projection maps rho0 theta0 / rho onto the
+    // faces with it, and the advection of the cell-centered scalars from the projected state
+    // picks its upwind side from it rather than from the sign of the projected mass flux, so
+    // that with rho theta = rho0 theta0 the advective flux of (rho theta) is the flux the
+    // projection made divergence-free, even where the projection reverses the flow.
+    // pi_upw_dir_stage is the copy an RK stage advects with: the stage's projection overwrites
+    // pi_upw_dir before erf_slow_rhs_post advects the remaining scalars.
+    amrex::Vector<amrex::Array<std::unique_ptr<amrex::MultiFab>,AMREX_SPACEDIM>> pi_upw_dir;
+    amrex::Vector<amrex::Array<std::unique_ptr<amrex::MultiFab>,AMREX_SPACEDIM>> pi_upw_dir_stage;
+
+    //! Define pi_upw_dir[lev] and pi_upw_dir_stage[lev] on the level's faces (zero) if needed
+    void define_pi_upw_dir (int lev);
+
     // Used only for fast substepping
     amrex::Vector<amrex::MultiFab> lagged_delta_rt;
     amrex::Vector<amrex::MultiFab> avg_xmom;
@@ -1580,6 +1607,8 @@ private:
     amrex::Vector<std::unique_ptr<ERFPhysBCFunct_v>> physbcs_v;
     amrex::Vector<std::unique_ptr<ERFPhysBCFunct_w>> physbcs_w;
     amrex::Vector<std::unique_ptr<ERFPhysBCFunct_base>> physbcs_base;
+    // The same on the mesh at the end of the stage, z_phys_nd_new (MovingFittedMesh only)
+    amrex::Vector<std::unique_ptr<ERFPhysBCFunct_base>> physbcs_base_new;
 
     // Store primitive variable for MOST BC
     amrex::Vector<std::unique_ptr<amrex::MultiFab>> Theta_prim;
@@ -1604,6 +1633,12 @@ private:
     // transport are destroyed before these register owners.
     amrex::Vector<std::unique_ptr<erf_sbm::SBMAMRFluxRegister>> sbm_amr_flux_regs;
     std::vector<amrex::Real> sbm_qualification_initial_inventory;
+    // Leaf inventory, cumulative outward boundary transfer and its gross scale
+    // at the previous erf.sbm_budget_check (or the start or restart).
+    std::vector<amrex::Real> sbm_budget_reference_inventory;
+    std::vector<double> sbm_budget_reference_outward;
+    std::vector<double> sbm_budget_reference_gross;
+    std::uint64_t sbm_budget_reference_terms{0};
     // Declared after the state manager so its non-owning layout reference is
     // destroyed before the authoritative SBM owner.
     std::unique_ptr<erf_sbm::SBMTransport> sbm_transport;
@@ -1792,6 +1827,9 @@ private:
 
     amrex::Vector<std::unique_ptr<amrex::MultiFab>> z_phys_nd_new;
     amrex::Vector<std::unique_ptr<amrex::MultiFab>>   detJ_cc_new;
+    // The mesh and Jacobian at the acoustic sub-step midpoint (MovingFittedMesh), rewritten every sub-step
+    amrex::Vector<std::unique_ptr<amrex::MultiFab>> z_phys_nd_mid;
+    amrex::Vector<std::unique_ptr<amrex::MultiFab>>   detJ_cc_mid;
 
     amrex::Vector<std::unique_ptr<amrex::MultiFab>> z_t_rk;
 
@@ -2379,6 +2417,9 @@ private:
     /// The grids of the model's level at its last advance(): the source add_momentum_sources() returns lives there
     amrex::BoxArray            m_structure_src_ba;
     amrex::DistributionMapping m_structure_src_dm;
+
+    /// The node heights of the level above the model's, for the check of its support(): kept until that level's boxes change
+    erf_actuator::LevelHeights m_structure_fine_heights;
 #endif
 
     //
