@@ -1298,6 +1298,43 @@ TEST(ActuatorSampling, CoverageRefusesBoundsWithoutASpacingAndARanksTable)
     EXPECT_FALSE(all.has_table());
     EXPECT_TRUE(erf_actuator::points_covered_by(ba, f.geom, pos, Real(50.0), outside, erf_actuator::CoverZ::Column, &all)) << outside;
 }
+// The tests from here on are of functions and call paths only GALE's turbine module uses: the top face for
+// sample_cell_scalar and for columns split in z, min_cell_heights, tip_cell_heights and tip_cell_heights_batched.
+
+// A point on the domain's top face (a vertical wake line that reaches the top) takes the last cell: on a uniform
+// mesh with the column split in z, on a stretched mesh in one box, and for a cell-centred scalar linear in z
+// with the column in one box and split in z.
+TEST(ActuatorSampling, TheTopFaceIsTheLastCellForASplitColumnAndACellScalar)
+{
+    MeshSpec m;
+    m.stretch = 1.0;
+    m.max_grid = {{5, 4, 1024}};
+    Fields f(m, true);
+    const std::vector<Real> top{Real(0.41) * m.Lx, Real(0.37) * m.Ly, m.H, m.Lx, m.Ly, m.H};
+    MeshSpec ms = m;
+    ms.stretch = 1.15;
+    Fields fs(ms, false);
+    fs.check(top, tol);
+    MeshSpec mu = m;
+    mu.max_grid = {{5, 4, 4}};
+    Fields fu(mu, true);
+    fu.check(top, tol);
+    for (const Fields* fc : {&f, &fu}) {
+        amrex::MultiFab c(fc->ba, fc->dm, 1, 1);
+        const Real dz = m.H / m.nz;
+        for (amrex::MFIter mfi(c, false); mfi.isValid(); ++mfi) {
+            auto ca = c.array(mfi);
+            amrex::LoopOnCpu(mfi.growntilebox(), [&](int i, int j, int k) {
+                amrex::ignore_unused(i, j);
+                ca(i,j,k) = Real(2.5) + Real(0.0125) * (k + Real(0.5)) * dz;
+            });
+        }
+        std::vector<Real> val;
+        erf_actuator::sample_cell_scalar(c, 0, nullptr, fc->geom, top, val);
+        ASSERT_EQ(val.size(), top.size() / 3);
+        for (const Real x : val) { EXPECT_NEAR(x, Real(2.5) + Real(0.0125) * m.H, tol * Real(10.0)); }
+    }
+}
 
 // min_cell_heights: the shortest physical cell under a region, from z_phys_nd's node spacing; over a
 // hill the cells are shorter than the nominal dz, so a rotor over the summit counts more cells than

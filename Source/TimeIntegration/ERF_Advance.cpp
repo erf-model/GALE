@@ -207,6 +207,12 @@ ERF::Advance (int lev, double time, double dt_lev, int iteration, int /*ncycle*/
         // (or of the finest, should a regrid have removed it), so a regrid is caught before the next step
         if (lev == std::min(moving_bodies->anchor_level(), finest_level)) {
             moving_bodies->check_levels(finest_level, grids, geom);
+            // the actuator core places its kernels and samples at prob_lo + i dx with the volumes dx dy dz detJ,
+            // with no map factors: checked with the levels, so also after a regrid
+            if (!structure_unit_map_factors(lev)) {
+                Abort("erf.moving_bodies: the bodies' forces are spread and the velocities sampled without map factors, but level "
+                      + std::to_string(lev) + " has a map factor other than 1; run the bodies on a mesh whose map factors are all 1");
+            }
         }
         moving_bodies->advance(lev, time, dt_lev, S_old, U_old, V_old, W_old,
                                z_phys_nd[lev].get(), detJ_cc[lev].get(), Geom(lev));

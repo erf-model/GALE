@@ -4066,6 +4066,10 @@ endfunction(add_test_eb_build)
 if(ERF_ENABLE_OPENFAST AND ERF_OPENFAST_USE_STUB AND ERF_ENABLE_FFT AND ERF_ENABLE_MPI AND NOT WIN32)
   # The moving-bodies start-up checks, one deck each: every abort must name the input to change.
   set(_mb_cases ${PROJECT_SOURCE_DIR}/Exec/CanonicalTests/MovingBodies)
+  # the actuator core carries no map factors: with one other than 1 (erf.test_mapfactor: 0.5 and 0.25) the run stops
+  add_test_abort(MovingBodies_MapFactorsNotOne ${_mb_cases}/Actuator_UniformCtDisk Actuator_UniformCtDisk.i
+                 "erf.moving_bodies: the bodies' forces are spread and the velocities sampled without map factors, but level 0 has a map factor other than 1"
+                 "erf.test_mapfactor=true")
   add_test_abort(MovingBodies_AnchorLevelAboveFinest ${_mb_cases}/OpenFAST_ADM_Restart OpenFAST_ADM_Restart.i
       "anchor_level = 1 is not a level of this run" "erf.moving_bodies.anchor_level=1")
   add_test_abort(MovingBodies_AdmSpreadingUnknown ${_mb_cases}/OpenFAST_ADM_Restart OpenFAST_ADM_Restart.i

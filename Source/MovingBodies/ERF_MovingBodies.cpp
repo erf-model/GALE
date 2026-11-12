@@ -2257,8 +2257,8 @@ MovingBodies::check_coverage (const BoxArray& level_grids, const MultiFab* z_phy
         }
     }
     {
-        const std::string first = erf_actuator::first_failure(failed, key);
-        if (!first.empty()) { Abort(first); }
+        const std::string failure = erf_actuator::first_failure(failed, key);
+        if (!failure.empty()) { Abort(failure); }
     }
 }
 

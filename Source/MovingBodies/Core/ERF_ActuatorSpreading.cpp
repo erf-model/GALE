@@ -497,7 +497,12 @@ uniform_mesh_norm (Real px, Real py, Real pz, Real eps, const Geometry& geom, co
                     for (int i = lo.x; i <= hi.x; ++i) {
                         if (boundary_face(dir, i, j, k, kf.per, kf.dlo, kf.dhi)) { continue; }
                         const Real w = kernel_weight(dir, i, j, k, q[0], q[1], q[2], kf.plo, kf.dx, no_znd, false, inv_eps2, reach2);
-                        if (w > Real(0.0)) { s[dir] += w * kf.dxdydz; }
+                        // the product in a statement of its own, as in spread_partial_norms(): the two sums
+                        // then add the same terms on a target with a fused multiply-add
+                        if (w > Real(0.0)) {
+                            const Real term = w * kf.dxdydz;
+                            s[dir] += term;
+                        }
                     }
                 }
             }
