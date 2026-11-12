@@ -819,6 +819,10 @@ struct SolverChoice {
             (sbm_test_native_qc_write_fault || sbm_test_donor_cfl_fault)) {
             amrex::Error("SBM test fault-injection options require moisture_model=SBM");
         }
+        pp.queryAdd("sbm_budget_check", sbm_budget_check);
+        if (moisture_type != MoistureType::SBM && sbm_budget_check) {
+            amrex::Error("erf.sbm_budget_check requires erf.moisture_model = SBM");
+        }
 
         // Register the moisture data this scheme carries: conserved-state
         // components and qmoist diagnostic slots alike.  MoistureComponentIndices
@@ -1294,6 +1298,19 @@ struct SolverChoice {
                              (fc ? "RK3_ImplicitSubstep or RK3_NoSubstepping because the level is "
                                    "FullyCompressible"
                                  : "RK2 or MidPoint because the level is not FullyCompressible"));
+            }
+        }
+
+        // A moving mesh is advanced only by the RK3 integrators (erf_substep_MT with
+        // RK3_ImplicitSubstep, the update without substeps with RK3_NoSubstepping), which by the
+        // check above are those of a FullyCompressible level
+        if (terrain_type == TerrainType::MovingFittedMesh) {
+            for (int i = 0; i <= max_level; i++) {
+                if (compressibility_type[i] != CompressibilityType::FullyCompressible) {
+                    amrex::Abort("erf.terrain_type = MovingFittedMesh requires erf.timestepping_type = "
+                                 "RK3_ImplicitSubstep or RK3_NoSubstepping (a FullyCompressible level) "
+                                 "at level " + std::to_string(i));
+                }
             }
         }
 
@@ -2436,6 +2453,14 @@ struct SolverChoice {
                           " turbine disk from the x-axis. A turbine facing an oncoming flow in the x-direction"
                           " will have turb_disk_angle value of 90 deg.");
         }
+#ifdef ERF_USE_WINDFARM
+        // Without a location type no turbine table is read, and the model would run on empty tables
+        if (windfarm_type != WindFarmType::None && windfarm_loc_type == WindFarmLocType::None) {
+            amrex::Error(std::string("erf.windfarm_type = ") + amrex::getEnumNameString(windfarm_type)
+                         + " needs erf.windfarm_loc_type, either lat_lon or x_y, with the turbine locations"
+                         " in erf.windfarm_loc_table and their specifications in erf.windfarm_spec_table.");
+        }
+#endif
         if (windfarm_loc_type == WindFarmLocType::lat_lon and (windfarm_x_shift < zero or windfarm_y_shift < zero)) {
             amrex::Error("You are using windfarms with latitude-logitude option to position the turbines."
                          " For this you should provide the inputs erf.windfarm_x_shift and"
@@ -3241,6 +3266,7 @@ struct SolverChoice {
     bool sbm_amr_qualification_uniform_ratio{false};
     bool sbm_test_native_qc_write_fault{false};
     bool sbm_test_donor_cfl_fault{false};
+    bool sbm_budget_check{false};
     amrex::Vector<amrex::Real> sbm_edges;
     amrex::Vector<amrex::Real> sbm_pivots;
     amrex::Vector<amrex::Real> sbm_fixture_initial_state;

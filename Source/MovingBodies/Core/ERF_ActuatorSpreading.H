@@ -18,14 +18,21 @@ namespace erf_actuator {
 /**
  * Spread point forces onto the face-centred momentum sources with a 3-D Gaussian kernel.
  *
+ * The points are spread where they are given, with the periodic images within reach of the domain: a
+ * caller whose points may lie outside a periodic domain moves them inside first (wrap_periodic()).
+ *
  * Each point p carries a force F_p on the fluid (N) and has its own kernel width epsilon_p
- * (the blades, tower and nacelle of a turbine, or two bodies, may differ). Its share of the source at a face is
+ * (the conductor lines and the towers of a run may differ). Its share of the source at a face is
  * F_p w_p(face) / S_p, where w_p = exp(-|x_face - x_p|^2 / epsilon_p^2) is cut off beyond
  * 3 epsilon_p and S_p = sum over the faces of that component of w_p dV is the discrete
  * normalisation with the face volumes (dx dy dz detJ on a terrain-following mesh). The sum
  * of src dV over the mesh therefore equals F_p exactly for every point and component,
  * whatever the resolution and however much of the kernel is cut off by the ground or the
- * domain top; the kernel's shape is Gaussian only where it is resolved.
+ * domain top; the kernel's shape is Gaussian only where it is resolved. The faces sit at
+ * prob_lo + i dx with the volumes dx dy dz detJ, with no map factors: a body model must refuse a
+ * run whose map factors are not 1 until the core carries them. The normalisation sums and the
+ * sources are accumulated in a fixed order without atomic adds (spread_partial_norms(),
+ * add_scaled_kernels()), so the source does not depend on the device's scheduling.
  *
  * Every rank accumulates the faces its boxes own (each physical face once, however the boxes
  * share their boundary faces) and the normalisations are summed across ranks, so the result
@@ -58,8 +65,7 @@ void spread_forces (const std::vector<amrex::Real>& pos,
 
 /**
  * The same, but added to what the sources hold (spread_forces() sets them): for several sets of
- * points spread one after the other. Collective: every rank must pass the same points. (MovingBodies
- * spreads its turbines and disks through BodyExchange::spread_forces, which adds to the sources too.)
+ * points spread one after the other. Collective: every rank must pass the same points.
  */
 void add_spread_forces (const std::vector<amrex::Real>& pos,
                         const std::vector<amrex::Real>& force,
@@ -85,14 +91,17 @@ void spread_forces (const std::vector<amrex::Real>& pos,
 /**
  * The first of spread_forces()'s two passes, on this rank's boxes only: for each point and each
  * component, this rank's part of the normalisation S_p (the sum of w_p dV over the faces its boxes
- * own). No reduction: the caller sums the ranks' parts (BodyExchange sums those of the ranks a
- * point reaches, in rank order). The boxes are src_x's, which z_phys_nd and detJ_cc must share.
+ * own). No reduction: the caller sums the ranks' parts (spread_forces() over every rank; a model
+ * whose ranks hold different points, over the ranks a point reaches). The boxes are src_x's, which
+ * z_phys_nd and detJ_cc must share.
  * zb_local, when given, is this rank's mesh_z_bounds(z_phys_nd, geom, false), which the call then
  * need not compute; the same for add_scaled_kernels.
  *
  * The periodic images of the points are made once, and binned to the boxes: one kernel per box and
  * face grid, one thread per point, which adds the point's terms in a fixed order (its images, then
  * their faces k, j, i) without atomics, so the result does not depend on the device's scheduling.
+ * The call checks only the arrays' sizes: the caller checks the points, widths and layouts first
+ * (check_spread_points(), check_spread_layout()), as spread_forces() does; the same for add_scaled_kernels().
  * @param[out] norm 3*n partial normalisations (m^3), component fastest
  * @param buffers device memory kept from call to call (the call uses its own when nullptr)
  */

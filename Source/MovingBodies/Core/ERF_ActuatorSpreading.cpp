@@ -70,6 +70,10 @@ spread_forces (const std::vector<Real>& pos, const std::vector<Real>& force, Rea
                const MultiFab* z_phys_nd, const MultiFab* detJ_cc, const Geometry& geom,
                MultiFab& src_x, MultiFab& src_y, MultiFab& src_z)
 {
+    // also without points, where the per-point check of the widths has nothing to refuse
+    if (!(epsilon > 0.0) || !std::isfinite(epsilon)) {
+        Abort("spread_forces: the kernel width " + std::to_string(epsilon) + " m must be positive and finite");
+    }
     spread_forces(pos, force, std::vector<Real>(pos.size() / 3, epsilon), z_phys_nd, detJ_cc, geom, src_x, src_y, src_z);
 }
 
@@ -311,12 +315,12 @@ Bin add_bin (const KernelImages& im, const std::vector<Real>& f_over_s, int dir,
         if (f_over_s[3*im.point[m]+dir] == Real(0.0)) { continue; }
         const Box c = im.reach[m][dir] & fbx;
         if (c.isEmpty()) { continue; }
-        const IntVect tlo = (c.smallEnd() - flo) / tile_size;
-        const IntVect thi = (c.bigEnd() - flo) / tile_size;
-        touched[m] = {{tlo, thi}};
-        for (int tz = tlo[2]; tz <= thi[2]; ++tz) {
-            for (int ty = tlo[1]; ty <= thi[1]; ++ty) {
-                for (int tx = tlo[0]; tx <= thi[0]; ++tx) { ++cnt[1 + tx + nt[0] * (ty + nt[1] * tz)]; }
+        const IntVect t_lo = (c.smallEnd() - flo) / tile_size;
+        const IntVect t_hi = (c.bigEnd() - flo) / tile_size;
+        touched[m] = {{t_lo, t_hi}};
+        for (int tz = t_lo[2]; tz <= t_hi[2]; ++tz) {
+            for (int ty = t_lo[1]; ty <= t_hi[1]; ++ty) {
+                for (int tx = t_lo[0]; tx <= t_hi[0]; ++tx) { ++cnt[1 + tx + nt[0] * (ty + nt[1] * tz)]; }
             }
         }
     }
@@ -341,11 +345,11 @@ Bin add_bin (const KernelImages& im, const std::vector<Real>& f_over_s, int dir,
     bins.push_back(item);
     bins.resize(item, -1);
     for (int m = 0; m < nimg; ++m) {
-        const IntVect& tlo = touched[m][0];
-        const IntVect& thi = touched[m][1];
-        for (int tz = tlo[2]; tz <= thi[2]; ++tz) {
-            for (int ty = tlo[1]; ty <= thi[1]; ++ty) {
-                for (int tx = tlo[0]; tx <= thi[0]; ++tx) { bins[next[tx + nt[0] * (ty + nt[1] * tz)]++] = m; }
+        const IntVect& t_lo = touched[m][0];
+        const IntVect& t_hi = touched[m][1];
+        for (int tz = t_lo[2]; tz <= t_hi[2]; ++tz) {
+            for (int ty = t_lo[1]; ty <= t_hi[1]; ++ty) {
+                for (int tx = t_lo[0]; tx <= t_hi[0]; ++tx) { bins[next[tx + nt[0] * (ty + nt[1] * tz)]++] = m; }
             }
         }
     }
@@ -361,6 +365,8 @@ spread_partial_norms (const std::vector<Real>& pos, const std::vector<Real>& eps
                       ActuatorDeviceBuffers* buffers)
 {
     BL_PROFILE("erf_actuator::spread_partial_norms()");
+    AMREX_ALWAYS_ASSERT_WITH_MESSAGE(buffers == nullptr || !OpenMP::in_parallel(),
+                                     "spread_partial_norms: kept buffers must not be shared by the threads of an OpenMP parallel region");
     AMREX_ALWAYS_ASSERT_WITH_MESSAGE(pos.size() == 3 * epsilon.size(), "spread_partial_norms: one kernel width per x,y,z point");
     const int npts = static_cast<int>(epsilon.size());
     norm.assign(3 * static_cast<std::size_t>(npts), Real(0.0));
@@ -437,7 +443,12 @@ spread_partial_norms (const std::vector<Real>& pos, const std::vector<Real>& eps
                             for (int i = ilo; i <= ihi; ++i) {
                                 if (boundary_face(dir, i, j, k, per, dlo, dhi)) { continue; }
                                 const Real w = kernel_weight(dir, i, j, k, qx, qy, qz, plo, dx, znd, has_znd, inv_eps2, reach2);
-                                if (w > Real(0.0)) { acc += w * face_volume(dir, i, j, k, detj, has_detj, dxdydz); }
+                                // the product in a statement of its own: fused with the addition it would
+                                // round differently on a target with a fused multiply-add
+                                if (w > Real(0.0)) {
+                                    const Real term = w * face_volume(dir, i, j, k, detj, has_detj, dxdydz);
+                                    acc += term;
+                                }
                             }
                         }
                     }
@@ -503,6 +514,8 @@ add_scaled_kernels (const std::vector<Real>& pos, const std::vector<Real>& f_ove
                     ActuatorDeviceBuffers* buffers)
 {
     BL_PROFILE("erf_actuator::add_scaled_kernels()");
+    AMREX_ALWAYS_ASSERT_WITH_MESSAGE(buffers == nullptr || !OpenMP::in_parallel(),
+                                     "add_scaled_kernels: kept buffers must not be shared by the threads of an OpenMP parallel region");
     AMREX_ALWAYS_ASSERT_WITH_MESSAGE(pos.size() == 3 * epsilon.size() && f_over_s.size() == pos.size(),
                                      "add_scaled_kernels: one kernel width and one x,y,z scale per x,y,z point");
     const int npts = static_cast<int>(epsilon.size());
@@ -547,7 +560,10 @@ add_scaled_kernels (const std::vector<Real>& pos, const std::vector<Real>& f_ove
                             for (int i = lo.x; i <= hi.x; ++i) {
                                 if (boundary_face(dir, i, j, k, per, dlo, dhi)) { continue; }
                                 const Real w = kernel_weight(dir, i, j, k, qx, qy, qz, plo, dx, znd, has_znd, inv_eps2, reach2);
-                                if (w > Real(0.0)) { s(i,j,k) += scale * w; }
+                                if (w > Real(0.0)) {
+                                    const Real term = scale * w;   // a statement of its own, as in the first pass
+                                    s(i,j,k) += term;
+                                }
                             }
                         }
                     }
@@ -612,7 +628,8 @@ add_scaled_kernels (const std::vector<Real>& pos, const std::vector<Real>& f_ove
                     const Real w = kernel_weight(dir, i, j, k, p_q[3*m], p_q[3*m+1], p_q[3*m+2], plo, dx, znd, has_znd,
                                                  p_eps[2*p], p_eps[2*p+1]);
                     if (w > Real(0.0)) {
-                        acc += p_scale[3*p+dir] * w;
+                        const Real term = p_scale[3*p+dir] * w;   // a statement of its own, as in the first pass
+                        acc += term;
                         added = true;
                     }
                 }

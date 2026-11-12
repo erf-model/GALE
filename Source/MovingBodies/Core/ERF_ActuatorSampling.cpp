@@ -212,7 +212,9 @@ sample_velocity_local (const MultiFab& U, const MultiFab& V, const MultiFab& W,
             p_vel[3*p]   = sample_component(0, u, x, y, z, plo, dxi, kb, kt,   znd, has_znd, dz);
             p_vel[3*p+1] = sample_component(1, v, x, y, z, plo, dxi, kb, kt,   znd, has_znd, dz);
             p_vel[3*p+2] = sample_component(2, w, x, y, z, plo, dxi, kb, kt+1, znd, has_znd, dz);
-            p_cnt[p] = 1;
+            // a count, not a flag: boxes of one rank may run on different streams, and a point held by two of
+            // them must still be refused by the caller
+            Gpu::Atomic::AddNoRet(&p_cnt[p], 1);
         });
     }
     // the answers back with asynchronous copies and one synchronisation
@@ -361,7 +363,9 @@ sample_cell_scalar (const MultiFab& mf, int comp, const MultiFab* z_phys_nd, con
             const Real f01 = centre_column_value(f, comp, i0,   j0+1, kb, kt, z, znd, has_znd, plo[2], dz);
             const Real f11 = centre_column_value(f, comp, i0+1, j0+1, kb, kt, z, znd, has_znd, plo[2], dz);
             p_val[p] = (Real(1.0) - wy) * ((Real(1.0) - wx) * f00 + wx * f10) + wy * ((Real(1.0) - wx) * f01 + wx * f11);
-            p_cnt[p] = 1;
+            // a count, not a flag: boxes of one rank may run on different streams, and a point held by two of
+            // them must still be refused by the caller
+            Gpu::Atomic::AddNoRet(&p_cnt[p], 1);
         });
     }
     Gpu::streamSynchronize();
@@ -425,7 +429,9 @@ terrain_heights (const MultiFab* z_phys_nd, const Geometry& geom, const std::vec
             const Real z00 = znd(ic,   jc,   klo), z10 = znd(ic+1, jc,   klo);
             const Real z01 = znd(ic,   jc+1, klo), z11 = znd(ic+1, jc+1, klo);
             p_h[p] = (Real(1.0) - wy) * ((Real(1.0) - wx) * z00 + wx * z10) + wy * ((Real(1.0) - wx) * z01 + wx * z11);
-            p_cnt[p] = 1;
+            // a count, not a flag: boxes of one rank may run on different streams, and a point held by two of
+            // them must still be refused by the caller
+            Gpu::Atomic::AddNoRet(&p_cnt[p], 1);
         });
     }
     Gpu::streamSynchronize();
@@ -442,6 +448,58 @@ terrain_heights (const MultiFab* z_phys_nd, const Geometry& geom, const std::vec
         }
     }
 }
+
+namespace {
+
+// The table of this rank's boxes: each node level's lowest and highest height, and the cells the boxes
+// hold. One kernel entry per node level of a box, which goes over that level's nodes and then makes one
+// atomic min and one atomic max into the level's two values: the kernels of two boxes may run at the same
+// time on GPU (MFIter spreads the boxes over the device's streams), and both may hold the level
+void
+node_level_table (const MultiFab& z_phys_nd, const Geometry& geom, ZBounds& b)
+{
+    const Real big = std::numeric_limits<Real>::max();
+    const Box& dom = geom.Domain();
+    b.k0 = dom.smallEnd(2);
+    const int nnode = dom.length(2) + 1;
+    const Box dom_nodes = amrex::surroundingNodes(dom);
+    Gpu::DeviceVector<Real> lo(nnode, big), hi(nnode, -big);
+    Real* plo = lo.data();
+    Real* phi = hi.data();
+    const int k0 = b.k0;
+    b.has_cell.assign(nnode - 1, 0);
+    for (MFIter mfi(z_phys_nd, false); mfi.isValid(); ++mfi) {
+        const Box nbx = mfi.validbox();
+        AMREX_ALWAYS_ASSERT_WITH_MESSAGE(dom_nodes.contains(nbx), "mesh_z_bounds: z_phys_nd's boxes must lie in geom's domain");
+        Array4<Real const> const& znd = z_phys_nd.const_array(mfi);
+        const int ilo = nbx.smallEnd(0), ihi = nbx.bigEnd(0);
+        const int jlo = nbx.smallEnd(1), jhi = nbx.bigEnd(1);
+        const int klo = nbx.smallEnd(2);
+        ParallelFor(nbx.length(2), [=] AMREX_GPU_DEVICE (int n) noexcept
+        {
+            const int k = klo + n;
+            Real mn = big;
+            Real mx = -big;
+            for (int j = jlo; j <= jhi; ++j) {
+                for (int i = ilo; i <= ihi; ++i) {
+                    mn = amrex::min(mn, znd(i,j,k));
+                    mx = amrex::max(mx, znd(i,j,k));
+                }
+            }
+            Gpu::Atomic::Min(plo + (k - k0), mn);
+            Gpu::Atomic::Max(phi + (k - k0), mx);
+        });
+        // the box's cells: between its lowest and highest node levels
+        for (int k = nbx.smallEnd(2); k < nbx.bigEnd(2); ++k) { b.has_cell[k - b.k0] = 1; }
+    }
+    b.node_lo.resize(nnode);
+    b.node_hi.resize(nnode);
+    Gpu::copyAsync(Gpu::deviceToHost, lo.begin(), lo.end(), b.node_lo.begin());
+    Gpu::copyAsync(Gpu::deviceToHost, hi.begin(), hi.end(), b.node_hi.begin());
+    Gpu::streamSynchronize();
+}
+
+} // namespace
 
 ZBounds
 mesh_z_bounds (const MultiFab& z_phys_nd, const Geometry& geom, bool over_all_ranks)
@@ -481,36 +539,38 @@ mesh_z_bounds (const MultiFab& z_phys_nd, const Geometry& geom, bool over_all_ra
     }
     b.all_ground = (all != 0);
     if (!over_all_ranks && !b.all_ground) {
-        // the table of this rank's boxes, where some do not reach the ground: each node level's lowest and
-        // highest height (one pass over the boxes' nodes, a min and a max per level), and the cells they hold
-        const Box& dom = geom.Domain();
-        b.k0 = dom.smallEnd(2);
-        const int nnode = dom.length(2) + 1;
-        const Box dom_nodes = amrex::surroundingNodes(dom);
-        Gpu::DeviceVector<Real> lo(nnode, big), hi(nnode, -big);
-        Real* plo = lo.data();
-        Real* phi = hi.data();
-        const int k0 = b.k0;
-        b.has_cell.assign(nnode - 1, 0);
-        for (MFIter mfi(z_phys_nd, false); mfi.isValid(); ++mfi) {
-            const Box nbx = mfi.validbox();
-            AMREX_ALWAYS_ASSERT_WITH_MESSAGE(dom_nodes.contains(nbx), "mesh_z_bounds: z_phys_nd's boxes must lie in geom's domain");
-            Array4<Real const> const& znd = z_phys_nd.const_array(mfi);
-            ParallelFor(nbx, [=] AMREX_GPU_DEVICE (int i, int j, int k) noexcept
-            {
-                Gpu::Atomic::Min(plo + (k - k0), znd(i,j,k));
-                Gpu::Atomic::Max(phi + (k - k0), znd(i,j,k));
-            });
-            // the box's cells: between its lowest and highest node levels
-            for (int k = nbx.smallEnd(2); k < nbx.bigEnd(2); ++k) { b.has_cell[k - b.k0] = 1; }
-        }
-        b.node_lo.resize(nnode);
-        b.node_hi.resize(nnode);
-        Gpu::copyAsync(Gpu::deviceToHost, lo.begin(), lo.end(), b.node_lo.begin());
-        Gpu::copyAsync(Gpu::deviceToHost, hi.begin(), hi.end(), b.node_hi.begin());
-        Gpu::streamSynchronize();
+        // where some of this rank's boxes do not reach the ground
+        node_level_table(z_phys_nd, geom, b);
     }
     return b;
+}
+
+ZBounds
+mesh_z_levels (const MultiFab& z_phys_nd, const Geometry& geom)
+{
+    BL_PROFILE("erf_actuator::mesh_z_levels()");
+    ZBounds b = mesh_z_bounds(z_phys_nd, geom, true);
+    node_level_table(z_phys_nd, geom, b);
+    // over every rank's boxes: a rank with no box at a node level holds the largest and the lowest Real there
+    const int nnode = static_cast<int>(b.node_lo.size());
+    ParallelDescriptor::ReduceRealMin(b.node_lo.data(), nnode);
+    ParallelDescriptor::ReduceRealMax(b.node_hi.data(), nnode);
+    std::vector<int> has(b.has_cell.begin(), b.has_cell.end());
+    ParallelDescriptor::ReduceIntMax(has.data(), static_cast<int>(has.size()));
+    for (std::size_t n = 0; n < has.size(); ++n) { b.has_cell[n] = static_cast<char>(has[n]); }
+    return b;
+}
+
+const ZBounds&
+LevelHeights::get (const MultiFab& z_phys_nd, const Geometry& geom, bool rebuild)
+{
+    if (rebuild || m_builds == 0 || m_domain != geom.Domain() || m_ba != z_phys_nd.boxArray()) {
+        m_zb = mesh_z_levels(z_phys_nd, geom);
+        m_ba = z_phys_nd.boxArray();
+        m_domain = geom.Domain();
+        ++m_builds;
+    }
+    return m_zb;
 }
 
 namespace {
@@ -585,7 +645,7 @@ horizontal_node_ranges (const Real* b, const Geometry& geom, std::array<std::vec
     for (int d = 0; d < 2; ++d) {
         ranges[d].clear();
         const int dlo = domain.smallEnd(d), dhi = domain.bigEnd(d), nc = dhi - dlo + 1;
-        // a bound more than a domain length outside (a diverged hub) is clamped there, so the
+        // a bound more than a domain length outside (a diverged point) is clamped there, so the
         // index stays an int; such a region already covers or misses the whole domain
         const Real len = Real(nc) / dxi[d];
         const Real blo = amrex::Clamp(b[d],   plo[d] - len, plo[d] + Real(2.0) * len);
@@ -593,12 +653,12 @@ horizontal_node_ranges (const Real* b, const Geometry& geom, std::array<std::vec
         const int clo = static_cast<int>(std::floor((blo - plo[d]) * dxi[d]));
         const int chi = static_cast<int>(std::floor((bhi - plo[d]) * dxi[d]));
         if (geom.isPeriodic(d)) {
-            const int len = chi + 2 - clo;   // nodes clo .. chi + 1
-            if (len >= nc) {
+            const int nnodes = chi + 2 - clo;   // nodes clo .. chi + 1
+            if (nnodes >= nc) {
                 ranges[d].push_back({{dlo, dhi + 1}});
             } else {
                 const int a = dlo + (((clo - dlo) % nc) + nc) % nc;
-                const int e = a + len - 1;
+                const int e = a + nnodes - 1;
                 if (e <= dhi + 1) {
                     ranges[d].push_back({{a, e}});
                 } else {
@@ -826,6 +886,7 @@ column_cell_ranges (const MultiFab& z_phys_nd, const Geometry& geom, const std::
     // nothing touched: an empty range (kb > kt), the domain's cells being dlo .. dhi
     cells.kb.assign(npts, dhi + 1);
     cells.kt.assign(npts, dlo - 1);
+    check_same_points_everywhere(npts, "column_cell_ranges");
     if (npts == 0) { return; }
     // the pieces: for every point, the node columns its reach across touches in each of this rank's boxes
     std::vector<ColumnWork> work;
@@ -882,7 +943,9 @@ column_cell_ranges (const MultiFab& z_phys_nd, const Geometry& geom, const std::
                 // the slack of ZBounds::k_range: the heights are rounded sums
                 const Real slack = Real(1.0e-5) * amrex::max(amrex::Math::abs(zl0), amrex::max(amrex::Math::abs(zh0), zh0 - zl0));
                 const Real zl = zl0 - slack, zh = zh0 + slack;
-                int kb = p_kb[w.p], kt = p_kt[w.p];
+                // from the empty range, not from the point's slot: another piece of the same point (a range
+                // split at a periodic seam) may be updating it
+                int kb = dhi + 1, kt = dlo - 1;
                 for (int j = w.j0; j <= w.j1; ++j) {
                     for (int i = w.i0; i <= w.i1; ++i) {
                         // the cells of this column whose spacing the heights overlap
@@ -940,8 +1003,14 @@ points_covered_by (const CoverageGrids& grids, const Geometry& geom, const std::
 {
     BL_PROFILE("erf_actuator::points_covered_by()");
     AMREX_ALWAYS_ASSERT_WITH_MESSAGE(!geom.isPeriodic(2), "points_covered_by: z must not be periodic");
-    AMREX_ALWAYS_ASSERT_WITH_MESSAGE(zb == nullptr || !zb->has_ground() || zb->dz_hi >= zb->dz_lo,
+    // bounds of a level with no box at the ground (ground_lo > ground_hi) carry no spacing, and the whole
+    // column is asked for; any other bounds must have a positive spacing
+    AMREX_ALWAYS_ASSERT_WITH_MESSAGE(zb == nullptr || zb->ground_lo > zb->ground_hi ||
+                                     (zb->dz_lo > Real(0.0) && zb->dz_hi >= zb->dz_lo),
                                      "points_covered_by: the levels' spacing must be positive");
+    AMREX_ALWAYS_ASSERT_WITH_MESSAGE(zb == nullptr || !zb->has_table(),
+                                     "points_covered_by: zb must be the bounds over all ranks (mesh_z_bounds with over_all_ranks = true), "
+                                     "not one rank's table");
     AMREX_ALWAYS_ASSERT_WITH_MESSAGE(cells == nullptr || (cells->kb.size() == pos.size() / 3 && cells->kt.size() == pos.size() / 3),
                                      "points_covered_by: one cell range per point");
     first_outside.clear();
@@ -984,7 +1053,6 @@ points_covered_by (const CoverageGrids& grids, const Geometry& geom, const std::
                 } else {
                     // every cell a height within reach may lie in, whatever column it is in (the global
                     // bounds: a rank's own table would make the answer depend on the rank)
-                    AMREX_ASSERT(!zb->has_table());
                     int kb = dlo, kt = dhi;
                     zb->k_range(pos[3*p+2] - reach, pos[3*p+2] + reach, dlo, dhi, kb, kt);
                     ranges[d].push_back({{std::max(kb, dlo), std::min(kt, dhi)}});
@@ -1010,6 +1078,67 @@ points_covered_by (const CoverageGrids& grids, const Geometry& geom, const std::
         }
     }
     return true;
+}
+
+bool
+region_touches_grids (const BoxArray& ba, const Geometry& geom, const RealBox& region, const ZBounds* zb)
+{
+    BL_PROFILE("erf_actuator::region_touches_grids()");
+    AMREX_ALWAYS_ASSERT_WITH_MESSAGE(!geom.isPeriodic(2), "region_touches_grids: z must not be periodic");
+    for (int d = 0; d < AMREX_SPACEDIM; ++d) {
+        // a NaN first: comparing one may trap (amrex.fpe_trap_invalid) before the message is printed
+        AMREX_ALWAYS_ASSERT_WITH_MESSAGE(!std::isnan(region.lo(d)) && !std::isnan(region.hi(d)) && region.lo(d) <= region.hi(d),
+                                         "region_touches_grids: the region needs lo <= hi in every direction");
+    }
+    const Box& domain = geom.Domain();
+    const auto plo = geom.ProbLoArray();
+    const auto dxi = geom.InvCellSizeArray();
+    IntVect lo, hi;
+    for (int d = 0; d < AMREX_SPACEDIM; ++d) {
+        // The region's cells, as points_covered_by finds a point's, kept as doubles until they are bounded: an int
+        // holds no infinity and no index far outside the domain
+        const int dlo = domain.smallEnd(d), dhi = domain.bigEnd(d), n = dhi - dlo + 1;
+        double l = std::floor(static_cast<double>((region.lo(d) - plo[d]) * dxi[d]));
+        double h = std::floor(static_cast<double>((region.hi(d) - plo[d]) * dxi[d]));
+        if (geom.isPeriodic(d)) {
+            // an infinite end is replaced by 0 before any difference is taken: inf - inf is invalid and may
+            // trap (amrex.fpe_trap_invalid), also where a compiler evaluates it ahead of a test that skips it
+            const bool unbounded = std::isinf(l) || std::isinf(h);
+            const double fl = unbounded ? 0.0 : l;
+            const double fh = unbounded ? 0.0 : h;
+            if (unbounded || !(fh - fl + 1 < n)) {
+                // a period or more, or an infinite extent: every cell
+                l = dlo;
+                h = dhi;
+            } else {
+                // by whole periods until lo lies in the domain; hi is then less than a period above it, and the
+                // shifts below bring the part beyond the seam back in
+                const double s = std::floor((fl - dlo) / n);
+                l = fl - s * n;
+                h = fh - s * n;
+            }
+        }
+        // one cell outside the domain stays outside it (and bounds what rounding leaves of a far periodic region)
+        lo[d] = static_cast<int>(std::min<double>(static_cast<double>(dhi) + n, std::max<double>(static_cast<double>(dlo) - 1, l)));
+        hi[d] = static_cast<int>(std::min<double>(static_cast<double>(dhi) + n, std::max<double>(static_cast<double>(dlo) - 1, h)));
+    }
+    if (zb != nullptr) {
+        // every cell a height of the region may lie in, whatever its column. With the table, from the level's own
+        // node heights. With the bounds alone, from the ground and the spacing, which describe a column only where
+        // every box stands on the ground; with a box that does not, the column is taken whole
+        int kb = domain.smallEnd(2), kt = domain.bigEnd(2);
+        if (zb->has_table() || zb->all_ground) { zb->k_range(region.lo(2), region.hi(2), domain.smallEnd(2), domain.bigEnd(2), kb, kt); }
+        lo[2] = kb;
+        hi[2] = kt;
+    }
+    if (lo[2] > hi[2]) { return false; }   // the table holds no cell at these heights
+    const BoxArray cc = amrex::convert(ba, IntVect::TheZeroVector());
+    const Box needed(lo, hi);
+    for (const IntVect& s : geom.periodicity().shiftIntVect()) {
+        const Box b = (needed + s) & domain;
+        if (b.ok() && cc.intersects(b)) { return true; }
+    }
+    return false;
 }
 
 } // namespace erf_actuator

@@ -830,6 +830,35 @@ function(add_test_conservation TEST_NAME TEST_FILES_DIR QUANTITY)
         ATTACHED_FILES_ON_FAIL "${CURRENT_TEST_BINARY_DIR}/simulation.log")
 endfunction(add_test_conservation)
 
+# Run the pseudo-incompressible deck in test_files/<TEST_FILES_DIR> and require the last
+# "PI DRIFT" it prints, max |rho theta - rho0 theta0| / (rho0 theta0), to be below 10^MAX_EXP
+function(add_test_pi_drift TEST_NAME TEST_FILES_DIR MAX_EXP)
+    set(oneValueArgs "OPTIONS")
+    cmake_parse_arguments(ADD_TEST_PID "" "${oneValueArgs}" "" ${ARGN})
+    setup_test()
+    resolve_test_exe("" "erf_exec" TEST_EXE)
+
+    add_test(NAME ${TEST_NAME} COMMAND ${CMAKE_COMMAND}
+        "-DMPIEXEC=${MPIEXEC_EXECUTABLE}"
+        "-DMPIEXEC_NUMPROC_FLAG=${MPIEXEC_NUMPROC_FLAG}"
+        "-DMPIEXEC_PREFLAGS=${MPIEXEC_PREFLAGS}"
+        "-DNRANKS=${NP}"
+        "-DTEST_EXE=${TEST_EXE}"
+        "-DCONFIG=$<CONFIG>"
+        "-DINPUT=${CURRENT_TEST_BINARY_DIR}/${TEST_FILES_DIR}.i"
+        "-DWORKING_DIRECTORY=${CURRENT_TEST_BINARY_DIR}"
+        "-DMAX_EXP=${MAX_EXP}"
+        "-DOPTIONS=${ADD_TEST_PID_OPTIONS}"
+        -P ${PROJECT_SOURCE_DIR}/Tests/RunPIDrift.cmake)
+    set_tests_properties(${TEST_NAME}
+        PROPERTIES
+        TIMEOUT 600
+        PROCESSORS ${NP}
+        WORKING_DIRECTORY "${CURRENT_TEST_BINARY_DIR}/"
+        LABELS "regression"
+        ATTACHED_FILES_ON_FAIL "${CURRENT_TEST_BINARY_DIR}/simulation.log")
+endfunction(add_test_pi_drift)
+
 # Run the deck in test_files/<TEST_FILES_DIR> twice, once with a diagnostic off and once
 # with it on, and require PLTFILE to be identical bit for bit.  This is the harness for
 # "turning this output on does not change the answer": OFF_OPTIONS and ON_OPTIONS are the
@@ -4173,6 +4202,14 @@ if(ERF_ENABLE_MPI AND NOT WIN32)
                        FIXTURES_REQUIRED BndryPlanesMoist
                        ATTACHED_FILES_ON_FAIL "${_bp_end_bin}/ReadToLastPlane.log")
 endif()
+if(ERF_ENABLE_WINDFARM)
+  # erf-model/ERF#5071: a wind-farm model without erf.windfarm_loc_type reads no turbine table, so it
+  # must stop at start-up and name the input
+  add_test_abort(WindFarm_Fitch_NoLocType ${CMAKE_CURRENT_SOURCE_DIR}/test_files/ScalarAdvectionUniformU
+                 ScalarAdvectionUniformU.i
+                 "erf.windfarm_type = Fitch needs erf.windfarm_loc_type"
+                 "erf.windfarm_type=Fitch")
+endif()
 add_test_abort(BndryPlanes_MoistTemperature_WriteWithoutQv ${_bp_moist_dir}
                BndryPlanes_MoistTemperature_Write.i
                "writes temperature but not qv"
@@ -4663,6 +4700,15 @@ add_test_conservation(Conservation_ScalarDiffusion_Flat      ScalarDiffusion_Ref
 # both must be conserved over two levels coupled two-way (a stratified flow over a hill)
 add_test_conservation(Conservation_PseudoIncompressible_Mass     PseudoIncompressible_StratifiedHill "MASS")
 add_test_conservation(Conservation_PseudoIncompressible_RhoTheta PseudoIncompressible_StratifiedHill "RHO THETA")
+# A single pseudo-incompressible level keeps rho theta = rho0 theta0 to the tolerance of the solve
+# (about 1e-10 here) with upwind dycore schemes: the projection and the advection of (rho theta)
+# use the same upwind direction on each face (fixed by the projection) and the same ghost cells
+if(ERF_PRECISION STREQUAL "DOUBLE")
+  foreach(_sch Upwind_3rd Upwind_5th Centered_4th)
+    add_test_pi_drift(PseudoIncompressible_Drift_${_sch} PseudoIncompressible_StratifiedHill -8
+        OPTIONS "amr.max_level=0 erf.dycore_horiz_adv_type=${_sch} erf.dycore_vert_adv_type=${_sch}")
+  endforeach()
+endif()
 add_test_conservation(Conservation_ScalarDiffusion_Terrain   ScalarDiffusion_Reflux "RHO SCALAR"
     OPTIONS "erf.terrain_type=StaticFittedMesh")
 add_test_conservation(Conservation_ScalarDiffusion_Hill      ScalarDiffusion_Reflux "RHO SCALAR"
@@ -5299,6 +5345,38 @@ function(add_test_ibseb_ground_sky_view TEST_NAME)
         ATTACHED_FILES_ON_FAIL "${CURRENT_TEST_BINARY_DIR}/clear_off/simulation.log;${CURRENT_TEST_BINARY_DIR}/clear_on/simulation.log;${CURRENT_TEST_BINARY_DIR}/restart/simulation.log;${CURRENT_TEST_BINARY_DIR}/serial/simulation.log;${CURRENT_TEST_BINARY_DIR}/scattering_off/simulation.log;${CURRENT_TEST_BINARY_DIR}/scattering_on/simulation.log;${CURRENT_TEST_BINARY_DIR}/seam/simulation.log;${CURRENT_TEST_BINARY_DIR}/seam_serial/simulation.log;${CURRENT_TEST_BINARY_DIR}/two_level_off/simulation.log;${CURRENT_TEST_BINARY_DIR}/two_level/simulation.log;${CURRENT_TEST_BINARY_DIR}/checker.log")
 endfunction(add_test_ibseb_ground_sky_view)
 
+# erf.ibseb.two_stream_roofs: the two-stream column under a building starts on the building's
+# roof. The roofs' diffuse light and the outgoing longwave over the building against column
+# solvers written again in Python on the shorter column; nothing else changes in the first
+# step; one rank against several; a restart; two levels.
+function(add_test_ibseb_two_stream_roofs TEST_NAME)
+    set(TEST_FILES_DIR IBSEB_TwoStreamBuildings)
+    setup_test()
+    resolve_test_exe("" "erf_exec" TEST_EXE)
+    add_test(NAME ${TEST_NAME} COMMAND ${CMAKE_COMMAND}
+        "-DMPIEXEC=${MPIEXEC_EXECUTABLE}"
+        "-DMPIEXEC_NUMPROC_FLAG=${MPIEXEC_NUMPROC_FLAG}"
+        "-DMPIEXEC_PREFLAGS=${MPIEXEC_PREFLAGS}"
+        "-DNRANKS=${NP}"
+        "-DTEST_EXE=${TEST_EXE}"
+        "-DCONFIG=$<CONFIG>"
+        "-DINPUT=${CURRENT_TEST_BINARY_DIR}/IBSEB_TwoStreamBuildings.i"
+        "-DPROVIDER_FILES=${CMAKE_CURRENT_SOURCE_DIR}/test_files/IBSEB_TwoStreamProvider"
+        "-DTWO_LEVEL_FILES=${CMAKE_CURRENT_SOURCE_DIR}/test_files/IBSEB_RefinedLevels"
+        "-DPRECISION=${ERF_PRECISION}"
+        "-DWORKING_DIRECTORY=${CURRENT_TEST_BINARY_DIR}"
+        "-DPYTHON_EXE=${ERF_TEST_PYTHON}"
+        "-DCHECKER=${CMAKE_CURRENT_SOURCE_DIR}/check_ibseb_two_stream_roofs.py"
+        -P ${PROJECT_SOURCE_DIR}/Tests/RunIBSEBTwoStreamRoofs.cmake)
+    set_tests_properties(${TEST_NAME}
+        PROPERTIES
+        TIMEOUT 1200
+        PROCESSORS ${NP}
+        WORKING_DIRECTORY "${CURRENT_TEST_BINARY_DIR}/"
+        LABELS "regression"
+        ATTACHED_FILES_ON_FAIL "${CURRENT_TEST_BINARY_DIR}/clear_off/simulation.log;${CURRENT_TEST_BINARY_DIR}/clear_on/simulation.log;${CURRENT_TEST_BINARY_DIR}/scattering_off/simulation.log;${CURRENT_TEST_BINARY_DIR}/scattering_on/simulation.log;${CURRENT_TEST_BINARY_DIR}/restart/simulation.log;${CURRENT_TEST_BINARY_DIR}/shadow_on/simulation.log;${CURRENT_TEST_BINARY_DIR}/serial/simulation.log;${CURRENT_TEST_BINARY_DIR}/two_level_off/simulation.log;${CURRENT_TEST_BINARY_DIR}/two_level/simulation.log;${CURRENT_TEST_BINARY_DIR}/checker.log")
+endfunction(add_test_ibseb_two_stream_roofs)
+
 # The direct beam the ground reflects onto the building faces through the sunlit part of
 # each face's ground view (erf.ibseb.ground_view_shadow; Tests/RunIBSEBGroundViewShadow.cmake),
 # on the cube of Tests/test_files/IBSEB_TwoStreamProvider: the sunlit part of every face's
@@ -5341,6 +5419,7 @@ if(ERF_ENABLE_MPI AND NOT WIN32)
     add_test_ibseb_two_stream_buildings(IBSEB_TwoStreamBuildings)
     add_test_ibseb_ground_view_shadow(IBSEB_GroundViewShadow)
     add_test_ibseb_ground_sky_view(IBSEB_GroundSkyView)
+    add_test_ibseb_two_stream_roofs(IBSEB_TwoStreamRoofs)
   endif()
   # erf.ibseb.two_stream_buildings acts only on the two-stream radiation: given without a
   # radiation model the run stops; with another model named it warns and carries on to the
@@ -5359,6 +5438,18 @@ if(ERF_ENABLE_MPI AND NOT WIN32)
                  IBSEB_TwoStreamProvider.i
                  "erf.ibseb.ground_sky_view = true needs erf.radiation_model = TwoStream.*erf.radiation.seb_use_radiation_fluxes = true"
                  "erf.ibseb.ground_sky_view=true erf.radiation.seb_use_radiation_fluxes=false")
+  # erf.ibseb.two_stream_roofs changes the columns under the buildings, which the columns must
+  # see, and takes the roofs from the immersed-boundary balance: without either the run stops.
+  add_test_abort(IBSEB_TwoStreamRoofsWithoutBuildings
+                 ${CMAKE_CURRENT_SOURCE_DIR}/test_files/IBSEB_TwoStreamProvider
+                 IBSEB_TwoStreamProvider.i
+                 "erf.ibseb.two_stream_roofs = true needs erf.radiation_model = TwoStream and erf.ibseb.two_stream_buildings = true, and no land-surface model"
+                 "erf.ibseb.two_stream_roofs=true erf.ibseb.two_stream_buildings=false")
+  add_test_abort(IBSEB_TwoStreamRoofsDisabled
+                 ${CMAKE_CURRENT_SOURCE_DIR}/test_files/IBSEB_TwoStreamProvider
+                 IBSEB_TwoStreamProvider.i
+                 "erf.ibseb.two_stream_roofs = true needs erf.ibseb.enable = true"
+                 "erf.ibseb.enable=false erf.ibseb.two_stream_roofs=true")
   # Without the immersed-boundary balance there are no faces to send anything: the run stops.
   add_test_abort(IBSEB_GroundSkyViewDisabled
                  ${CMAKE_CURRENT_SOURCE_DIR}/test_files/IBSEB_TwoStreamProvider
@@ -6437,9 +6528,45 @@ if(ERF_ENABLE_MPI AND NOT WIN32)   # the launchers below run through sh -c, as t
       add_test_abort(Structures_Abort_FinerLevelCovers ${_smx_src} inputs_structure_example
                      "structure model .example. couples to level 0, but level 1 covers part of its support"
                      "${_smx_finer} erf.box1.in_box_lo_indices=8 8 8 erf.box1.in_box_hi_indices=23 23 23")
+      # erf-model/ERF#5056: a stretched mesh (node levels at 0, 20, 40.4, 61.2, 82.4, ... 171.7, 195.1, ... m)
+      # and a level-1 box aloft, which has no box at the ground. Over coarse cells 4 to 7 in z (82 to 172 m),
+      # inside the kernel's reach (50 to 350 m), the run must stop. It must run with the same box beside the
+      # reach (the point at x = y = 100 m with a 20 m width, reach 40 to 160 m across; the box over 250 to
+      # 400 m), and with a box above the reach (the point at z = 60 m with a 15 m width, reach 15 to 105 m;
+      # the box over coarse cells 8 to 11, 172 to 268 m, in the point's own columns).
+      set(_smx_aloft "${_smx_finer} erf.grid_stretching_ratio=1.02 erf.initial_dz=20.0")
+      add_test_abort(Structures_Abort_FinerLevelAloft ${_smx_src} inputs_structure_example
+                     "structure model .example. couples to level 0, but level 1 covers part of its support"
+                     "${_smx_aloft} erf.box1.in_box_lo_indices=8 8 8 erf.box1.in_box_hi_indices=23 23 15")
+      set(_smx_al_names Structures_ExampleModel_FinerLevelAloftBeside Structures_ExampleModel_FinerLevelAloftAbove)
+      set(_smx_al_args_0 "structure.example.position=100 100 200 structure.example.epsilon=20 erf.box1.in_box_lo_indices=20 20 8 erf.box1.in_box_hi_indices=31 31 15")
+      set(_smx_al_args_1 "structure.example.position=200 200 60 structure.example.epsilon=15 erf.box1.in_box_lo_indices=8 8 16 erf.box1.in_box_hi_indices=23 23 23")
+      foreach(_smx_al RANGE 0 1)
+        list(GET _smx_al_names ${_smx_al} _smx_al_name)
+        set(_smx_al_dir ${CMAKE_CURRENT_BINARY_DIR}/test_files/${_smx_al_name})
+        file(MAKE_DIRECTORY ${_smx_al_dir})
+        file(COPY ${_smx_src}/inputs_structure_example DESTINATION ${_smx_al_dir})
+        add_test(NAME ${_smx_al_name}
+                 COMMAND sh -c "${_smx_mpi} ${_smx_exe} inputs_structure_example max_step=2 erf.plot_int_1=-1 erf.check_int=-1 amrex.call_addr2line=0 ${_smx_aloft} ${_smx_al_args_${_smx_al}} > run.log 2>&1 && grep -q 'structure example: t = 0.5 ' run.log"
+                 WORKING_DIRECTORY ${_smx_al_dir})
+        set_tests_properties(${_smx_al_name} PROPERTIES
+            LABELS "regression;structures" TIMEOUT 600 PROCESSORS 2
+            ATTACHED_FILES_ON_FAIL "${_smx_al_dir}/run.log")
+      endforeach()
       add_test_abort(Structures_Abort_UnknownModel ${_smx_src} inputs_structure_example
                      "erf.structures.model = .no_such_model. is not one of the structure models compiled in .*\"example\""
                      "erf.structures.model=no_such_model")
+      # A support box with a NaN, or with its low end above its high end, stops the run with the model's name
+      # (structure.example.test_support makes the example return one). The check runs with a finer level.
+      add_test_abort(Structures_Abort_SupportNaN ${_smx_src} inputs_structure_example
+                     "structure model .example.: support.. returned a box with a NaN or with its low end above its high end .direction 1: "
+                     "${_smx_finer} erf.box1.in_box_lo_indices=0 0 0 erf.box1.in_box_hi_indices=31 31 3 structure.example.test_support=nan")
+      add_test_abort(Structures_Abort_SupportInverted ${_smx_src} inputs_structure_example
+                     "structure model .example.: support.. returned a box with a NaN or with its low end above its high end .direction 0: "
+                     "${_smx_finer} erf.box1.in_box_lo_indices=0 0 0 erf.box1.in_box_hi_indices=31 31 3 structure.example.test_support=inverted")
+      add_test_abort(Structures_Abort_ExampleTestSupport ${_smx_src} inputs_structure_example
+                     "structure.example.test_support must be reach, nan or inverted, got box"
+                     "structure.example.test_support=box")
       add_test_abort(Structures_Abort_ExampleLevel ${_smx_src} inputs_structure_example
                      "structure.example.level must be -1 .the finest level. or 0 to amr.max_level = 0, got 1"
                      "structure.example.level=1")
@@ -7124,6 +7251,47 @@ if(NOT WIN32 AND ERF_TEST_PYTHON)
   endfunction(add_test_line_sampling_terrain)
   add_test_line_sampling_terrain(LineSamplingTerrain)
 
+  # Lines interpolated to requested heights over the same hill (erf.sample_line_interp): four
+  # vertical lines at given heights and a horizontal one at a constant height across the hill,
+  # partly below the ground, by height above sea level and above the ground; each sample must
+  # be the plotfile's rhoadv_0 interpolated in height in its column (check_line_interp.py)
+  function(add_test_line_sampling_interp TEST_NAME)
+    setup_test()
+    resolve_test_exe("" "erf_exec" TEST_EXE)
+    set(_log ${CURRENT_TEST_BINARY_DIR}/${TEST_NAME}.log)
+    set(_lines "tower:16:16:0:280:15 far:0:0:0:280:15 high:16:16:600:790:5 one:16:16:150:150:1 across:x:16:50")
+    set(_agl "erf.sample_line_z_agl=1 erf.plot_file_1=agl_plt 'erf.sample_line_name=agl_tower agl_far agl_high agl_one agl_across'")
+    set(_check "ERF_TOOLS=${PROJECT_SOURCE_DIR}/Exec/Tools ${ERF_TEST_PYTHON} check_line_interp.py")
+    set(_names "tower far high one across agl_tower agl_far agl_high agl_one agl_across")
+    add_test(${TEST_NAME} sh -c
+        "rm -rf plt0* agl_plt0* plt_line_lev* && for n in ${_names}; do rm -f $n.*; done && ( ${MPI_COMMANDS} ${TEST_EXE} ${TEST_NAME}.i > ${_log} 2>&1 || ( tail -n 40 ${_log} && false ) ) && ${_check} plt00001 0 '' -9999 ${_lines} && ( ${MPI_COMMANDS} ${TEST_EXE} ${TEST_NAME}.i ${_agl} > ${_log}.agl 2>&1 || ( tail -n 40 ${_log}.agl && false ) ) && ${_check} agl_plt00001 1 agl_ -9999 ${_lines}")
+    set_tests_properties(${TEST_NAME} PROPERTIES
+        TIMEOUT 600 PROCESSORS ${NP} WORKING_DIRECTORY "${CURRENT_TEST_BINARY_DIR}/"
+        LABELS "regression" ATTACHED_FILES_ON_FAIL "${_log}")
+  endfunction(add_test_line_sampling_interp)
+  add_test_line_sampling_interp(LineSamplingInterp)
+
+  # The same lines with a full-depth refined level over the hill (level-1 cells 24..39 in x and
+  # y): the three lines over the hill top must be sampled on level 1, with its own ground, and
+  # the two that leave it on level 0
+  function(add_test_line_sampling_interp_two_level TEST_NAME)
+    set(TEST_FILES_DIR LineSamplingInterp)
+    setup_test()
+    resolve_test_exe("" "erf_exec" TEST_EXE)
+    set(_log ${CURRENT_TEST_BINARY_DIR}/${TEST_NAME}.log)
+    set(_amr "amr.max_level=1 amr.ref_ratio_vect=2 2 1 erf.refinement_indicators=box1 erf.box1.max_level=1 erf.box1.in_box_lo_indices=24 24 0 erf.box1.in_box_hi_indices=39 39 11")
+    set(_lines "tower@1:33:33:0:280:15 far:0:0:0:280:15 high@1:33:33:600:790:5 one@1:33:33:150:150:1 across:x:16:50")
+    set(_agl "erf.sample_line_z_agl=1 erf.plot_file_1=agl_plt 'erf.sample_line_name=agl_tower agl_far agl_high agl_one agl_across'")
+    set(_check "ERF_TOOLS=${PROJECT_SOURCE_DIR}/Exec/Tools ${ERF_TEST_PYTHON} check_line_interp.py")
+    set(_names "tower far high one across agl_tower agl_far agl_high agl_one agl_across")
+    add_test(${TEST_NAME} sh -c
+        "rm -rf plt0* agl_plt0* plt_line_lev* && for n in ${_names}; do rm -f $n.*; done && ( ${MPI_COMMANDS} ${TEST_EXE} LineSamplingInterp.i ${_amr} > ${_log} 2>&1 || ( tail -n 40 ${_log} && false ) ) && ${_check} plt00001 0 '' -9999 ${_lines} && ( ${MPI_COMMANDS} ${TEST_EXE} LineSamplingInterp.i ${_amr} ${_agl} > ${_log}.agl 2>&1 || ( tail -n 40 ${_log}.agl && false ) ) && ${_check} agl_plt00001 1 agl_ -9999 ${_lines}")
+    set_tests_properties(${TEST_NAME} PROPERTIES
+        TIMEOUT 600 PROCESSORS ${NP} WORKING_DIRECTORY "${CURRENT_TEST_BINARY_DIR}/"
+        LABELS "regression" ATTACHED_FILES_ON_FAIL "${_log}")
+  endfunction(add_test_line_sampling_interp_two_level)
+  add_test_line_sampling_interp_two_level(LineSamplingInterp_TwoLevel)
+
   # Line and plane sampling with EB terrain (#4977): covered cells are written as
   # erf.sampling_covered_value, in a column through the top of the hill (the lowest 14 of
   # its 86 cells are covered; as an erf.sample_line log and as do_line_sampling text) and in
@@ -7169,6 +7337,14 @@ add_test_abort(LineSampling_Abort_NotAxisAligned ${CMAKE_CURRENT_SOURCE_DIR}/tes
 add_test_abort(LineSampling_Abort_NotAxisAlignedReal ${CMAKE_CURRENT_SOURCE_DIR}/test_files/LineSamplingTerrain LineSamplingTerrain.i
                "Line 1 of erf.sample_line_lo/hi_real is not along erf.sample_line_dir"
                "erf.sample_line_hi_real=40. 40. 300. -1240. -1200. 300. 40. 40. 420. 1240. 40. 150.")
+# erf.sample_line_interp interpolates to heights: not for lines given by cells, and a horizontal
+# line has one sample per column
+add_test_abort(LineSampling_Abort_InterpIndexLines ${CMAKE_CURRENT_SOURCE_DIR}/test_files/SampleLine SampleLine.i
+               "erf.sample_line_interp needs lines given by heights"
+               "erf.sample_line_interp=1")
+add_test_abort(LineSampling_Abort_InterpHorizontalNpts ${CMAKE_CURRENT_SOURCE_DIR}/test_files/LineSamplingInterp LineSamplingInterp.i
+               "Line 4 of erf.sample_line_interp is horizontal"
+               "erf.sample_line_npts=15 15 5 1 3")
 add_test_abort(LineSampling_Abort_MovingTerrain ${CMAKE_CURRENT_SOURCE_DIR}/test_files/MovingTerrain_nosub MovingTerrain_nosub.i
                "is not supported with erf.terrain_type = MovingFittedMesh"
                "erf.do_line_sampling=1 erf.line_sampling_interval=1 erf.sample_line_lo_real=50. 20. 0. erf.sample_line_hi_real=50. 20. 100. erf.sample_line_dir=2")
