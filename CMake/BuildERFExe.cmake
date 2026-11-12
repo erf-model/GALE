@@ -380,14 +380,18 @@ function(build_erf_lib erf_lib_name)
       ${SRC_DIR}/MovingBodies/ERF_MovingBodiesInputs.cpp
       ${SRC_DIR}/MovingBodies/Core/ERF_ActuatorSampling.cpp
       ${SRC_DIR}/MovingBodies/Core/ERF_ActuatorSpreading.cpp
-      ${SRC_DIR}/MovingBodies/Core/ERF_ActuatorRestriction.cpp
-      ${SRC_DIR}/MovingBodies/Core/ERF_BodyExchange.cpp
       ${SRC_DIR}/MovingBodies/Core/ERF_WakeLines.cpp
+      ${SRC_DIR}/MovingBodies/GaleCore/ERF_ActuatorRestriction.cpp
+      ${SRC_DIR}/MovingBodies/GaleCore/ERF_BodyExchange.cpp
+      ${SRC_DIR}/MovingBodies/GaleCore/ERF_CellHeights.cpp
+      ${SRC_DIR}/MovingBodies/GaleCore/ERF_OwnedWakeLines.cpp
+      ${SRC_DIR}/MovingBodies/GaleCore/ERF_UniformMeshNorm.cpp
       ${SRC_DIR}/MovingBodies/ForceModels/ERF_PrescribedCtDisk.cpp
       ${SRC_DIR}/MovingBodies/ForceModels/ERF_FLLC.cpp
     )
     target_include_directories(${erf_lib_name} PUBLIC $<BUILD_INTERFACE:${SRC_DIR}/MovingBodies>)
     target_include_directories(${erf_lib_name} PUBLIC $<BUILD_INTERFACE:${SRC_DIR}/MovingBodies/Core>)
+    target_include_directories(${erf_lib_name} PUBLIC $<BUILD_INTERFACE:${SRC_DIR}/MovingBodies/GaleCore>)
     target_include_directories(${erf_lib_name} PUBLIC $<BUILD_INTERFACE:${SRC_DIR}/MovingBodies/Motion>)
     target_include_directories(${erf_lib_name} PUBLIC $<BUILD_INTERFACE:${SRC_DIR}/MovingBodies/ForceModels>)
     target_compile_definitions(${erf_lib_name} PUBLIC ERF_USE_MOVING_BODIES)

@@ -396,7 +396,8 @@ else ifneq ($(strip $(FIRE_HOME)),)
 endif
 
 # The actuator core and the structure coupling for bodies in the flow
-# (Source/MovingBodies/Core, Source/MovingBodies/Coupling). Each directory in
+# (Source/MovingBodies/Core, GALE's own Source/MovingBodies/GaleCore,
+# Source/MovingBodies/Coupling). Each directory in
 # STRUCTURE_HOME (one or more, space separated) is a structure model with its
 # own Make.package, compiled in as the fire engines of FIRE_HOME are.
 ifeq ($(USE_MOVING_BODIES), TRUE)
@@ -405,6 +406,10 @@ ifeq ($(USE_MOVING_BODIES), TRUE)
     include $(ERF_MOVING_BODIES_CORE_DIR)/Make.package
     VPATH_LOCATIONS   += $(ERF_MOVING_BODIES_CORE_DIR)
     INCLUDE_LOCATIONS += $(ERF_MOVING_BODIES_CORE_DIR)
+    ERF_MOVING_BODIES_GALE_CORE_DIR = $(ERF_SOURCE_DIR)/MovingBodies/GaleCore
+    include $(ERF_MOVING_BODIES_GALE_CORE_DIR)/Make.package
+    VPATH_LOCATIONS   += $(ERF_MOVING_BODIES_GALE_CORE_DIR)
+    INCLUDE_LOCATIONS += $(ERF_MOVING_BODIES_GALE_CORE_DIR)
     ERF_STRUCTURE_COUPLING_DIR = $(ERF_SOURCE_DIR)/MovingBodies/Coupling
     include $(ERF_STRUCTURE_COUPLING_DIR)/Make.package
     VPATH_LOCATIONS   += $(ERF_STRUCTURE_COUPLING_DIR)

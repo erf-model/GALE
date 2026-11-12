@@ -16,12 +16,12 @@
 
 #include "ERF_BodyExchange.H"
 #include "ERF_BodyMotion.H"
-#include "ERF_DiagnosticsLog.H"
+#include "ERF_LogStreams.H"
 #include "ERF_MovingBodiesInputs.H"
 #include "ERF_PhaseTimers.H"
 #include "ERF_PrescribedCtDisk.H"
-#include "ERF_RunningStats.H"
-#include "ERF_WakeLines.H"
+#include "ERF_OwnedRunningStats.H"
+#include "ERF_OwnedWakeLines.H"
 #ifdef ERF_USE_OPENFAST
 #include "ERF_FLLC.H"
 #include "ERF_OpenFASTRotor.H"
@@ -283,15 +283,15 @@ private:
     void write_wake_diagnostics (double time, const amrex::MultiFab& U, const amrex::MultiFab& V,
                                  const amrex::MultiFab& W, const amrex::MultiFab* z_phys_nd,
                                  const amrex::Geometry& geom);
-    std::vector<std::unique_ptr<erf_actuator::WakeLines>> m_wakes;   //!< one per rotor, built at the first write
+    std::vector<std::unique_ptr<erf_actuator::OwnedWakeLines>> m_wakes;   //!< one per rotor, built at the first write
     bool m_wakes_built{false};
     bool m_wake_written{false};
     std::string m_wake_state_dir;   //!< checkpoint directory whose running averages the lines take over
 
     /** Feed every body's statistics with the state after this step and rewrite the files (each body's on its owner). */
     void accumulate_statistics (double time);
-    std::vector<erf_actuator::RunningStats> m_turbine_stats;   //!< one per OpenFAST turbine
-    std::vector<erf_actuator::RunningStats> m_disk_stats;      //!< one per prescribed-Ct disk
+    std::vector<erf_actuator::OwnedRunningStats> m_turbine_stats;   //!< one per OpenFAST turbine
+    std::vector<erf_actuator::OwnedRunningStats> m_disk_stats;      //!< one per prescribed-Ct disk
 
     /** The OpenFAST turbines (0 without OpenFAST): the bodies 0 .. num_turbines() - 1 of m_exchange, the disks after them. */
     int num_turbines () const { return static_cast<int>(m_turbine_mode.size()); }

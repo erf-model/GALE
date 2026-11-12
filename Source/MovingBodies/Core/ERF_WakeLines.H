@@ -4,16 +4,12 @@
 /** Wake sampling lines behind one rotor and their running time average. */
 
 #include <array>
-#include <ostream>
 #include <string>
 #include <vector>
 
-#include <AMReX_ParallelDescriptor.H>
 #include <AMReX_REAL.H>
 
 namespace erf_actuator {
-
-class LogStreams;
 
 /**
  * Wake sampling lines behind one rotor: at each downstream distance x/D along the horizontal
@@ -27,9 +23,6 @@ class LogStreams;
  * sit above -half_width. Every point's offset s (in diameters) is recorded in the files. The
  * lateral line runs along (-axis_y, axis_x, 0), from the right of the downstream direction to
  * its left; the vertical line runs up. Positions in m, ERF domain coordinates; velocities in m/s.
- *
- * The files and the checkpoint state are written by one rank, the I/O rank unless set_writer()
- * names another (the rotor's owner, which alone samples the lines and accumulates the average).
  */
 class WakeLines
 {
@@ -43,21 +36,22 @@ public:
      * @param lines_xD    downstream distances of the lines, in diameters (at least one)
      * @param half_width  half the length of each line, in diameters (> 0)
      * @param num_points  points per line (>= 2)
-     * @param z_min       the ground under each line's centre, one per downstream distance (m, finite):
-     *                    that line's vertical part starts no lower
+     * @param z_min       the ground under the hub (m, finite): the vertical line starts no lower
+     */
+    WakeLines (std::string name, std::string output_root,
+               const std::array<amrex::Real,3>& hub, const std::array<amrex::Real,3>& axis,
+               amrex::Real diameter, const std::vector<amrex::Real>& lines_xD,
+               amrex::Real half_width, int num_points, amrex::Real z_min);
+
+    /**
+     * The same with one ground height per downstream distance (z_min[n] under the centre of
+     * the lines at lines_xD[n], from terrain_heights), so that on terrain rising or falling
+     * downstream each vertical line stops at its own ground. z_min must have lines_xD's size.
      */
     WakeLines (std::string name, std::string output_root,
                const std::array<amrex::Real,3>& hub, const std::array<amrex::Real,3>& axis,
                amrex::Real diameter, const std::vector<amrex::Real>& lines_xD,
                amrex::Real half_width, int num_points, const std::vector<amrex::Real>& z_min);
-
-    /** The same with one ground height for every line (flat ground). */
-    WakeLines (std::string name, std::string output_root,
-               const std::array<amrex::Real,3>& hub, const std::array<amrex::Real,3>& axis,
-               amrex::Real diameter, const std::vector<amrex::Real>& lines_xD,
-               amrex::Real half_width, int num_points, amrex::Real z_min)
-        : WakeLines(std::move(name), std::move(output_root), hub, axis, diameter, lines_xD, half_width, num_points,
-                    std::vector<amrex::Real>(lines_xD.size(), z_min)) {}
 
     const std::string& name () const { return m_name; }
     int num_points () const { return static_cast<int>(m_pos.size() / 3); }
@@ -68,9 +62,6 @@ public:
     const std::array<amrex::Real,3>& axis () const { return m_axis; }
     amrex::Real diameter () const { return m_diameter; }
     int num_samples () const { return m_count; }
-    /** The rank that writes the files and the checkpoint state (the I/O rank by default). */
-    void set_writer (int rank) { m_writer = rank; }
-    int writer () const { return m_writer; }
 
     /** Add one set of sampled velocities (3*n, m/s, finite) to the running average. */
     void accumulate (const std::vector<amrex::Real>& vel);
@@ -83,31 +74,25 @@ public:
      * asks for one. Units: time s, x y z m, u v w m/s.
      */
     void write_instantaneous (double time, const std::vector<amrex::Real>& vel, bool truncate) const;
-    /** The same through logs, which keeps the file open from one write to the next (LogStreams). */
-    void write_instantaneous (LogStreams& logs, double time, const std::vector<amrex::Real>& vel, bool truncate) const;
-    /** Rewrite <output_root>_wake_avg.csv with the running average so far. */
+    /** Rewrite <output_root>_wake_avg.csv with the running average (the file always holds the current mean). */
     void write_average () const;
 
     /**
      * The lines' state for a checkpoint, <dir>/<name>_wake_avg.dat: the sampling geometry
-     * (hub, axis, diameter, the points) and the running sums. The geometry is stored because the
-     * rotor's hub and diameter (from its outermost blade node) come from OpenFAST's
-     * single-precision arrays and would be rebuilt slightly differently after a restart.
+     * (hub, axis, diameter, the points) and the running sums. The geometry is stored because a
+     * body model may rebuild the hub and diameter from lower-precision data after a restart and
+     * land a few ulps away; the stored points keep the average on the same positions.
      */
     void write_state (const std::string& dir) const;
     /**
-     * Restore the state written by write_state(), geometry included, read on this rank alone (not
-     * collective: the rotor's owner calls it); false when there is none. When the file is malformed
-     * (a negative count, a diameter that is not positive, an axis that is not a horizontal unit
-     * vector, a non-finite value, or other lines than the inputs') it changes nothing and aborts,
-     * or, given error, returns false with the message there, for the caller to stop every rank with
-     * it (first_failure()).
+     * Restore the state written by write_state(), geometry included; false when there is none.
+     * Aborts, changing nothing, when the file is malformed: a negative count, a diameter that is
+     * not positive, an axis that is not a horizontal unit vector, or a non-finite value.
      */
-    bool read_state (const std::string& dir, std::string* error = nullptr);
+    bool read_state (const std::string& dir);
 
 private:
-    void write_rows (std::ostream& out, const std::vector<amrex::Real>& vel, const std::string& prefix) const;
-    void write_instantaneous_rows (std::ostream& out, double time, const std::vector<amrex::Real>& vel) const;
+    void write_rows (std::ofstream& out, const std::vector<amrex::Real>& vel, const std::string& prefix) const;
 
     std::string m_name, m_output_root;
     std::array<amrex::Real,3> m_hub, m_axis, m_lateral;
@@ -117,9 +102,8 @@ private:
     int m_npts{0};
     std::vector<amrex::Real> m_s;     //!< n offsets along the lines, in diameters
     std::vector<amrex::Real> m_pos;   //!< 3*n
-    std::vector<double> m_sum;   //!< 3*n running sums, in double so a long average keeps its digits in single precision
+    std::vector<double> m_sum;        //!< 3*n running sums, in double whatever Real is
     int m_count{0};
-    int m_writer{amrex::ParallelDescriptor::IOProcessorNumber()};
 };
 
 } // namespace erf_actuator

@@ -1,7 +1,6 @@
 CEXE_headers += ERF_ActuatorGeometry.H
 CEXE_headers += ERF_DiagnosticsLog.H
 CEXE_headers += ERF_RunningStats.H
-CEXE_headers += ERF_PhaseTimers.H
 CEXE_headers += ERF_WakeLines.H
 CEXE_sources += ERF_WakeLines.cpp
 CEXE_headers += ERF_ActuatorDeviceBuffers.H
@@ -9,7 +8,3 @@ CEXE_headers += ERF_ActuatorSampling.H
 CEXE_headers += ERF_ActuatorSpreading.H
 CEXE_sources += ERF_ActuatorSampling.cpp
 CEXE_sources += ERF_ActuatorSpreading.cpp
-CEXE_headers += ERF_ActuatorRestriction.H
-CEXE_sources += ERF_ActuatorRestriction.cpp
-CEXE_headers += ERF_BodyExchange.H
-CEXE_sources += ERF_BodyExchange.cpp

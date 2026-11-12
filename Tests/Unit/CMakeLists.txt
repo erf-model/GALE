@@ -521,6 +521,20 @@ if(ERF_ENABLE_MOVING_BODIES)
   target_sources(${erf_exe_name} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/MovingBodies/ERF_GTestRunningStats.cpp
   )
+  # Motivation (GALE): GALE's copies of the wake lines and the running statistics (GaleCore), written and
+  # restored by a body's owner, and its log helpers must pass the same checks as the originals, and the
+  # log helpers must keep many files open within the open-file limit and trim a log at a checkpoint.
+  target_sources(${erf_exe_name} PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/MovingBodies/ERF_GTestOwnedWakeLines.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/MovingBodies/ERF_GTestOwnedRunningStats.cpp
+  )
+  # Motivation (GALE): the cell height that limits a blade tip must be the physical one, weighed by the tip
+  # speed that crosses it, the same from the batched and the per-region search; a kernel's normalisation on
+  # a uniform mesh, found on one rank, must be the sum of the ranks' partial norms.
+  target_sources(${erf_exe_name} PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/MovingBodies/ERF_GTestGaleCellHeights.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/MovingBodies/ERF_GTestGaleUniformMeshNorm.cpp
+  )
   # Motivation: the timing summary (erf.moving_bodies.timing_int) must charge a phase's time to that
   # phase alone and only when it is on, and give each phase's minimum, mean and maximum over the ranks.
   target_sources(${erf_exe_name} PRIVATE
@@ -1287,6 +1301,8 @@ if(ERF_ENABLE_MPI)
       ${CMAKE_CURRENT_SOURCE_DIR}/MovingBodies/ERF_GTestActuatorSampling.cpp
       ${CMAKE_CURRENT_SOURCE_DIR}/MovingBodies/ERF_GTestActuatorSpreading.cpp
       ${CMAKE_CURRENT_SOURCE_DIR}/MovingBodies/ERF_GTestBodyExchange.cpp
+      ${CMAKE_CURRENT_SOURCE_DIR}/MovingBodies/ERF_GTestGaleCellHeights.cpp
+      ${CMAKE_CURRENT_SOURCE_DIR}/MovingBodies/ERF_GTestGaleUniformMeshNorm.cpp
     )
   endif()
   if(ERF_ENABLE_OPENFAST AND ERF_OPENFAST_USE_STUB)

@@ -154,18 +154,11 @@ struct KernelFaces
         if (!zb.all_ground && !zb.has_table()) { zb = ZBounds{}; }
     }
 
-    // The index box of the faces of grid dir within reach of a point at (px,py,pz); with z_phys_nd
-    // (terrain-following or stretched) a face's height is not its index times dz, so the box takes
+    // The index boxes of the faces of the three face grids within reach of a point at (px,py,pz); with
+    // z_phys_nd (terrain-following or stretched) a face's height is not its index times dz, so a box takes
     // every k a height within reach may lie in, from the mesh's bounds (with the table of the rank's node
     // heights where its boxes do not all reach the ground), and kernel_weight's cut-off at 3 eps, measured
-    // in physical heights, picks the faces
-    Box reach_box (int dir, Real px, Real py, Real pz, Real eps) const
-    {
-        int kb = dlo[2], kt = dhi[2];
-        if (has_znd) { zb.k_range(pz - Real(3.0) * eps, pz + Real(3.0) * eps, dlo[2], dhi[2], kb, kt); }
-        return reach_box_k(dir, px, py, pz, eps, kb, kt);
-    }
-    // The same for the three face grids, the cells in z found once
+    // in physical heights, picks the faces. The cells in z are found once for the three grids
     std::array<Box,3> reach_boxes (Real px, Real py, Real pz, Real eps) const
     {
         int kb = dlo[2], kt = dhi[2];
@@ -173,7 +166,7 @@ struct KernelFaces
         return {{reach_box_k(0, px, py, pz, eps, kb, kt), reach_box_k(1, px, py, pz, eps, kb, kt),
                  reach_box_k(2, px, py, pz, eps, kb, kt)}};
     }
-    // reach_box with the cells [kb, kt] a height within reach may lie in (used with z_phys_nd only)
+    // The box of grid dir, with the cells [kb, kt] a height within reach may lie in (used with z_phys_nd only)
     Box reach_box_k (int dir, Real px, Real py, Real pz, Real eps, int kb, int kt) const
     {
         const Real pc[3] = {px, py, pz};
@@ -221,7 +214,7 @@ constexpr int tile_size = 8;
 // The periodic images of every point, made once per call (not per box and face grid) and sent to the
 // device in one copy each, in point order and, for a point, in point_images' order, which is the order
 // in which the passes add their terms: the image's position, its point, and the faces of each grid
-// within its reach (reach_box). Also each point's 1 / eps^2 and squared cut-off radius.
+// within its reach (reach_boxes). Also each point's 1 / eps^2 and squared cut-off radius.
 struct KernelImages
 {
     std::vector<std::array<Real,3>> pos;
@@ -462,55 +455,6 @@ spread_partial_norms (const std::vector<Real>& pos, const std::vector<Real>& eps
     std::copy(buf.norms.pinned.begin(), buf.norms.pinned.begin() + norm.size(), norm.begin());
 }
 
-bool
-uniform_mesh_norm (Real px, Real py, Real pz, Real eps, const Geometry& geom, const BoxArray& ba, Real norm[3])
-{
-    AMREX_ALWAYS_ASSERT_WITH_MESSAGE(ba.ixType().cellCentered(), "uniform_mesh_norm: the level's boxes must be cell-centred");
-    KernelFaces kf(geom, nullptr, nullptr, nullptr);
-    const Real inv_eps2 = Real(1.0) / (eps * eps);
-    const Real reach2 = Real(9.0) * eps * eps;
-    const Array4<Real const> no_znd{};
-    std::vector<std::array<Real,3>> images;
-    kf.point_images(px, py, pz, eps, images);
-    // the faces of the domain a box would own (each physical face once): the cells' low faces
-    const Box dom_cells = geom.Domain();
-    // first check that the boxes hold every cell whose low face is within reach, in every direction
-    for (int dir = 0; dir < 3; ++dir) {
-        const Box dom_faces = owned_faces(dir, dom_cells);
-        for (const auto& q : images) {
-            const Box rb = kf.reach_box(dir, q[0], q[1], q[2], eps) & dom_faces;
-            if (rb.isEmpty()) { continue; }
-            // a face of rb and the cell it is the low face of have the same index
-            if (!ba.contains(Box(rb.smallEnd(), rb.bigEnd()))) { return false; }
-        }
-    }
-    Real s[3] = {Real(0.0), Real(0.0), Real(0.0)};
-    for (int dir = 0; dir < 3; ++dir) {
-        const Box dom_faces = owned_faces(dir, dom_cells);
-        for (const auto& q : images) {
-            const Box rb = kf.reach_box(dir, q[0], q[1], q[2], eps) & dom_faces;
-            if (rb.isEmpty()) { continue; }
-            const auto lo = amrex::lbound(rb);
-            const auto hi = amrex::ubound(rb);
-            for (int k = lo.z; k <= hi.z; ++k) {
-                for (int j = lo.y; j <= hi.y; ++j) {
-                    for (int i = lo.x; i <= hi.x; ++i) {
-                        if (boundary_face(dir, i, j, k, kf.per, kf.dlo, kf.dhi)) { continue; }
-                        const Real w = kernel_weight(dir, i, j, k, q[0], q[1], q[2], kf.plo, kf.dx, no_znd, false, inv_eps2, reach2);
-                        // the product in a statement of its own, as in spread_partial_norms(): the two sums
-                        // then add the same terms on a target with a fused multiply-add
-                        if (w > Real(0.0)) {
-                            const Real term = w * kf.dxdydz;
-                            s[dir] += term;
-                        }
-                    }
-                }
-            }
-        }
-    }
-    for (int d = 0; d < 3; ++d) { norm[d] = s[d]; }
-    return true;
-}
 
 void
 add_scaled_kernels (const std::vector<Real>& pos, const std::vector<Real>& f_over_s, const std::vector<Real>& epsilon,

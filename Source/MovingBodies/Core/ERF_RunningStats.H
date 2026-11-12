@@ -26,12 +26,10 @@ namespace erf_actuator {
 
 /**
  * One set of running statistics: the mean, the root mean square, the minimum and the maximum of
- * each named scalar quantity over every sample added since the caller's averaging start (for
- * example erf.moving_bodies.avg_start). write() rewrites <output_root>_stats.csv with the current
+ * each named scalar quantity over every sample added since the caller's averaging start.
+ * write() rewrites <output_root>_stats.csv with the current
  * values; the sums are part of the checkpoint, so the statistics continue across a restart.
- * A non-finite sample aborts, naming the statistics and the quantity. The files are written by one
- * rank, the I/O rank unless set_writer() names another (the owner of a turbine or a prescribed-Ct
- * disk, which alone accumulates its statistics).
+ * A non-finite sample aborts, naming the statistics and the quantity.
  */
 class RunningStats
 {
@@ -43,9 +41,6 @@ public:
           m_max(m_names.size(), std::numeric_limits<amrex::Real>::lowest()) {}
 
     const std::string& name () const { return m_name; }
-    /** The rank that writes the statistics and their checkpoint state (the I/O rank by default). */
-    void set_writer (int rank) { m_writer = rank; }
-    int writer () const { return m_writer; }
     const std::vector<std::string>& quantities () const { return m_names; }
 
     /**
@@ -94,39 +89,20 @@ public:
     /** Rewrite <output_root>_stats.csv: one row per quantity with the current statistics. */
     void write () const
     {
-        if (amrex::ParallelDescriptor::MyProc() != m_writer) { return; }
+        if (!amrex::ParallelDescriptor::IOProcessor()) { return; }
         std::ofstream out;
         open_log(out, m_output_root + "_stats.csv", true);
-        out << columns() << "\n";
-        write_rows(out, "");
-    }
-
-    /** The columns of the rows of write_rows() after its prefix. */
-    static const char* columns () { return "samples,t_first,t_last,quantity,mean,rms,min,max"; }
-    /** The statistics as write() writes them, one row per quantity, each row after prefix (a body's name and a comma, or nothing). */
-    void write_rows (std::ostream& out, const std::string& prefix) const
-    {
-        std::vector<amrex::Real> v(4 * m_names.size());
+        out << "samples,t_first,t_last,quantity,mean,rms,min,max\n" << std::setprecision(10);
         for (std::size_t i = 0; i < m_names.size(); ++i) {
-            v[4*i] = mean(i); v[4*i+1] = rms(i); v[4*i+2] = min(i); v[4*i+3] = max(i);
-        }
-        write_rows(out, prefix, m_names, m_count, m_t_first, m_t_last, v.data());
-    }
-    /** The same rows from values packed elsewhere (another rank's statistics): mean, rms, min and max for each quantity. */
-    static void write_rows (std::ostream& out, const std::string& prefix, const std::vector<std::string>& names, int count,
-                            double t_first, double t_last, const amrex::Real* v)
-    {
-        out << std::setprecision(10);
-        for (std::size_t i = 0; i < names.size(); ++i) {
-            out << prefix << count << "," << t_first << "," << t_last << "," << names[i] << ","
-                << v[4*i] << "," << v[4*i+1] << "," << v[4*i+2] << "," << v[4*i+3] << "\n";
+            out << m_count << "," << m_t_first << "," << m_t_last << "," << m_names[i] << ","
+                << mean(i) << "," << rms(i) << "," << min(i) << "," << max(i) << "\n";
         }
     }
 
     /** The state for a checkpoint: <dir>/<name>_stats.dat. */
     void write_state (const std::string& dir) const
     {
-        if (amrex::ParallelDescriptor::MyProc() != m_writer) { return; }
+        if (!amrex::ParallelDescriptor::IOProcessor()) { return; }
         std::ofstream out(dir + "/" + m_name + "_stats.dat", std::ios::trunc);
         if (!out) { amrex::Abort("cannot write the statistics checkpoint for " + m_name + " in '" + dir + "'"); }
         out << std::setprecision(17) << "count = " << m_count << "\nsize = " << m_names.size()
@@ -136,68 +112,60 @@ public:
         }
     }
     /**
-     * Restore the state written by write_state(), read on this rank alone (not collective: the
-     * body's owner calls it); false when there is none. When the file is malformed (a negative
-     * count, t_last before t_first, a non-finite value, or quantities other than this object's but
-     * those accepted by renamed_from) it changes nothing and aborts, or, given error, returns false
-     * with the message there, for the caller to stop every rank with it (first_failure()).
+     * Restore the state written by write_state(); false when there is none. Aborts, changing
+     * nothing, when the file is malformed: a negative count, t_last before t_first, a non-finite
+     * value, or quantities other than this object's (but those accepted by renamed_from).
      */
-    bool read_state (const std::string& dir, std::string* error = nullptr)
+    bool read_state (const std::string& dir)
     {
         const std::string fname = dir + "/" + m_name + "_stats.dat";
-        // read on this rank alone: its writer's (the body's owner), which alone keeps the statistics
-        auto fail = [error] (const std::string& msg) {
-            if (error == nullptr) { amrex::Abort(msg); }
-            *error = msg;
-            return false;
-        };
-        if (!amrex::FileExists(fname)) {
-            amrex::AllPrint() << "RunningStats " << m_name << ": no " << fname << " in the checkpoint; the statistics start afresh\n";
+        if (!file_exists_everywhere(fname)) {
+            amrex::Print() << "RunningStats " << m_name << ": no " << fname << " in the checkpoint; the statistics start afresh\n";
             return false;
         }
-        std::ifstream in(fname);
-        if (!in) { return fail("cannot read the statistics checkpoint '" + fname + "' on rank " +
-                               std::to_string(amrex::ParallelDescriptor::MyProc()) + ", the body's owner"); }
+        amrex::Vector<char> chars;
+        amrex::ParallelDescriptor::ReadAndBcastFile(fname, chars);
+        std::istringstream in(std::string(chars.dataPtr(), chars.size()));
         std::string key, eq, qname;
         std::size_t size = 0;
         int count = 0;
         double t0 = 0.0, t1 = 0.0;
         if (!(in >> key >> eq >> count) || key != "count" || !(in >> key >> eq >> size) || key != "size" ||
             !(in >> key >> eq >> t0) || key != "t_first" || !(in >> key >> eq >> t1) || key != "t_last") {
-            return fail("malformed statistics checkpoint '" + fname + "'");
+            amrex::Abort("malformed statistics checkpoint '" + fname + "'");
         }
         if (size != m_names.size()) {
-            return fail("the statistics checkpoint '" + fname + "' holds " + std::to_string(size) + " quantities but " +
+            amrex::Abort("the statistics checkpoint '" + fname + "' holds " + std::to_string(size) + " quantities but " +
                          m_name + " has " + std::to_string(m_names.size()));
         }
         if (count < 0 || !std::isfinite(t0) || !std::isfinite(t1) || (count > 0 && t1 < t0)) {
-            return fail("malformed statistics checkpoint '" + fname + "': the count must be >= 0 and t_first <= t_last, both finite");
+            amrex::Abort("malformed statistics checkpoint '" + fname + "': the count must be >= 0 and t_first <= t_last, both finite");
         }
         std::vector<double> sum(size), sum2(size);
         std::vector<amrex::Real> mn(size), mx(size);
         std::string afresh;
         for (std::size_t i = 0; i < size; ++i) {
             if (!(in >> qname >> sum[i] >> sum2[i] >> mn[i] >> mx[i])) {
-                return fail("the statistics checkpoint '" + fname + "' is truncated: " + m_names[i] + " is missing or incomplete");
+                amrex::Abort("the statistics checkpoint '" + fname + "' is truncated: " + m_names[i] + " is missing or incomplete");
             }
             if (qname != m_names[i]) {
                 const auto r = m_renamed.find(qname);
                 if (r == m_renamed.end() || r->second.first != m_names[i]) {
-                    return fail("the statistics checkpoint '" + fname + "' does not list " + m_names[i] + " where expected");
+                    amrex::Abort("the statistics checkpoint '" + fname + "' does not list " + m_names[i] + " where expected");
                 }
                 if (r->second.second) {
-                    amrex::AllPrint() << "RunningStats " << m_name << ": the checkpoint's " << qname << " statistics continue as "
+                    amrex::Print() << "RunningStats " << m_name << ": the checkpoint's " << qname << " statistics continue as "
                                    << m_names[i] << "\n";
                 } else if (afresh.empty()) {
                     afresh = qname;
                 }
             }
             if (!std::isfinite(sum[i]) || !std::isfinite(sum2[i]) || !std::isfinite(mn[i]) || !std::isfinite(mx[i])) {
-                return fail("malformed statistics checkpoint '" + fname + "': a value of " + m_names[i] + " is not finite");
+                amrex::Abort("malformed statistics checkpoint '" + fname + "': a value of " + m_names[i] + " is not finite");
             }
         }
         if (!afresh.empty()) {
-            amrex::AllPrint() << "RunningStats " << m_name << ": the checkpoint lists " << afresh << ", another quantity than "
+            amrex::Print() << "RunningStats " << m_name << ": the checkpoint lists " << afresh << ", another quantity than "
                            << m_renamed[afresh].first << " here; all statistics of " << m_name << " start afresh at the restart\n";
             return true;
         }
@@ -208,7 +176,6 @@ public:
 
 private:
     std::string m_name, m_output_root;
-    int m_writer{amrex::ParallelDescriptor::IOProcessorNumber()};
     std::vector<std::string> m_names;
     std::vector<double> m_sum, m_sum2;          //!< in double: a float sum over many steps would lose the samples
     std::vector<amrex::Real> m_min, m_max;

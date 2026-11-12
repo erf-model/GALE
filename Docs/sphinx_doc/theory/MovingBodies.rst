@@ -10,6 +10,16 @@ is separate from the wind farm parameterizations of :ref:`sec:WindFarmModels`,
 which model turbines with thrust curves; here the loads come from OpenFAST's
 blade-element solution on the turbine's own blade and tower nodes.
 
+It builds on the actuator core (``Source/MovingBodies/Core``,
+:ref:`sec:ActuatorCore`), which it uses unchanged. What the framework adds
+to the core lives in ``Source/MovingBodies/GaleCore``: the exchange of a
+body's points with the ranks it touches (``BodyExchange``), the restriction
+of the sources to coarser levels, the cell heights that limit a blade tip,
+a kernel's normalisation summed on one rank, the phase timers, the
+diagnostics files of many bodies per rank (``LogStreams``), and copies of the
+core's ``WakeLines`` and ``RunningStats`` that a body's owner writes and
+restores (``OwnedWakeLines``, ``OwnedRunningStats``).
+
 Coupling
 --------
 
@@ -566,7 +576,8 @@ thrust is computed with one density and put into a flow of another.
 Wake diagnostics
 ----------------
 
-The lines are the actuator core's ``WakeLines`` (:ref:`sec:ActuatorCore`).
+The lines are ``OwnedWakeLines``, the copy of the actuator core's ``WakeLines``
+(:ref:`sec:ActuatorCore`) that the rotor's owner writes and restores.
 ``erf.moving_bodies.wake.lines_xD`` puts sampling lines behind every rotor:
 at each listed distance in rotor diameters along the horizontal projection
 of the rotor axis through the hub (the shaft axis of an OpenFAST turbine,
@@ -586,7 +597,9 @@ points with the actuator sampler, written to ``<output_root>_wake.csv``
 samples in it). The file is rewritten at every sample, or with
 ``erf.moving_bodies.stats_int`` every that many steps, at every checkpoint and
 at the end of the run. The running sums are part of the checkpoint, so the average
-continues across a restart. Nothing is sampled when a prescribed velocity
+continues across a restart. The checkpoint file ``<name>_wake_avg.dat`` also
+records the line layout (``lines_xD``, ``half_width`` and ``num_points``), and a
+restart with another line layout stops. Nothing is sampled when a prescribed velocity
 replaces the flow.
 
 Body statistics

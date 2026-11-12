@@ -1,4 +1,4 @@
-// Contract of erf_actuator::BodyExchange and its helpers (Core/ERF_BodyExchange):
+// Contract of erf_actuator::BodyExchange and its helpers (GaleCore/ERF_BodyExchange):
 //
 // - domain_images, cells_within, ranks_touching: a range of cells wraps across a periodic seam and
 //   is clipped at a non-periodic side; a fitted mesh takes the whole column.

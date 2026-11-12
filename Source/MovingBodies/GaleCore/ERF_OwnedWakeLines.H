@@ -1,0 +1,128 @@
+#ifndef ERF_OWNED_WAKE_LINES_H
+#define ERF_OWNED_WAKE_LINES_H
+
+/** GALE: wake sampling lines behind one rotor and their running time average, written and restored by the
+ *  rotor's owner (GALE's copy of WakeLines, under its own name; the messages keep the old name). */
+
+#include <array>
+#include <ostream>
+#include <string>
+#include <vector>
+
+#include <AMReX_ParallelDescriptor.H>
+#include <AMReX_REAL.H>
+
+namespace erf_actuator {
+
+class LogStreams;
+
+/**
+ * Wake sampling lines behind one rotor: at each downstream distance x/D along the horizontal
+ * projection of the rotor axis through the hub (a wake follows the wind at hub height, not a
+ * tilted shaft), one lateral line (horizontal, normal to that direction) and one vertical
+ * line, each of num_points points spanning +-half_width diameters about the centre. The
+ * sampled velocities are written as they are and accumulated into a running time average.
+ *
+ * Point order: for each x/D, the lateral line then the vertical line, each from -half_width
+ * to +half_width; the vertical line is clipped at z_min (the ground), so its lowest point may
+ * sit above -half_width. Every point's offset s (in diameters) is recorded in the files. The
+ * lateral line runs along (-axis_y, axis_x, 0), from the right of the downstream direction to
+ * its left; the vertical line runs up. Positions in m, ERF domain coordinates; velocities in m/s.
+ *
+ * The files and the checkpoint state are written by one rank, the I/O rank unless set_writer()
+ * names another (the rotor's owner, which alone samples the lines and accumulates the average).
+ */
+class OwnedWakeLines
+{
+public:
+    /**
+     * Build the sampling points.
+     *
+     * @param hub         the rotor's hub (m)
+     * @param axis        the rotor axis (any non-vertical vector; its horizontal projection is used)
+     * @param diameter    the rotor diameter (m, > 0)
+     * @param lines_xD    downstream distances of the lines, in diameters (at least one)
+     * @param half_width  half the length of each line, in diameters (> 0)
+     * @param num_points  points per line (>= 2)
+     * @param z_min       the ground under each line's centre, one per downstream distance (m, finite):
+     *                    that line's vertical part starts no lower
+     */
+    OwnedWakeLines (std::string name, std::string output_root,
+               const std::array<amrex::Real,3>& hub, const std::array<amrex::Real,3>& axis,
+               amrex::Real diameter, const std::vector<amrex::Real>& lines_xD,
+               amrex::Real half_width, int num_points, const std::vector<amrex::Real>& z_min);
+
+    /** The same with one ground height for every line (flat ground). */
+    OwnedWakeLines (std::string name, std::string output_root,
+               const std::array<amrex::Real,3>& hub, const std::array<amrex::Real,3>& axis,
+               amrex::Real diameter, const std::vector<amrex::Real>& lines_xD,
+               amrex::Real half_width, int num_points, amrex::Real z_min)
+        : OwnedWakeLines(std::move(name), std::move(output_root), hub, axis, diameter, lines_xD, half_width, num_points,
+                    std::vector<amrex::Real>(lines_xD.size(), z_min)) {}
+
+    const std::string& name () const { return m_name; }
+    int num_points () const { return static_cast<int>(m_pos.size() / 3); }
+    /** 3*n positions of the sampling points (m). */
+    const std::vector<amrex::Real>& positions () const { return m_pos; }
+    const std::array<amrex::Real,3>& hub () const { return m_hub; }
+    /** The unit downstream direction: the rotor axis projected on the horizontal plane. */
+    const std::array<amrex::Real,3>& axis () const { return m_axis; }
+    amrex::Real diameter () const { return m_diameter; }
+    int num_samples () const { return m_count; }
+    /** The rank that writes the files and the checkpoint state (the I/O rank by default). */
+    void set_writer (int rank) { m_writer = rank; }
+    int writer () const { return m_writer; }
+
+    /** Add one set of sampled velocities (3*n, m/s, finite) to the running average. */
+    void accumulate (const std::vector<amrex::Real>& vel);
+    /** The running mean velocities (3*n); zeros before the first sample. */
+    std::vector<amrex::Real> average () const;
+
+    /**
+     * Write the sampled velocities to <output_root>_wake.csv, one row per point: truncate starts
+     * the file afresh, otherwise the rows are appended; the header is written when open_log_once()
+     * asks for one. Units: time s, x y z m, u v w m/s.
+     */
+    void write_instantaneous (double time, const std::vector<amrex::Real>& vel, bool truncate) const;
+    /** The same through logs, which keeps the file open from one write to the next (LogStreams). */
+    void write_instantaneous (LogStreams& logs, double time, const std::vector<amrex::Real>& vel, bool truncate) const;
+    /** Rewrite <output_root>_wake_avg.csv with the running average so far. */
+    void write_average () const;
+
+    /**
+     * The lines' state for a checkpoint, <dir>/<name>_wake_avg.dat: the sampling geometry
+     * (hub, axis, diameter, the points) and the running sums. The geometry is stored because the
+     * rotor's hub and diameter (from its outermost blade node) come from OpenFAST's
+     * single-precision arrays and would be rebuilt slightly differently after a restart.
+     */
+    void write_state (const std::string& dir) const;
+    /**
+     * Restore the state written by write_state(), geometry included, read on this rank alone (not
+     * collective: the rotor's owner calls it); false when there is none. When the file is malformed
+     * (a negative count, a diameter that is not positive, an axis that is not a horizontal unit
+     * vector, a non-finite value, or other lines than the inputs') it changes nothing and aborts,
+     * or, given error, returns false with the message there, for the caller to stop every rank with
+     * it (first_failure()).
+     */
+    bool read_state (const std::string& dir, std::string* error = nullptr);
+
+private:
+    void write_rows (std::ostream& out, const std::vector<amrex::Real>& vel, const std::string& prefix) const;
+    void write_instantaneous_rows (std::ostream& out, double time, const std::vector<amrex::Real>& vel) const;
+
+    std::string m_name, m_output_root;
+    std::array<amrex::Real,3> m_hub, m_axis, m_lateral;
+    amrex::Real m_diameter{0.0};
+    std::vector<amrex::Real> m_xD;
+    amrex::Real m_half_width{1.5};
+    int m_npts{0};
+    std::vector<amrex::Real> m_s;     //!< n offsets along the lines, in diameters
+    std::vector<amrex::Real> m_pos;   //!< 3*n
+    std::vector<double> m_sum;   //!< 3*n running sums, in double so a long average keeps its digits in single precision
+    int m_count{0};
+    int m_writer{amrex::ParallelDescriptor::IOProcessorNumber()};
+};
+
+} // namespace erf_actuator
+
+#endif
