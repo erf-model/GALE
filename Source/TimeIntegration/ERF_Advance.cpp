@@ -216,6 +216,20 @@ ERF::Advance (int lev, double time, double dt_lev, int iteration, int /*ncycle*/
         }
         moving_bodies->advance(lev, time, dt_lev, S_old, U_old, V_old, W_old,
                                z_phys_nd[lev].get(), detJ_cc[lev].get(), Geom(lev));
+        // on a coarser level, the anchor level's latest source restricted onto this level, held over the
+        // step, as for a structure model (make_structure_coarse_sources; two-way coupling only)
+        if (lev < moving_bodies->anchor_level() && moving_bodies->anchor_level() <= finest_level) {
+            const int L = moving_bodies->anchor_level();
+            Vector<const MultiFab*> detJ(L + 1, nullptr);
+            Vector<IntVect> rr(L);
+            for (int l = 0; l <= L; ++l) {
+                if (SolverChoice::mesh_type != MeshType::ConstantDz) { detJ[l] = detJ_cc[l].get(); }
+                if (l < L) { rr[l] = refRatio(l); }
+            }
+            moving_bodies->make_coarse_sources(lev, grids, dmap, geom, rr, detJ);
+        } else if (lev < moving_bodies->anchor_level()) {
+            moving_bodies->drop_coarse_source(lev);
+        }
     }
 
     // **************************************************************************************

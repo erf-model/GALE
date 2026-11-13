@@ -3290,8 +3290,10 @@ written without bodies (a precursor) starts the bodies afresh at the checkpoint'
 |                                                        | started)                                                 |                          |                          |
 +--------------------------------------------------------+----------------------------------------------------------+--------------------------+--------------------------+
 | **erf.moving_bodies.anchor_level**                     | the level the bodies are sampled and forced on; coarser  | 0 .. amr.max_level, or   | -1 (amr.max_level)       |
-|                                                        | levels carry the anchor level's force summed onto their  | -1                       |                          |
-|                                                        | faces, and no finer level may cover them                 |                          |                          |
+|                                                        | levels carry the anchor level's source restricted onto   | -1                       |                          |
+|                                                        | their faces, which needs erf.coupling_type = TwoWay      |                          |                          |
+|                                                        | above level 0 (none on a coarse step after a regrid of   |                          |                          |
+|                                                        | the anchor level); no finer level may cover them         |                          |                          |
 +--------------------------------------------------------+----------------------------------------------------------+--------------------------+--------------------------+
 | **erf.moving_bodies.density_tolerance**                | relative difference allowed between ERF's density at a   | Real >= 0                | 0.05                     |
 |                                                        | hub and the OpenFAST model's AirDens, and at a ct_disk   |                          |                          |

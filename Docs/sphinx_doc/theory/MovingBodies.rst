@@ -640,40 +640,46 @@ spread onto that level's faces with the kernel width in that level's cells,
 and OpenFAST is stepped with that level's fixed step (``erf.fixed_dt`` divided
 by the sub-cycling ratios down to it), so a fine patch around the rotor gives
 an actuator line its few-metre cells without refining the whole domain.
-Every coarser level carries the bodies' force too. At the start of each of its
-steps, the anchor level's face forces after its latest step,
-:math:`F_f = s_f\,\Delta V_f`, are summed onto the coarser level's faces,
+Every coarser level carries the bodies' force too, with
+``erf.coupling_type = TwoWay`` (the default; a run with the bodies above level 0
+and ``OneWay`` stops, naming the input). At the start of each of its steps, the
+anchor level's source of its latest step is restricted onto the coarser level's
+faces by the same routine that serves a structure model
+(``erf_structure::restrict_face_sources``, see :ref:`sec:StructureCoarseSource`). It goes
+down one level at a time; with :math:`F_f = s_f J_f \Delta x \Delta y \Delta z`
+the force on a face,
 
 .. math::
 
-   F_C = \sum_f w_f F_f, \qquad s_C = F_C / \Delta V_C ,
+   F_C = \sum_f w_f F_f, \qquad s_C = F_C / (J_C \Delta x_C \Delta y_C \Delta z_C) ,
 
 over the fine faces about each coarse face: in the face's own direction those
 from :math:`rI - (r-1)` to :math:`rI + (r-1)` (:math:`r` the refinement ratio
-from that level to the anchor) with the linear weights
+between the two levels) with the linear weights
 :math:`w_f = 1 - |i_f - rI|/r`, and across it the fine faces that tile the
-coarse face. Here
-:math:`s` is a momentum source (N/m\ :sup:`3`) and :math:`\Delta V` a face
-volume (with the cell Jacobians on a fitted mesh). Each fine face's weights add
-to one, so every level carries the same total force, however narrow the kernel
-is against the coarse cells, and the linear weights keep the force's centroid
-in the face's own direction (across it the centroid may move by up to
-:math:`(r-1)/2` fine cells). Without this, a coarser level advanced and solved
-for its pressure as if the bodies were not there; with sub-cycling, the anchor
-level then took its boundary values from a flow that did not feel them, and the
-induction could not reach beyond the anchor level's boxes (a two-level disk
-with its fine box 0.8 R upstream saw 9.9 instead of 9.3 m/s a quarter of a
-diameter ahead of it, and 12 % more thrust). The coarser level uses the anchor
-level's forces of the previous step of that coarser level, from the anchor
-level's last step within it: about half a coarse step behind the coarse step's
-middle (for the IEA 15 MW rotor at 7.5 rpm with 0.2 s coarse steps, under 6
-degrees of rotation and 0.6 coarse cells of tip travel, in a region the
-average-down overwrites anyway); the first coarse step of a run carries none.
-A checkpoint keeps the anchor level's forces, so a restart gives the coarser
-levels the same sources. ERF's average-down of the state after every coarse step still
-replaces the covered coarse cells with the anchor level's
-(``erf.coupling_type = TwoWay``, the default); with ``OneWay`` the coarser
-levels carry the summed force but are not averaged down. Only the anchor level's
+coarse face. Here :math:`s` is a momentum source (N/m\ :sup:`3`) and :math:`J`
+the face Jacobian, the mean of ``detJ`` in the two cells beside the face (at a
+non-periodic domain face, the one cell inside; 1 on a uniform-dz mesh). Each fine face's weights add to one, so every level carries
+the same total force, however narrow the kernel is against the coarse cells, and
+the linear weights keep the force's centroid in the face's own direction (across
+it the centroid may move by up to :math:`(r-1)/2` fine cells). On a non-periodic
+domain face, where the boundary condition sets the momentum, a fine face inside
+the domain gives its whole force to the first coarse face inside. Without this,
+a coarser level advanced and solved for its pressure as if the bodies were not
+there; with sub-cycling, the anchor level then took its boundary values from a
+flow that did not feel them, and the induction could not reach beyond the anchor
+level's boxes (a two-level disk with its fine box 0.8 R upstream saw 9.9 instead
+of 9.3 m/s a quarter of a diameter ahead of it, and 12 % more thrust). The
+coarser level uses the anchor level's source of the previous step of that
+coarser level, from the anchor level's last step within it: about half a coarse
+step behind the coarse step's middle (for the IEA 15 MW rotor at 7.5 rpm with
+0.2 s coarse steps, under 6 degrees of rotation and 0.6 coarse cells of tip
+travel, in a region the average-down overwrites anyway). The first coarse step
+of a run carries none, and neither does a coarse step after a regrid of the
+anchor level until the anchor level's next step. A checkpoint keeps the anchor
+level's source, so a restart gives the coarser levels the same sources. ERF's
+average-down of the state after every coarse step still replaces the covered
+coarse cells with the anchor level's. Only the anchor level's
 source is written to ``moving_bodies/momentum_source.csv``. A finer level than the anchor may exist elsewhere, but not over the
 bodies: the average-down would overwrite their force there, so before every
 coarse step the run aborts if a finer level reaches a rotor, with its kernel's
@@ -804,9 +810,11 @@ each OpenFAST turbine's own checkpoint ``<name>.chkp``, written through
 ``FAST_CreateCheckpoint`` by the rank that owns the turbine, with the
 turbine's node loads (``<name>_nodes.dat``) and lifting-line correction
 (``<name>_fllc.dat``) written by that rank too, the wake lines' running sums
-and the bodies' statistics, and, with an anchor level above 0, the anchor
-level's face forces (``force_x``, ``force_y``, ``force_z``) that the coarser
-levels' first steps after the restart sum onto their faces. A restart may run on another number of ranks: the
+and the bodies' statistics. With an anchor level above 0, the anchor level's
+source that the coarser levels' first steps after the restart restrict onto
+their faces goes to ``<chk>/moving_bodies/StructureCoarseSource`` (``Level``, ``x_faces``,
+``y_faces``, ``z_faces``), the layout ERF writes to ``<chk>/StructureCoarseSource``
+for a structure model, which may run alongside the bodies. A restart may run on another number of ranks: the
 owners are chosen again from its boxes, and each reads its turbines' files
 (tested with the stub library, from two ranks to one). On a restart the
 turbines are restored with ``FAST_ExtInfw_Restart`` instead of being
@@ -814,9 +822,11 @@ initialised, ERF checks that the time index OpenFAST reports is the one its
 own checkpoint expects, and the run continues with the next step; the anchor
 level's momentum sources are not stored but rebuilt at that step from the
 restored loads, as they would have been in the run being continued, while the
-coarser levels take theirs from the stored face forces. A checkpoint written
-before the face forces were stored restarts with an unforced first coarse step,
-and the log says so. With ``fllc = automatic`` the kernel width is set again
+coarser levels take theirs from the stored source. A checkpoint of an earlier
+version, which stored the anchor level's face forces as ``moving_bodies/force_x``,
+``force_y`` and ``force_z``, is read too: the forces are turned into the source
+on the restart's grids. A checkpoint written before either was stored restarts
+with an unforced first coarse step, and the log says so. With ``fllc = automatic`` the kernel width is set again
 from the restored rotor. The diagnostics
 files keep their rows up to the checkpoint, dropping any that a run which went
 on past it wrote, and are appended to from there (a restart in a clean
@@ -912,9 +922,8 @@ checks (the coverage check, the audits, the disks' density check), the
 sampling (``MovingBodies::supply_velocities()``), the OpenFAST step
 (``OpenFASTDriver::step()``, every turbine's ``FAST_CFD_Step`` calls on its
 owner), the spreading (``MovingBodies::spread_sources()``, the zeroing of the
-source and the actuator lines' tip cells included, then
-``MovingBodies::store_face_forces()`` on the anchor level and
-``MovingBodies::restrict_sources()`` at each step of a coarser level), each diagnostics writer,
+source and the actuator lines' tip cells included, and
+``MovingBodies::make_coarse_sources()`` at each step of a coarser level), each diagnostics writer,
 the statistics and the wake lines (their set-up included). Inside the
 exchanges they cover the routing of the points to ranks, the envelope check,
 each message round (``BodyExchange::sample_velocity``: the points and the

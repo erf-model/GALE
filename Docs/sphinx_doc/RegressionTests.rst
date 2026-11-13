@@ -894,13 +894,20 @@ Anchor level on two levels
 ``OpenFAST_ADM_TwoLevel`` (same build requirements) runs the actuator-disk
 deck with a level 1 of 25 m cells over a box around the rotor and its near
 wake: the turbine lives on level 1 (the default anchor), is sampled and forced
-there with the fine level's step, and level 0 carries the turbine's force
-summed onto its faces from level 1. The two-level plotfile and ``T1_flow.csv`` match their golds and
+there with the fine level's step, and level 0 carries level 1's momentum
+source restricted onto its faces (:ref:`sec:StructureCoarseSource`). The
+two-level plotfile and ``T1_flow.csv`` match their golds and
 the integrated source equals minus the thrust in every row.
 ``OpenFASTADM_TwoLevel_BoxParity`` splits the fine level unevenly over two
 ranks and requires the plotfiles and the flow log to agree, and
 ``OpenFAST_ADM_TwoLevel_Restart`` checkpoints at step 5 and restarts to step
 10 with the fine level and the turbine restored exactly.
+``OpenFAST_ADM_TwoLevel_RestartLegacy`` rewrites the step-5 checkpoint with
+``make_legacy_checkpoint.py`` into the layout of an earlier version (the
+anchor level's face forces in ``moving_bodies/force_x``, ``_y``, ``_z``),
+restarts from it and requires step 10 to match the straight run to a relative
+1e-10 (on this uniform-dz mesh, where the face Jacobian is 1). ``MovingBodies_OneWayAboveLevel0`` requires the run to abort when the
+bodies live above level 0 and ``erf.coupling_type`` is not ``TwoWay``.
 
 Test Location: `Exec/CanonicalTests/MovingBodies/OpenFAST_ADM_TwoLevel`_ and `Exec/CanonicalTests/MovingBodies/OpenFAST_ADM_TwoLevel_Restart`_
 
