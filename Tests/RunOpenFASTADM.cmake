@@ -25,8 +25,11 @@
 # is compared with it too, on the columns TURBINE_COLUMNS (a ;-list), to SIGDIGITS.
 
 cmake_minimum_required(VERSION 3.20)
-include("${CMAKE_CURRENT_LIST_DIR}/MPILauncher.cmake")
-include("${CMAKE_CURRENT_LIST_DIR}/ResolveExecutable.cmake")
+if(NOT ERF_TESTS_DIR OR NOT EXISTS "${ERF_TESTS_DIR}/MPILauncher.cmake")
+    message(FATAL_ERROR "ERF_TESTS_DIR must name ERF's Tests folder (Submodules/ERF/Tests), not '${ERF_TESTS_DIR}'")
+endif()
+include("${ERF_TESTS_DIR}/MPILauncher.cmake")
+include("${ERF_TESTS_DIR}/ResolveExecutable.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/CompareDataLogs.cmake")
 
 foreach(arg TEST_EXE INPUT WORKING_DIRECTORY FCOMPARE PLTFILE PLOT_GOLD FLOW_CSV FLOW_GOLD TURBINE_CSV SOURCE_CSV)

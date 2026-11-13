@@ -11,17 +11,19 @@ terrain-fitted meshes, mesh refinement, LES and RANS closures, the surface
 layer) is available to a GALE run.
 
 This repository was the ``ERF-MovingBodies`` branch of ``hgopalan/ERF`` until
-November 2026. Its ``development`` branch takes upstream ERF ``development``
-merges regularly, so the atmospheric core, build system and inputs stay the
-same as ERF's.
+November 2026. It now holds only GALE's own files and takes ERF as a git
+submodule (``Submodules/ERF``), so the atmospheric core, build system and
+inputs are ERF's own.
+
+The documentation is at https://erf-model.github.io/GALE/.
 
 ==================  ================
-Regression Tests     |regtests|
 OpenFAST (stub)      |stubtests|
 OpenFAST (library)   |realtests|
+Documentation        |docs|
 ==================  ================
 
-.. |regtests| image:: https://github.com/erf-model/GALE/actions/workflows/ci.yml/badge.svg?branch=development
+.. |docs| image:: https://github.com/erf-model/GALE/actions/workflows/docs.yml/badge.svg?branch=development
 .. |stubtests| image:: https://github.com/erf-model/GALE/actions/workflows/openfast-stub.yml/badge.svg?branch=development
 .. |realtests| image:: https://github.com/erf-model/GALE/actions/workflows/openfast-real.yml/badge.svg?branch=development
 
@@ -65,7 +67,7 @@ with the ``erf_exec`` of a build described under `Building and running`_.
 
 Every case except the two Askervein cases and the power-curve case runs with
 the bundled OpenFAST stub. The Askervein decks expect the ``IEA15_land_model``
-folder and the terrain file of ``Exec/CanonicalTests/Real_Terrain/Askervein``
+folder and the terrain file of ``Submodules/ERF/Exec/CanonicalTests/Real_Terrain/Askervein``
 next to them; CTest copies both.
 The `cases README <Exec/CanonicalTests/MovingBodies/README.md>`_ lists each
 case, its body and what it checks.
@@ -134,7 +136,8 @@ Requirements of a run
 Building and running
 --------------------
 
-GALE builds with CMake exactly like ERF; the ERF
+GALE's ``CMakeLists.txt`` sets GALE's options and adds ERF as a subproject;
+every ERF build option works as in ERF. The ERF
 `Getting Started <https://erf.readthedocs.io/en/latest/GettingStarted.html>`_
 page gives the system requirements. Clone with the submodules::
 
@@ -174,7 +177,11 @@ OpenFAST was built with).
 With either option CTest also checks that the library loads and runs four
 short tests of the power-curve case (label ``rosco``).
 
-``ERF_ENABLE_MOVING_BODIES=ON`` alone builds the framework with the ``ct_disk``
+The executable is ``cmake-build/ERF/Exec/erf_exec``. GNU Make builds from
+``Exec/GNUmakefile``; the `Building <https://erf-model.github.io/GALE/Building.html>`_
+page has both builds and every option.
+
+``ERF_ENABLE_MOVING_BODIES`` (ON by default in GALE) alone builds the framework with the ``ct_disk``
 body and no OpenFAST. A deck turns the bodies on with ``erf.structures.model = gale``
 and lists them in ``erf.moving_bodies.bodies``; every ``erf.moving_bodies.*`` key is in the inputs
 documentation.
@@ -184,7 +191,10 @@ Cases and tests
 
 ``Exec/CanonicalTests/MovingBodies`` has one folder per case, with the input
 deck, the turbine file and the gold logs, and a README that lists what each
-case checks. The cases run under CTest:
+case checks. With ``-DERF_ENABLE_TESTS=ON`` (and MPI, FFT and the OpenFAST stub, as in
+the build page) they run under CTest
+(``ctest --test-dir cmake-build/Tests --no-tests=error``); ERF's own regression
+suite is not registered in a GALE build:
 
 * label ``moving-bodies``: the stub and ``ct_disk`` cases, their restart and
   box-parity twins, and one abort test per start-up check;
@@ -196,8 +206,8 @@ case checks. The cases run under CTest:
   loads. They are registered when the build is given ``ROSCO_DIR`` or
   ``ERF_BUILD_ROSCO=ON``.
 
-The unit tests of the samplers and the force spreading are in
-``Tests/Unit/MovingBodies``; those of the body exchange, the OpenFAST driver and
+The unit tests of ERF's samplers and force spreading are in ERF
+(``Submodules/ERF/Tests/Unit/MovingBodies``); those of the body exchange, the OpenFAST driver and
 the rest of the turbine model are in ``Turbines/Tests/Unit``, and the model's
 regression tests are registered in ``Turbines/Tests/ERFTurbinesTests.cmake``.
 
@@ -218,13 +228,14 @@ is built on.
 Documentation
 -------------
 
-The theory is in ``Docs/sphinx_doc/theory/MovingBodies.rst``, the inputs in the
-``erf.moving_bodies`` table of ``Docs/sphinx_doc/Inputs.rst``, and the tests in
-``Docs/sphinx_doc/RegressionTests.rst``, alongside the ERF documentation. There
-is no published site yet; build them locally with::
+The documentation is published at https://erf-model.github.io/GALE/ from
+``Docs/sphinx_doc`` on every merge into ``development``: building, the OpenFAST
+coupling, the ``erf.moving_bodies`` inputs, the regression tests and the
+theory. ERF's own documentation is at https://erf.readthedocs.io/en/latest/.
+Build GALE's pages locally with::
 
    pip install -r Docs/sphinx_doc/requirements.txt
-   sphinx-build -b html Docs/sphinx_doc cmake-build/docs
+   sphinx-build -W -b html Docs/sphinx_doc cmake-build/docs
 
 How GALE relates to ERF
 -----------------------
@@ -238,11 +249,11 @@ GALE's turbine module is such a model. It sits in ``Turbines/``, registers as
 structure model ``gale`` and is compiled in from there
 (``Turbines/ERFStructureModel.cmake`` for CMake, ``Turbines/Make.package`` for
 GNU Make). The CMake build adds it whenever the moving-bodies framework is on;
-a GNU Make build needs ``STRUCTURE_HOME = $(ERF_HOME)/Turbines``.
-The planned next steps are to take ERF in as a submodule, so that GALE holds
-only its own files, and to put the body solvers behind one interface inside
-GALE, so that OpenFAST becomes one engine among others that can be added the
-same way.
+``Exec/GNUmakefile`` lists it in ``STRUCTURE_HOME``. ERF is a submodule, so
+GALE holds only its own files and builds against an unmodified ERF. The
+planned next step is to put the body solvers behind one interface inside GALE,
+so that OpenFAST becomes one engine among others that can be added the same
+way.
 
 Development model
 -----------------
@@ -250,9 +261,10 @@ Development model
 Development happens on topic branches off ``development`` with pull requests
 back into ``development``. A new capability comes with a regression case and a
 row in the cases README. Fixes to the shared atmospheric core are contributed
-to upstream ERF and reach this repository through the periodic upstream merges.
-The ERF coding conventions in `CONTRIBUTING.md <CONTRIBUTING.md>`_ apply here
-as well.
+to upstream ERF and reach this repository when the ``Submodules/ERF`` commit
+is moved forward. The ERF coding conventions in
+`CONTRIBUTING.md <https://github.com/erf-model/ERF/blob/development/CONTRIBUTING.md>`_
+apply here as well.
 
 Built on ERF
 ------------

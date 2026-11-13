@@ -16,8 +16,11 @@
 # match the on leg's simulation.log and not the off leg's, for an option that writes no file of its own;
 # OFF_LOG_REGEX, when given, the off leg's and not the on leg's.
 # -DX= defines X as empty, so test for a value, not for DEFINED
-include("${CMAKE_CURRENT_LIST_DIR}/MPILauncher.cmake")
-include("${CMAKE_CURRENT_LIST_DIR}/ResolveExecutable.cmake")
+if(NOT ERF_TESTS_DIR OR NOT EXISTS "${ERF_TESTS_DIR}/MPILauncher.cmake")
+    message(FATAL_ERROR "ERF_TESTS_DIR must name ERF's Tests folder (Submodules/ERF/Tests), not '${ERF_TESTS_DIR}'")
+endif()
+include("${ERF_TESTS_DIR}/MPILauncher.cmake")
+include("${ERF_TESTS_DIR}/ResolveExecutable.cmake")
 
 foreach(arg NRANKS TEST_EXE INPUT WORKING_DIRECTORY FCOMPARE PLTFILE RUN_TIMEOUT ON_OPTIONS)
     if("${${arg}}" STREQUAL "")

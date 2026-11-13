@@ -1,5 +1,8 @@
 name: DocHTML -- Build
 
+# Builds GALE's Sphinx pages (Docs/sphinx_doc) with warnings as errors on every PR, and publishes
+# them to GitHub Pages (https://erf-model.github.io/GALE/) on every push to development.
+
 on:
   push:
     branches: [development]
@@ -9,6 +12,9 @@ on:
 concurrency:
   group: ${{ github.event.pull_request.number || github.ref }}-${{ github.head_ref }}-docs
   cancel-in-progress: ${{ github.ref != 'refs/heads/development' }}
+
+permissions:
+  contents: read
 
 jobs:
   build:
@@ -20,18 +26,31 @@ jobs:
 
       - name: Dependencies
         run: |
-          .github/workflows/dependencies/documentation.sh
           python3 -m pip install --upgrade pip
           python3 -m pip install -r Docs/sphinx_doc/requirements.txt
 
       - name: Build Docs
         run: |
-          ./Docs/BuildDocs.sh
+          sphinx-build -W --keep-going -b html Docs/sphinx_doc Docs/sphinx_doc/_build/html
 
-#     - name: Check links
-#       run: |
-#         cd Docs/sphinx_doc
-#         make SPHINXOPTS="-v -W --keep-going" NO_DOXYGEN=TRUE linkcheck
+      - name: Upload Pages artifact
+        if: github.event_name == 'push' && github.ref == 'refs/heads/development'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: Docs/sphinx_doc/_build/html
 
-      # No deploy step: ERF's docs.yml publishes to erf-model/docs with ERF's key.
-      # GALE has no documentation site yet; the build above is the check.
+  deploy:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/development'
+    needs: build
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

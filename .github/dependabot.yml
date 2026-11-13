@@ -6,7 +6,7 @@ updates:
         interval: "monthly"
     directory: /
     allow:
-      - dependency-name: "Submodules/AMReX"
+      - dependency-name: "Submodules/ERF"
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:

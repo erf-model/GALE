@@ -20,7 +20,7 @@ box for ten steps or so, and is checked by the runner named below. The two
 Askervein cases are the exception: a 6 km x 3 km terrain-fitted domain, and the real OpenFAST library
 (`ERF_OPENFAST_USE_STUB=OFF`, label `openfast-real`) on the IEA 15 MW model in
 `IEA15_land_model` (see its README for the source, licence and changes) and the
-terrain file of `../Real_Terrain/Askervein`, both copied next to the deck by the test.
+terrain file of `Submodules/ERF/Exec/CanonicalTests/Real_Terrain/Askervein`, both copied next to the deck by the test.
 
 | case | body | runner | what it checks |
 | --- | --- | --- | --- |

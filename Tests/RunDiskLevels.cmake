@@ -6,8 +6,11 @@
 # WORKING_DIRECTORY, INPUT_ONE, INPUT_TWO, CHECKER, U_FREE, TOL.
 
 cmake_minimum_required(VERSION 3.20)
-include("${CMAKE_CURRENT_LIST_DIR}/MPILauncher.cmake")
-include("${CMAKE_CURRENT_LIST_DIR}/ResolveExecutable.cmake")
+if(NOT ERF_TESTS_DIR OR NOT EXISTS "${ERF_TESTS_DIR}/MPILauncher.cmake")
+    message(FATAL_ERROR "ERF_TESTS_DIR must name ERF's Tests folder (Submodules/ERF/Tests), not '${ERF_TESTS_DIR}'")
+endif()
+include("${ERF_TESTS_DIR}/MPILauncher.cmake")
+include("${ERF_TESTS_DIR}/ResolveExecutable.cmake")
 
 foreach(arg TEST_EXE PYTHON WORKING_DIRECTORY INPUT_ONE INPUT_TWO CHECKER U_FREE TOL)
     if(NOT DEFINED ${arg} OR "${${arg}}" STREQUAL "")

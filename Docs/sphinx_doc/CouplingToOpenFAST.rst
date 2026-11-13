@@ -19,25 +19,25 @@ this page is the how-to.
 Building
 --------
 
-Build OpenFAST 5.0 (4.2 also works) with its C++ API, which produces the
-shared library and ``FAST_Library.h``. ``Build/setup_openfast.sh`` does this
+Build OpenFAST 5.0 (4.2 also works) as a shared library, which produces
+``FAST_Library.h``; the C++ API is optional (``--no-cpp-api`` skips it). ``Build/setup_openfast.sh`` does this
 in one command (``--force`` rebuilds an existing install); by hand:
 
 .. code-block:: bash
 
-   cmake -DBUILD_OPENFAST_CPP_API=ON -DBUILD_SHARED_LIBS=ON -DDOUBLE_PRECISION=ON \
+   cmake -DBUILD_OPENFAST_CPP_API=OFF -DBUILD_SHARED_LIBS=ON -DDOUBLE_PRECISION=ON \
          -DCMAKE_INSTALL_PREFIX=$HOME/opt/openfast-5.0.0 ..
    make -j4 install
 
-Then build ERF with the coupling. The moving-bodies framework is switched on
+Then configure GALE with the coupling (:doc:`Building`). The moving-bodies framework is switched on
 by ``ERF_ENABLE_OPENFAST``; prescribed-Ct disks alone need only
 ``ERF_ENABLE_MOVING_BODIES`` and no OpenFAST. The decks use the anelastic
 solver with the FFT Poisson solve:
 
 .. code-block:: bash
 
-   cmake -DERF_ENABLE_MPI=ON -DERF_ENABLE_FFT=ON -DERF_ENABLE_OPENFAST=ON \
-         -DOPENFAST_DIR=$HOME/opt/openfast-5.0.0 ..
+   cmake -S . -B cmake-build -DERF_ENABLE_MPI=ON -DERF_ENABLE_FFT=ON -DERF_ENABLE_OPENFAST=ON \
+         -DOPENFAST_DIR=$HOME/opt/openfast-5.0.0
 
 The CMake build records the OpenFAST library directory in ``erf_exec``'s run-time
 search path; a moved installation or another build system needs it on the loader
@@ -375,11 +375,11 @@ Tests
 
 .. code-block:: bash
 
-   ctest -L moving-bodies            # the canonical cases and the start-up aborts
-   ctest -L restart-parity -R "OpenFAST|MovingBodies"
-   ctest -L box-parity -R "OpenFAST|Actuator"
-   Tests/Unit/erf_unit_tests --gtest_filter='OpenFAST*:Actuator*:BodyExchange.*:FLLC*:WakeLines*:RunningStats*:Owned*:LogStreams*:TrimLog*:PrescribedCtDisk.*:MovingBodiesInputs.*'
-   ctest -L parallel -R "Actuator|BodyExchange"   # the same exchanges on 1, 2 and 4 ranks
+   ctest --test-dir cmake-build/Tests -L moving-bodies   # the canonical cases and the start-up aborts
+   ctest --test-dir cmake-build/Tests -L restart-parity -R "OpenFAST|MovingBodies"
+   ctest --test-dir cmake-build/Tests -L box-parity -R "OpenFAST|Actuator"
+   cmake-build/ERF/Tests/Unit/erf_unit_tests --gtest_filter='OpenFAST*:Actuator*:BodyExchange.*:FLLC*:WakeLines*:RunningStats*:Owned*:LogStreams*:TrimLog*:PrescribedCtDisk.*:MovingBodiesInputs.*'
+   ctest --test-dir cmake-build -L parallel -R "Actuator|BodyExchange"   # the same exchanges on 1, 2 and 4 ranks
 
 These CTests run on the stub library (``-DERF_OPENFAST_USE_STUB=ON``); their
 golds hold the stub's loads. With a real OpenFAST the same decks run, but the

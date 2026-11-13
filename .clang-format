@@ -1,7 +1,7 @@
 # -*- mode: yaml -*-
 #
 # The authority for ERF's coding style is the "ERF Coding Style Guide" section
-# of CONTRIBUTING.md; this file exists to keep clang-format from fighting it.
+# of ERF's CONTRIBUTING.md (github.com/erf-model/ERF); this file exists to keep clang-format from fighting it.
 #
 # Requires clang-format 14 or newer (SpaceBeforeParensOptions).
 #
@@ -69,7 +69,7 @@ IncludeIsMainRegex: '$'
 IndentCaseLabels: false
 IndentWidth:     4
 IndentWrappedFunctionNames: false
-# InsertBraces: true   # CONTRIBUTING.md brace rule; off until that sweep is done
+# InsertBraces: true   # ERF CONTRIBUTING.md brace rule; off until that sweep is done
 JavaScriptQuotes: Leave
 JavaScriptWrapImports: true
 KeepEmptyLinesAtTheStartOfBlocks: true

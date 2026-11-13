@@ -3,8 +3,11 @@
 # on how the domain is decomposed. The reference runs on one rank because on more ranks
 # amr.refine_grid_layout splits even a single box.
 # -DX= defines X as empty, so test for a value, not for DEFINED
-include("${CMAKE_CURRENT_LIST_DIR}/MPILauncher.cmake")
-include("${CMAKE_CURRENT_LIST_DIR}/ResolveExecutable.cmake")
+if(NOT ERF_TESTS_DIR OR NOT EXISTS "${ERF_TESTS_DIR}/MPILauncher.cmake")
+    message(FATAL_ERROR "ERF_TESTS_DIR must name ERF's Tests folder (Submodules/ERF/Tests), not '${ERF_TESTS_DIR}'")
+endif()
+include("${ERF_TESTS_DIR}/MPILauncher.cmake")
+include("${ERF_TESTS_DIR}/ResolveExecutable.cmake")
 
 foreach(arg NRANKS TEST_EXE INPUT WORKING_DIRECTORY FCOMPARE PLTFILE RTOL ATOL)
     if("${${arg}}" STREQUAL "")
