@@ -365,11 +365,23 @@ and the torque by over 80 % in the first step, then recovers), so these are
 regressions of the coupling, not validations.
 
 The plotfile, ``T1_flow.csv`` and the turbine's rotor speed, loads, torque and
-power in ``T1_erf.csv`` match golds made on macOS arm64 with OpenFAST 5.0.0, at a
-relative tolerance of 1e-6 for the plotfile and two units of the sixth significant
-digit for the logs: OpenFAST's loads cross to ERF in single precision, so another
-compiler or maths library may round a load differently (at most 6e-8 relative, of
-order 1e-8 relative in the flow); one and two ranks agree to 1e-15. The load check
+power in ``T1_erf.csv`` match golds at a relative tolerance of 1e-6 for the
+plotfile and two units of the sixth significant digit for the logs. The golds are
+per platform: ``Tests/ERFGoldFiles/OpenFAST_{ADM,ALM}_Askervein_macOS`` and
+``..._Linux`` for the plotfiles, ``T1_erf.csv.macOS.gold`` and
+``T1_erf.csv.Linux.gold`` (likewise ``T1_flow.csv``) beside the deck. macOS arm64
+(Apple clang, Homebrew gfortran, Accelerate) and the ``Linux GCC OpenFAST 5`` CI
+job both run OpenFAST 5.0.0 and agree exactly for the first four steps, then part:
+the line's filtered lifting-line correction and the disk's correction feed their
+own output back, so a last-bit difference in one of their filters, from a
+different libm and Fortran compiler, grows over the ten steps to 4e-5 relative in
+the velocities, 1e-3 in the thrust and 4e-3 in the power. One gold set would
+therefore need about 1e-4 on the plotfile and 1e-2 on the power, coarser than the
+changes these cases exist to catch, so each platform keeps its own set and is
+refreshed on that platform. Within one platform the answers are reproducible:
+OpenFAST's loads cross to ERF in single precision, so a load rounds at most 6e-8
+relative (of order 1e-8 relative in the flow); one and two ranks agree to 1e-15.
+The load check
 is an identity. For the actuator line, with its tower and nacelle forced, the
 integrated source equals minus the total load ``load_x`` (to 8 digits). For the
 actuator disk, whose rings carry each blade node's force along the tilted (6
