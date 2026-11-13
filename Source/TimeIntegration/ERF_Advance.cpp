@@ -227,6 +227,8 @@ ERF::Advance (int lev, double time, double dt_lev, int iteration, int /*ncycle*/
                 if (l < L) { rr[l] = refRatio(l); }
             }
             moving_bodies->make_coarse_sources(lev, grids, dmap, geom, rr, detJ);
+        } else if (lev < moving_bodies->anchor_level()) {
+            moving_bodies->drop_coarse_source(lev);
         }
     }
 

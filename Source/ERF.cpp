@@ -2311,8 +2311,8 @@ ERF::InitData_post ()
         moving_bodies->set_ground((moving_bodies->anchor_level() <= finest_level) ? z_phys_nd[lev].get() : nullptr, Geom(lev),
                                   grids[lev], dmap[lev], t_new[0], finest_level);
         if (!restart_chkfile.empty()) {
-            const MultiFab* detJ = (SolverChoice::mesh_type != MeshType::ConstantDz) ? detJ_cc[lev].get() : nullptr;
-            moving_bodies->read_checkpoint(restart_chkfile, t_new[0], grids[lev], dmap[lev], detJ);
+            // detJ_cc as advance() passes it, with which an earlier version made the face forces it wrote
+            moving_bodies->read_checkpoint(restart_chkfile, t_new[0], grids[lev], dmap[lev], detJ_cc[lev].get());
         }
     }
 

@@ -658,8 +658,8 @@ from :math:`rI - (r-1)` to :math:`rI + (r-1)` (:math:`r` the refinement ratio
 between the two levels) with the linear weights
 :math:`w_f = 1 - |i_f - rI|/r`, and across it the fine faces that tile the
 coarse face. Here :math:`s` is a momentum source (N/m\ :sup:`3`) and :math:`J`
-the face Jacobian, the mean of ``detJ`` in the two cells beside the face (1 on a
-uniform-dz mesh). Each fine face's weights add to one, so every level carries
+the face Jacobian, the mean of ``detJ`` in the two cells beside the face (at a
+non-periodic domain face, the one cell inside; 1 on a uniform-dz mesh). Each fine face's weights add to one, so every level carries
 the same total force, however narrow the kernel is against the coarse cells, and
 the linear weights keep the force's centroid in the face's own direction (across
 it the centroid may move by up to :math:`(r-1)/2` fine cells). On a non-periodic
@@ -812,8 +812,9 @@ turbine's node loads (``<name>_nodes.dat``) and lifting-line correction
 (``<name>_fllc.dat``) written by that rank too, the wake lines' running sums
 and the bodies' statistics. With an anchor level above 0, the anchor level's
 source that the coarser levels' first steps after the restart restrict onto
-their faces goes to ``<chk>/StructureCoarseSource`` (``Level``, ``x_faces``,
-``y_faces``, ``z_faces``), the layout ERF writes for a structure model. A restart may run on another number of ranks: the
+their faces goes to ``<chk>/moving_bodies/StructureCoarseSource`` (``Level``, ``x_faces``,
+``y_faces``, ``z_faces``), the layout ERF writes to ``<chk>/StructureCoarseSource``
+for a structure model, which may run alongside the bodies. A restart may run on another number of ranks: the
 owners are chosen again from its boxes, and each reads its turbines' files
 (tested with the stub library, from two ranks to one). On a restart the
 turbines are restored with ``FAST_ExtInfw_Restart`` instead of being

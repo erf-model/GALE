@@ -1999,7 +1999,7 @@ if(ERF_ENABLE_OPENFAST AND ERF_OPENFAST_USE_STUB AND ERF_ENABLE_FFT AND ERF_ENAB
       unset(TEST_FILES_DIR)
       resolve_test_exe("" "erf_exec" _legacy_exe)
       add_test(NAME ${TEST_NAME}
-               COMMAND sh -c "rm -rf plt0* rplt0* chk0* moving_bodies T1_* && ${MPI_COMMANDS} ${_legacy_exe} OpenFAST_ADM_TwoLevel_Restart.i erf.check_int=5 > straight.log 2>&1 && test -f chk00005/StructureCoarseSource/x_faces_H && ${ERF_TEST_PYTHON} make_legacy_checkpoint.py chk00005 15625 > legacy.log 2>&1 && ${MPI_COMMANDS} ${_legacy_exe} OpenFAST_ADM_TwoLevel_Restart.i erf.restart=chk00005 erf.plot_file_1=rplt > restart.log 2>&1 && grep -q 'face forces of an earlier version' restart.log && ${MPI_FCOMP_COMMANDS} ${FCOMPARE_EXE} --abort_if_not_all_found --abs_tol 0 --rel_tol 1.0e-10 plt00010 rplt00010"
+               COMMAND sh -c "rm -rf plt0* rplt0* chk0* moving_bodies T1_* && ${MPI_COMMANDS} ${_legacy_exe} OpenFAST_ADM_TwoLevel_Restart.i erf.check_int=5 > straight.log 2>&1 && test -f chk00005/moving_bodies/StructureCoarseSource/x_faces_H && ${ERF_TEST_PYTHON} make_legacy_checkpoint.py chk00005 15625 > legacy.log 2>&1 && ${MPI_COMMANDS} ${_legacy_exe} OpenFAST_ADM_TwoLevel_Restart.i erf.restart=chk00005 erf.plot_file_1=rplt > restart.log 2>&1 && grep -q 'face forces of an earlier version' restart.log && ${MPI_FCOMP_COMMANDS} ${FCOMPARE_EXE} --abort_if_not_all_found --abs_tol 0 --rel_tol 1.0e-10 plt00010 rplt00010"
                WORKING_DIRECTORY ${CURRENT_TEST_BINARY_DIR})
       set_tests_properties(${TEST_NAME} PROPERTIES
           LABELS "regression;moving-bodies" TIMEOUT 600 PROCESSORS ${NP}

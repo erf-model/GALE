@@ -140,8 +140,8 @@ MovingBodies::create (const SolverChoice& sc, int max_level, const Vector<double
     // (ERF::make_structure_coarse_sources); one-way, the air under the anchor level would not feel it
     if (anchor > 0 && sc.coupling_type != CouplingType::TwoWay) {
         Abort("erf.moving_bodies: the bodies live on level " + std::to_string(anchor) + " (erf.moving_bodies.anchor_level / "
-              "amr.max_level), and the coarser levels take their force only with erf.coupling_type = TwoWay; set it "
-              "(a run that mixes anelastic and compressible levels is one-way), or put the bodies on level 0");
+              "amr.max_level), and the coarser levels take their force only with erf.coupling_type = TwoWay; set it, "
+              "or put the bodies on level 0");
     }
     // the anchor level's step: erf.fixed_dt divided by the sub-cycling ratios down to that level
     AMREX_ALWAYS_ASSERT_WITH_MESSAGE(anchor < static_cast<int>(fixed_dt_levels.size()) && fixed_dt_levels[anchor] > 0.0,
@@ -337,7 +337,9 @@ MovingBodies::write_checkpoint (const std::string& chkdir, const BoxArray& grids
             to_write = &m_chk_src;
         }
         if (to_write) {
-            const std::string src_dir = chkdir + "/StructureCoarseSource";
+            // in the bodies' own directory, with the layout ERF gives <chk>/StructureCoarseSource, which a
+            // structure model of the same run writes
+            const std::string src_dir = dir + "/StructureCoarseSource";
             if (ParallelDescriptor::IOProcessor()) {
                 if (!UtilCreateDirectory(src_dir, 0755)) { CreateDirectoryFailed(src_dir); }
                 std::ofstream level_file(src_dir + "/Level");
@@ -816,45 +818,6 @@ MovingBodies::read_checkpoint (const std::string& chkdir, double time, const Box
 #ifdef ERF_USE_OPENFAST
     m_fllc_state_dir = dir;
 #endif
-    // the anchor level's source at the checkpoint: the coarser levels' source until the anchor level steps,
-    // read as ERF reads a structure model's (ERF::read_structure_coarse_source_checkpoint)
-    for (MultiFab& mf : m_chk_src) { mf.clear(); }
-    if (m_anchor > 0) {
-        const std::string src_dir = chkdir + "/StructureCoarseSource";
-        int level_chk = -1;
-        if (ParallelDescriptor::IOProcessor()) {
-            std::ifstream level_file(src_dir + "/Level");
-            if (level_file) { level_file >> level_chk; }
-        }
-        ParallelDescriptor::Bcast(&level_chk, 1, ParallelDescriptor::IOProcessorNumber());
-        const char* face[3] = {"x_faces", "y_faces", "z_faces"};
-        if (level_chk == m_anchor) {
-            for (int d = 0; d < 3; ++d) { VisMF::Read(m_chk_src[d], src_dir + "/" + face[d]); }
-        } else if (level_chk >= 0) {
-            Print() << "Moving bodies: " << src_dir << " holds the source on level " << level_chk << ", but the bodies now live on level "
-                    << m_anchor << "; the coarser levels take their first step after the restart without it\n";
-        } else if (erf_actuator::file_exists_everywhere(dir + "/force_x_H")) {
-            // a checkpoint of an earlier version: the anchor level's face forces (N), turned into the source
-            // (N/m^3) on the anchor level's grids of this run
-            const char* name[3] = {"force_x", "force_y", "force_z"};
-            for (int d = 0; d < 3; ++d) {
-                MultiFab force_chk;
-                VisMF::Read(force_chk, dir + "/" + name[d]);
-                const BoxArray ba = convert(grids_anchor, IntVect::TheDimensionVector(d));
-                MultiFab force(ba, dmap_anchor, 1, 0);
-                force.setVal(Real(0.0));
-                force.ParallelCopy(force_chk, 0, 0, 1);
-                m_chk_src[d].define(ba, dmap_anchor, 1, 0);
-                erf_actuator::face_forces_to_source(d, force, detJ_anchor, m_anchor_geom, m_chk_src[d]);
-            }
-            Print() << "Moving bodies: the checkpoint " << chkdir << " holds the anchor level's face forces of an earlier version "
-                    << "(moving_bodies/force_x, _y, _z); the coarser levels take them, as a source, until the anchor level steps\n";
-        } else {
-            Print() << "Moving bodies: the checkpoint " << chkdir << " holds no anchor-level source; the levels below the "
-                    << "anchor get the bodies' force from the anchor level's first step on (so their first step after the restart "
-                    << "differs from a straight run's)\n";
-        }
-    }
     // each body's statistics, read by its owner alone (which alone keeps them); a malformed file stops every
     // rank with its owner's message, the first in body order as when every rank read every file
     {
@@ -944,6 +907,46 @@ MovingBodies::read_checkpoint (const std::string& chkdir, double time, const Box
     if (anchor_chk >= 0 && anchor_chk != m_anchor) {
         Abort("erf.moving_bodies: the checkpoint's bodies live on level " + std::to_string(anchor_chk) + ", this run's on level " +
               std::to_string(m_anchor) + " (erf.moving_bodies.anchor_level / amr.max_level); restart with the same anchor level");
+    }
+    // the anchor level's source at the checkpoint: the coarser levels' source until the anchor level steps,
+    // read as ERF reads a structure model's (ERF::read_structure_coarse_source_checkpoint); after the anchor
+    // level is checked, so the source is read onto that level's grids
+    for (MultiFab& mf : m_chk_src) { mf.clear(); }
+    if (m_anchor > 0) {
+        const std::string src_dir = dir + "/StructureCoarseSource";
+        int level_chk = -1;
+        if (ParallelDescriptor::IOProcessor()) {
+            std::ifstream level_file(src_dir + "/Level");
+            if (level_file) { level_file >> level_chk; }
+        }
+        ParallelDescriptor::Bcast(&level_chk, 1, ParallelDescriptor::IOProcessorNumber());
+        const char* face[3] = {"x_faces", "y_faces", "z_faces"};
+        if (level_chk == m_anchor) {
+            for (int d = 0; d < 3; ++d) { VisMF::Read(m_chk_src[d], src_dir + "/" + face[d]); }
+        } else if (level_chk >= 0) {
+            Print() << "Moving bodies: " << src_dir << " holds the source on level " << level_chk << ", but the bodies now live on level "
+                    << m_anchor << "; the coarser levels take their first step after the restart without it\n";
+        } else if (erf_actuator::file_exists_everywhere(dir + "/force_x_H")) {
+            // a checkpoint of an earlier version: the anchor level's face forces (N), turned into the source
+            // (N/m^3) on the anchor level's grids of this run
+            const char* name[3] = {"force_x", "force_y", "force_z"};
+            for (int d = 0; d < 3; ++d) {
+                MultiFab force_chk;
+                VisMF::Read(force_chk, dir + "/" + name[d]);
+                const BoxArray ba = convert(grids_anchor, IntVect::TheDimensionVector(d));
+                MultiFab force(ba, dmap_anchor, 1, 0);
+                force.setVal(Real(0.0));
+                force.ParallelCopy(force_chk, 0, 0, 1);
+                m_chk_src[d].define(ba, dmap_anchor, 1, 0);
+                erf_actuator::face_forces_to_source(d, force, detJ_anchor, m_anchor_geom, m_chk_src[d]);
+            }
+            Print() << "Moving bodies: the checkpoint " << chkdir << " holds the anchor level's face forces of an earlier version "
+                    << "(moving_bodies/force_x, _y, _z); the coarser levels take them, as a source, until the anchor level steps\n";
+        } else {
+            Print() << "Moving bodies: the checkpoint " << chkdir << " holds no anchor-level source; the levels below the "
+                    << "anchor get the bodies' force from the anchor level's first step on (so their first step after the restart "
+                    << "differs from a straight run's)\n";
+        }
     }
     if (dt_chk > 0.0 && std::abs(dt_chk - m_dt) > 1.0e-9 * m_dt) {
         Abort("erf.moving_bodies: the checkpoint's bodies stepped " + std::to_string(dt_chk) + " s on their level, this run " +
@@ -1911,6 +1914,12 @@ MovingBodies::anchor_source (const BoxArray& grids_anchor, const DistributionMap
     MultiFab::Add(src[0], m_src_x, 0, 0, 1, 0);
     MultiFab::Add(src[1], m_src_y, 0, 0, 1, 0);
     MultiFab::Add(src[2], m_src_z, 0, 0, 1, 0);
+}
+
+void
+MovingBodies::drop_coarse_source (int lev)
+{
+    if (lev < static_cast<int>(m_crse_src_defined.size())) { m_crse_src_defined[lev] = 0; }
 }
 
 void

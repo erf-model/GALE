@@ -69,7 +69,8 @@ public:
      * solution was taken, the anchor level and step, and one record of every body's placing and
      * forcing inputs) and each OpenFAST turbine's own checkpoint <chkdir>/moving_bodies/<name>.chkp.
      * With the bodies above level 0, the anchor level's source the coarser levels take at their next
-     * step goes to <chkdir>/StructureCoarseSource, in the layout ERF writes for a structure model.
+     * step goes to <chkdir>/moving_bodies/StructureCoarseSource, in the layout ERF writes to
+     * <chkdir>/StructureCoarseSource for a structure model.
      * @param grids_anchor,dmap_anchor the anchor level's boxes and their distribution now
      */
     void write_checkpoint (const std::string& chkdir, const amrex::BoxArray& grids_anchor,
@@ -87,9 +88,10 @@ public:
      * logs lose the rows written after the checkpoint. A checkpoint without bodies (a precursor)
      * starts the bodies at that time. The anchor level's momentum source is rebuilt from the
      * restored OpenFAST loads at its first step; until then the coarser levels take the source read
-     * from <chkdir>/StructureCoarseSource (or, from a checkpoint that has only the older
+     * from <chkdir>/moving_bodies/StructureCoarseSource (or, from a checkpoint that has only the older
      * moving_bodies/force_{x,y,z} face forces, those forces turned into the source).
-     * @param detJ_anchor the anchor level's detJ_cc on a stretched or terrain-following mesh, else nullptr
+     * @param detJ_anchor the anchor level's detJ_cc, as advance() gets it (used only to turn the older face
+     *        forces into the source, with the volumes they were made with)
      */
     void read_checkpoint (const std::string& chkdir, double time, const amrex::BoxArray& grids_anchor,
                           const amrex::DistributionMapping& dmap_anchor, const amrex::MultiFab* detJ_anchor);
@@ -154,6 +156,13 @@ public:
                               const amrex::Vector<amrex::Geometry>& geom,
                               const amrex::Vector<amrex::IntVect>& ref_ratio,
                               const amrex::Vector<const amrex::MultiFab*>& detJ);
+
+    /**
+     * Called by ERF on a level below the anchor level when the anchor level no longer exists (a regrid
+     * removed it): level lev takes its step without the bodies' source, as ERF clears a structure
+     * model's coarse source at every step (check_levels() then stops the run at the finest level).
+     */
+    void drop_coarse_source (int lev);
 
     /**
      * Called by ERF at every coarse step: abort when the anchor level has no grids, or when a level
