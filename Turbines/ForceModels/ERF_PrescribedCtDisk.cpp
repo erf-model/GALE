@@ -81,8 +81,9 @@ PrescribedCtDisk::update (const std::vector<Real>& sample_vel, const std::vector
     m_u_disk = u_disk / m_area_total;
     // a turbine table's Ct at the sampled free-stream speed (zero below cut-in and above cut-out)
     if (has_curve()) { m_ct = m_curve.ct(m_u_inf); }
-    // thrust along the normal, opposing the flow through the disk; the fluid gets -T n
-    m_thrust = 0.5 * m_rho * m_ct * m_u_inf * m_u_inf * m_area_total;
+    // thrust along the normal, opposing the flow through the disk; the fluid gets -T n. U |U| keeps
+    // the sign of the flow, so a reversed flow (U < 0) is slowed as well (T < 0, the fluid gets +|T| n)
+    m_thrust = 0.5 * m_rho * m_ct * m_u_inf * std::abs(m_u_inf) * m_area_total;
     for (int p = 0; p < n; ++p) {
         const Real share = m_area[p] / m_area_total;
         for (int d = 0; d < 3; ++d) { m_force[3*p+d] = -m_thrust * share * m_normal[d]; }

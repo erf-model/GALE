@@ -324,6 +324,38 @@ TEST(MovingBodiesInputs, TheRestartRecordHoldsTheWidthsInUse)
     EXPECT_FALSE(MovingBodiesInputs::changed_record_entry(chk, MovingBodiesInputs::restart_record(b), key, was, now));
 }
 
+// An input the body does not use is not recorded, so changing it does not stop a restart: the nacelle
+// area without a nacelle drag, the correction time with a fixed correction_relax. A checkpoint that
+// recorded them (written before this) still restarts: entries the record lacks are not compared.
+TEST(MovingBodiesInputs, TheRestartRecordLeavesOutUnusedInputs)
+{
+    MovingBodyInputs b;
+    b.type = "openfast_turbine";
+    b.mode = "adm";
+    b.sampling = "disk_corrected";
+    b.nacelle_cd = 0.0;
+    b.nacelle_area = 60.0;
+    b.correction_relax = 0.5;
+    b.correction_time = 3.0;
+    auto r = MovingBodiesInputs::restart_record(b);
+    EXPECT_EQ(record_value(r, "nacelle_area"), "");
+    EXPECT_EQ(record_value(r, "correction_time"), "");
+    EXPECT_EQ(record_value(r, "correction_relax"), "0.5");
+    // an older checkpoint that recorded both, with other values: no change
+    std::map<std::string,std::string> chk(r.begin(), r.end());
+    chk["nacelle_area"] = "10";
+    chk["correction_time"] = "-1";
+    std::string key, was, now;
+    EXPECT_FALSE(MovingBodiesInputs::changed_record_entry(chk, r, key, was, now));
+    // in use, they are recorded and compared
+    b.nacelle_cd = 1.0;
+    b.correction_relax = -1.0;
+    r = MovingBodiesInputs::restart_record(b);
+    EXPECT_EQ(record_value(r, "nacelle_area"), "60");
+    EXPECT_EQ(record_value(r, "correction_time"), "3");
+    EXPECT_TRUE(MovingBodiesInputs::changed_record_entry(chk, r, key, was, now));
+}
+
 TEST(MovingBodiesInputs, TheEnvelopeCheckIntervalDefaultsToEveryStepAndMustBePositive)
 {
     set_turbine("Tenv", "adm", "");
@@ -427,12 +459,12 @@ TEST(MovingBodiesInputs, FllcAutomaticSetsTheStudySettingsAndLeavesEpsilonToTheR
     const MovingBodyInputs& b = only_body(in);
     EXPECT_TRUE(b.fllc);
     EXPECT_TRUE(b.fllc_automatic);
-    EXPECT_DOUBLE_EQ(b.epsilon_diameters, 0.035);
-    EXPECT_DOUBLE_EQ(b.fllc_eps_chord, 0.15);
-    EXPECT_DOUBLE_EQ(b.fllc_eps_dr, 3.0);
-    EXPECT_DOUBLE_EQ(b.fllc_start_time, 5.0);
+    EXPECT_EQ(b.epsilon_diameters, amrex::Real(0.035));
+    EXPECT_EQ(b.fllc_eps_chord, amrex::Real(0.15));
+    EXPECT_EQ(b.fllc_eps_dr, amrex::Real(3.0));
+    EXPECT_EQ(b.fllc_start_time, amrex::Real(5.0));
     EXPECT_EQ(b.num_force_points_blade, 300);
-    EXPECT_DOUBLE_EQ(b.fllc_relax, 0.3);   // a key automatic does not set stays the user's
+    EXPECT_EQ(b.fllc_relax, amrex::Real(0.3));   // a key automatic does not set stays the user's
     // epsilon waits for the rotor: a width asked for before then aborts, naming the body
     EXPECT_LT(b.epsilon, 0.0);
     EXPECT_NE(erf_gtest::abort_message([&] { (void)b.kernel_widths(1.0); }).find(name), std::string::npos);

@@ -96,6 +96,9 @@ MovingBodies::create (MovingBodiesInputs in, int max_level, bool all_anelastic, 
             }
         } else {
             pp_root.query("stop_time", stop_time);
+            // ERF writes its own default, the largest double, into ParmParse when stop_time is not given
+            // (queryAdd in ERF::ReadParameters): read back, it means no stop time
+            if (stop_time >= std::numeric_limits<double>::max()) { stop_time = -1.0; }
             if (stop_time <= 0.0 && max_step > 0 && fixed_dt > 0.0) {
                 stop_time = max_step * fixed_dt;
             }
@@ -105,6 +108,17 @@ MovingBodies::create (MovingBodiesInputs in, int max_level, bool all_anelastic, 
                            max_step * fixed_dt < stop_time - 1.0e-6 * fixed_dt);
     }
     const double input_fixed_dt = fixed_dt;
+    // ERF scales its first step by erf.init_shrink (ERF_ComputeTimestep.cpp, step 0 only), which the
+    // fixed-step check of advance_step would then stop at step 1 without naming the key. Checked on a
+    // restart too: one from chk00000 takes step 0 again (and the first leg of any other needed 1)
+    {
+        double init_shrink = 1.0;
+        pp.query("init_shrink", init_shrink);
+        if (init_shrink != 1.0) {
+            Abort("erf.moving_bodies: erf.init_shrink = " + std::to_string(init_shrink) + " changes ERF's first step, and the "
+                  "bodies take the fixed step erf.fixed_dt from the start; set erf.init_shrink = 1");
+        }
+    }
 
     // OpenFAST is not floating-point-exception clean; runs with prescribed-Ct disks only may trap
     bool any_turbine = false;

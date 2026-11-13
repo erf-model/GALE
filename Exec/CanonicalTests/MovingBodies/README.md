@@ -49,6 +49,7 @@ Refresh a gold set on the platform it belongs to.
 | `OpenFAST_ADM_DiskAndTurbine` | stub turbine (disk, 2 cells) and a prescribed-Ct disk (1 cell) | `RunOpenFASTADM.cmake` | the disk's log, `fx == -load_x` of both bodies; with the two swapped, ownership parity with the disk on rank 1 (`total_load.csv` gathered from it) |
 | `OpenFAST_ADM_TwoLevel` | stub turbine, disk, on level 1 of two | `RunOpenFASTADM.cmake` | the anchor level: sampled and forced on the fine patch, stepped with its step; level 0 carries the source restricted onto its faces |
 | `OpenFAST_ADM_TwoLevel_Restart` | as above | `RunRestartParity.cmake`, `make_legacy_checkpoint.py` | restart parity with the fine level, every log; `OpenFAST_ADM_TwoLevel_RestartLegacy`: a restart from the step-5 checkpoint rewritten by `make_legacy_checkpoint.py` into an earlier version's layout (face forces in `moving_bodies/force_x`, `_y`, `_z`) matches the straight run to 1e-10; `OpenFAST_ADM_TwoLevel_RestartBodiesDir`: the same with the source in `moving_bodies/StructureCoarseSource`, matched exactly |
+| `Actuator_TurbineCtDisk` | a disk on the turbine table `NREL_5MW_126` beside a constant-Ct disk | `RunTurbineCtDisk.cmake` | both disk logs against their golds to ten digits; `check_turbine_disk.py` reads the table and requires the table's `ct` and `power_curve` at the free-stream speed and T = 1/2 rho Ct U\|U\| A in every row (needs Python 3) |
 | `Actuator_CtDisk_TwoLevel` | prescribed-Ct disk on one level and on level 1 of two, the fine box tight around it | `RunDiskLevels.cmake` | the coarse level carries the disk's force: the two runs' induction (disk-averaged and upstream velocity deficits) agree within 10 % |
 | `OpenFAST_ALM_Uniform` | stub turbine, line | `RunOpenFASTADM.cmake` | the rotating line; tip-travel limit |
 | `OpenFAST_ALM_Tower` | stub turbine, line, tower, nacelle | `RunOpenFASTADM.cmake` | `fx == -load_x` with the tower and nacelle |
@@ -66,19 +67,21 @@ decomposition-sensitive step.
 The start-up checks have one abort test each (`add_test_abort`, label
 `moving-bodies`), run on the decks above with one input changed: an anchor
 level above the finest or missing at the start, a stop time that is not a
-whole number of steps (of the single level, and of level 0 of two), a
+whole number of steps (of the single level, and of level 0 of two), no stop time at all, a
 prescribed-Ct disk's `air_density` off ERF's density, a finer level over the
 bodies, floating-point traps with a turbine, an out-of-range
 `correction_relax`, an actuator-line tip that sweeps more cells per step
 than `alm_max_tip_cells` allows (on a flat mesh, over a ridge where the physical cells are shorter, and on a
 stretched mesh where the short cells near the ground count with the share of the tip speed that crosses them), a nacelle kernel too narrow for its drag area (correction factor under 0.5),
-a tower width given without a tower, and two turbines of different OpenFAST time steps on one rank
+a tower width given without a tower, `erf.init_shrink` other than 1, `erf.terrain_type = ImmersedForcing`, and two turbines of different OpenFAST time steps on one rank
 (`MovingBodies_MixedTimeSteps_OneRank`). `MovingBodies_Owners_*` and `MovingBodies_MixedTimeSteps_TwoRanks`
 run a deck for one step on two ranks and require it to end normally with the turbines and disks on the ranks the
 restart and box-parity tests rely on (and the ranks their points and wake lines reach), and turbines of different OpenFAST time steps on different ranks
 (`Tests/RunExpectExit.cmake`). `OpenFAST_ADM_TwoTurbines/stub_turbine_dt002.fst` is the stub deck with
 `dt = 0.02` those tests give the second turbine. `MovingBodies_StopDatetime` runs `OpenFAST_ADM_Restart` to
-a `stop_datetime` past the deck's `stop_time` and requires it to get there.
+a `stop_datetime` past the deck's `stop_time` and requires it to get there. `MovingBodies_MaxStepWithoutStopTime`
+runs the same deck with its `stop_time` line removed and `max_step = 4`, and requires OpenFAST to be started for
+the 2 s of four steps and the run to get there.
 
 The decks that do not set `sampling` run the default `disk_corrected`; on the
 50 m decks its filter width is about two rotor radii, past the range the factor

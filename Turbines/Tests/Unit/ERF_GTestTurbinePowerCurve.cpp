@@ -156,7 +156,9 @@ TEST(TurbinePowerCurve, DiskTakesCtFromTheTableAtTheFreeStreamSpeed)
         const Real T = 0.5 * 1.2 * ct * u * u * pi * 50.0 * 50.0;
         EXPECT_NEAR(d.ct(), ct, rel_tol);
         if (u == Real(6.0)) { EXPECT_NEAR(d.ct(), 0.75, rel_tol); }   // the table's row, not a constant
-        EXPECT_NEAR(d.thrust(), T, 1.0e-9 * (T + 1.0));
+        // the thrust sums the disk's areas and speeds: 1e-9 relative in double, 2e-5 in single (as the disk tests)
+        const Real thrust_tol = (sizeof(Real) == 8) ? Real(1.0e-9) : Real(2.0e-5);
+        EXPECT_NEAR(d.thrust(), T, thrust_tol * (T + 1.0));
         EXPECT_NEAR(d.power_curve(), b.curve.power(u), rel_tol * (b.curve.power(u) + 1.0));
         Real row[7];
         d.log_row(0.0, true, row);
