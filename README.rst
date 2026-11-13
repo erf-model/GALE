@@ -20,12 +20,18 @@ The documentation is at https://erf-model.github.io/GALE/.
 ==================  ================
 OpenFAST (stub)      |stubtests|
 OpenFAST (library)   |realtests|
+GPU (compile)        |gpu|
+Windows              |windows|
+Style                |style|
 Documentation        |docs|
 ==================  ================
 
 .. |docs| image:: https://github.com/erf-model/GALE/actions/workflows/docs.yml/badge.svg?branch=development
 .. |stubtests| image:: https://github.com/erf-model/GALE/actions/workflows/openfast-stub.yml/badge.svg?branch=development
 .. |realtests| image:: https://github.com/erf-model/GALE/actions/workflows/openfast-real.yml/badge.svg?branch=development
+.. |gpu| image:: https://github.com/erf-model/GALE/actions/workflows/gpu.yml/badge.svg?branch=development
+.. |windows| image:: https://github.com/erf-model/GALE/actions/workflows/windows.yml/badge.svg?branch=development
+.. |style| image:: https://github.com/erf-model/GALE/actions/workflows/style.yml/badge.svg?branch=development
 
 Where the examples are
 ----------------------

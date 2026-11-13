@@ -172,3 +172,58 @@ The ERF version GALE builds against is the submodule's commit. To move it:
    git -C Submodules/ERF checkout <commit>
    git -C Submodules/ERF submodule update --init Submodules/AMReX Submodules/googletest
    git add Submodules/ERF
+
+The weekly run of the ``Linux OpenFAST stub`` workflow (below) builds against the head of ERF's
+``development`` branch, so a change upstream that breaks GALE shows up before the submodule
+is moved. Its job names end in ``ERF development``, and its step summary links the ERF changes
+since the pinned commit. An fcompare difference in that run can come from a numerics change in
+ERF rather than a defect; it is resolved by regolding when the submodule is moved.
+
+Continuous integration
+----------------------
+
+GALE's GitHub Actions workflows build GALE with ERF from the submodule and run only GALE's
+tests; ERF's own suite runs in ERF's CI. Every build includes GALE's moving bodies and the
+OpenFAST coupling against the bundled stub. The hosted runners have no GPU, so the GPU builds
+compile and link only: their device kernels are never run. Every build is in double precision.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 22 40 38
+
+   * - Workflow
+     - Builds
+     - Runs
+   * - ``Linux OpenFAST stub``
+     - GCC 11 and Clang 15, MPI, FFT, unit tests
+     - GALE's regression tests and unit tests; weekly and on request (``erf_ref``) also
+       against ERF's ``development`` head
+   * - ``Linux GCC OpenFAST 5``
+     - GCC, MPI, FFT, OpenFAST 5.0.0 built from source
+     - the real-OpenFAST cases (label ``openfast-real``)
+   * - ``Linux GPU``
+     - CUDA 12.2 (sm_80) with the unit tests, HIP ROCm 6.3.2 (gfx908), oneAPI SYCL; MPI, FFT
+     - compile only
+   * - ``Windows``
+     - MSVC without MPI, FFT (FFTW from vcpkg), unit tests; CUDA 12.6 (sm_80) without MPI
+     - MSVC: GALE's serial unit tests and the four GALE regression tests registered without
+       MPI (``OpenFAST_DriverOnly`` and the ``ShaftSourceChecker`` cases, none of which runs a
+       turbine's forcing on the flow); CUDA: compile only
+   * - ``Style``
+     - (nothing)
+     - no tabs, no trailing whitespace, codespell, on GALE's files
+   * - ``Lint``
+     - (nothing)
+     - actionlint and shellcheck on the workflows and scripts in ``.github``
+   * - ``DocHTML -- Build``
+     - this documentation
+     - ``sphinx-build -W``; deploys to GitHub Pages from ``development``
+
+A compiler warning in a GALE file fails a build job. In the GCC job of ``Linux OpenFAST stub`` a
+warning in an ERF file, or a compiler-driver or linker warning, fails it too, as before; in the
+other jobs those are listed but do not fail the job
+(``.github/workflows/scripts/build_report.sh``). The unit-test step
+(``.github/workflows/scripts/run_unit_tests.sh``) reads GALE's test suites from the files
+``Turbines/ERFStructureModel.cmake`` builds into ``erf_unit_tests`` and fails if one of them is
+not linked in. Compiler caches use the GitHub Actions cache; they are restored on every run and
+saved only on pushes to ``development``.

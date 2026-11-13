@@ -1,0 +1,54 @@
+name: Style
+
+# The checks ERF's style workflow makes, on GALE's own files: no tabs, no trailing whitespace
+# (the scripts in style/ are ERF's, and skip Submodules/, so ERF's files are not checked here)
+# and codespell (settings in .codespellrc). None of them compiles anything.
+
+on:
+  push:
+    branches: [development]
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.event.pull_request.number || github.ref }}-${{ github.head_ref }}-style
+  cancel-in-progress: ${{ github.ref != 'refs/heads/development' }}
+
+jobs:
+  tabs:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Tabs
+        run: .github/workflows/style/check_tabs.sh
+
+  trailing_whitespaces:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Trailing Whitespaces
+        run: .github/workflows/style/check_trailing_whitespaces.sh
+
+  codespell:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Install codespell
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends python3-pip
+          pip3 install --user codespell
+      - name: Run codespell
+        run: codespell

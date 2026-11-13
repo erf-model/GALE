@@ -1,0 +1,266 @@
+name: Linux GPU
+
+# GALE compiled for the three GPU back ends ERF supports: CUDA (NVIDIA), HIP (AMD) and SYCL
+# (Intel). The hosted runners have no GPU, so these jobs compile and link only: the device kernels
+# are compiled but never run, and GALE's tests run in the CPU jobs. Each job builds erf_exec with
+# GALE's moving bodies, the OpenFAST coupling against the bundled stub, MPI and the FFT solver
+# (cuFFT, rocFFT, oneMKL), so GALE's model sources are compiled for the device. The CUDA job also
+# builds the unit-test executables, so GALE's unit-test sources are compiled with nvcc (the
+# parallel ones as CUDA); the HIP and SYCL jobs do not build them. All three build in double
+# precision; single precision is not built. The set-up of each job (dependency script,
+# architecture, compiler and flags) is the one ERF's own CI uses at the pinned ERF commit.
+#
+# A diagnostic in a GALE file fails the job. Diagnostics in ERF files and toolchain lines (driver
+# and linker messages with no source file) are listed but do not fail it: ERF's own GPU builds do
+# not enable the FFT solver, so those files are ERF's to clean.
+#
+# The ccache is restored on every run but saved only on pushes to development, as in ERF's CI, so
+# pull requests do not fill the repository's 10 GB cache with one entry per push.
+#
+# On development, runs are not cancelled, but GitHub keeps only the newest pending run of a
+# concurrency group, so during quick merges some commits get no run.
+
+on:
+  push:
+    branches: [development]
+    paths-ignore: ['Docs/**', '**.md', '**.rst']
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths-ignore: ['Docs/**', '**.md', '**.rst']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.event.pull_request.number || github.ref }}-${{ github.head_ref }}-gpu
+  cancel-in-progress: ${{ github.ref != 'refs/heads/development' }}
+
+env:
+  CCACHE_COMPRESS: 1
+  CCACHE_COMPRESSLEVEL: 10
+  CCACHE_MAXSIZE: 800M
+
+jobs:
+  cuda:
+    name: CUDA 12.2 sm_80 (compile only)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 150
+
+    steps:
+
+    - uses: actions/checkout@v7
+      with:
+        submodules: true
+        persist-credentials: false
+
+    - name: ERF Submodules
+      run: git -C Submodules/ERF submodule update --init --depth 1 Submodules/AMReX Submodules/googletest
+
+    - name: Free up disk space
+      run: |
+        df -h /
+        sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL
+        df -h /
+
+    - name: Prepare CUDA environment
+      run: Submodules/ERF/Submodules/AMReX/.github/workflows/dependencies/dependencies_nvcc.sh 12.2
+
+    - name: Install CCache
+      run: Submodules/ERF/Submodules/AMReX/.github/workflows/dependencies/dependencies_ccache.sh
+
+    - name: Restore Cache
+      uses: actions/cache/restore@v6
+      with:
+        path: ~/.cache/ccache
+        key: ccache-${{ github.workflow }}-${{ github.job }}-git-${{ github.sha }}
+        restore-keys: |
+             ccache-${{ github.workflow }}-${{ github.job }}-git-
+
+    - name: Configure and build
+      run: |
+        ccache -z
+        build_start=$(date +%s)
+        export PATH=/usr/local/nvidia/bin:/usr/local/cuda/bin:${PATH}
+        export LD_LIBRARY_PATH=/usr/local/nvidia/lib:/usr/local/nvidia/lib64:/usr/local/cuda/lib64:${LD_LIBRARY_PATH:-}
+        which nvcc
+        # The two AMReX checks make capturing `this` and calling host code from device code
+        # errors, as in ERF's CUDA job
+        cmake -B${{runner.workspace}}/GALE/build-cuda \
+          -DCMAKE_BUILD_TYPE:STRING=RelWithDebInfo \
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+          -DCMAKE_CUDA_COMPILER_LAUNCHER=ccache \
+          -DAMReX_CUDA_ERROR_CROSS_EXECUTION_SPACE_CALL=ON \
+          -DAMReX_CUDA_ERROR_CAPTURE_THIS=ON \
+          -DAMReX_CUDA_ARCH=8.0 \
+          -DERF_DIM:STRING=3 \
+          -DERF_ENABLE_MPI:BOOL=ON \
+          -DERF_ENABLE_CUDA:BOOL=ON \
+          -DERF_ENABLE_FFT:BOOL=ON \
+          -DERF_ENABLE_OPENFAST:BOOL=ON \
+          -DERF_OPENFAST_USE_STUB:BOOL=ON \
+          -DERF_ENABLE_UNIT_TESTS:BOOL=ON \
+          ${{github.workspace}}
+        cmake --build ${{runner.workspace}}/GALE/build-cuda --parallel "$(nproc)" \
+          2>&1 | tee -a ${{runner.workspace}}/build-output.txt
+        ccache --evict-older-than "$(( $(date +%s) - build_start + 120 ))s"
+        ccache -s
+        du -hs ~/.cache/ccache
+
+    - name: Save Cache
+      if: ${{ !cancelled() && github.event_name == 'push' }}
+      uses: actions/cache/save@v6
+      with:
+        path: ~/.cache/ccache
+        key: ccache-${{ github.workflow }}-${{ github.job }}-git-${{ github.sha }}
+
+    - name: Report
+      if: always()
+      run: .github/workflows/scripts/build_report.sh ${{runner.workspace}}/build-output.txt gale
+
+  hip:
+    name: HIP ROCm 6.3.2 gfx908 (compile only)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 180
+    env:
+      # ERF's HIP job flags (the -Wno-* entries silence ROCm headers)
+      CXXFLAGS: "-Wall -Wextra -Wpedantic -Wnull-dereference -Wfloat-conversion -Wshadow -Woverloaded-virtual -Wextra-semi -Wunreachable-code -Wno-deprecated-declarations -Wno-gnu-zero-variadic-macro-arguments -Wno-pass-failed"
+
+    steps:
+
+    - uses: actions/checkout@v7
+      with:
+        submodules: true
+        persist-credentials: false
+
+    - name: ERF Submodules
+      run: git -C Submodules/ERF submodule update --init --depth 1 Submodules/AMReX
+
+    - name: Free up disk space
+      run: |
+        df -h /
+        sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL
+        df -h /
+
+    - name: Dependencies
+      run: Submodules/ERF/Submodules/AMReX/.github/workflows/dependencies/dependencies_hip.sh 6.3.2
+
+    - name: Install CCache
+      run: Submodules/ERF/Submodules/AMReX/.github/workflows/dependencies/dependencies_ccache.sh
+
+    - name: Restore Cache
+      uses: actions/cache/restore@v6
+      with:
+        path: ~/.cache/ccache
+        key: ccache-${{ github.workflow }}-${{ github.job }}-git-${{ github.sha }}
+        restore-keys: |
+             ccache-${{ github.workflow }}-${{ github.job }}-git-
+
+    - name: Configure and build
+      run: |
+        ccache -z
+        build_start=$(date +%s)
+        source /etc/profile.d/rocm.sh
+        hipcc --version
+        cmake -B${{runner.workspace}}/GALE/build-hip \
+          -DCMAKE_BUILD_TYPE:STRING=RelWithDebInfo \
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+          -DCMAKE_C_COMPILER="$(which clang)" \
+          -DCMAKE_CXX_COMPILER="$(which clang++)" \
+          -DCMAKE_CXX_STANDARD=17 \
+          -DAMReX_AMD_ARCH=gfx908 \
+          -DERF_DIM:STRING=3 \
+          -DERF_ENABLE_MPI:BOOL=ON \
+          -DERF_ENABLE_HIP:BOOL=ON \
+          -DERF_ENABLE_FFT:BOOL=ON \
+          -DERF_ENABLE_ALL_WARNINGS:BOOL=ON \
+          -DERF_ENABLE_OPENFAST:BOOL=ON \
+          -DERF_OPENFAST_USE_STUB:BOOL=ON \
+          ${{github.workspace}}
+        cmake --build ${{runner.workspace}}/GALE/build-hip --parallel "$(nproc)" \
+          2>&1 | tee -a ${{runner.workspace}}/build-output.txt
+        ccache --evict-older-than "$(( $(date +%s) - build_start + 120 ))s"
+        ccache -s
+        du -hs ~/.cache/ccache
+
+    - name: Save Cache
+      if: ${{ !cancelled() && github.event_name == 'push' }}
+      uses: actions/cache/save@v6
+      with:
+        path: ~/.cache/ccache
+        key: ccache-${{ github.workflow }}-${{ github.job }}-git-${{ github.sha }}
+
+    - name: Report
+      if: always()
+      run: .github/workflows/scripts/build_report.sh ${{runner.workspace}}/build-output.txt gale
+
+  sycl:
+    name: oneAPI SYCL (compile only)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
+
+    steps:
+
+    - uses: actions/checkout@v7
+      with:
+        submodules: true
+        persist-credentials: false
+
+    - name: ERF Submodules
+      run: git -C Submodules/ERF submodule update --init --depth 1 Submodules/AMReX
+
+    - name: Dependencies
+      run: |
+        Submodules/ERF/Submodules/AMReX/.github/workflows/dependencies/ubuntu_free_disk_space.sh
+        Submodules/ERF/Submodules/AMReX/.github/workflows/dependencies/dependencies_dpcpp.sh
+
+    - name: Install CCache
+      run: Submodules/ERF/Submodules/AMReX/.github/workflows/dependencies/dependencies_ccache.sh
+
+    - name: Restore Cache
+      uses: actions/cache/restore@v6
+      with:
+        path: ~/.cache/ccache
+        key: ccache-${{ github.workflow }}-${{ github.job }}-git-${{ github.sha }}
+        restore-keys: |
+             ccache-${{ github.workflow }}-${{ github.job }}-git-
+
+    - name: Configure and build
+      run: |
+        export CCACHE_DEPEND=1
+        ccache -z
+        build_start=$(date +%s)
+        set +e
+        source /opt/intel/oneapi/setvars.sh
+        set -e
+        cmake -B${{runner.workspace}}/GALE/build-sycl \
+          -DCMAKE_BUILD_TYPE:STRING=Release \
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+          -DCMAKE_C_COMPILER="$(which icx)" \
+          -DCMAKE_CXX_COMPILER="$(which icpx)" \
+          -DCMAKE_CXX_STANDARD=17 \
+          -DAMReX_PARALLEL_LINK_JOBS=4 \
+          -DERF_DIM:STRING=3 \
+          -DERF_ENABLE_MPI:BOOL=ON \
+          -DERF_ENABLE_SYCL:BOOL=ON \
+          -DERF_ENABLE_FFT:BOOL=ON \
+          -DERF_ENABLE_ALL_WARNINGS:BOOL=ON \
+          -DERF_ENABLE_OPENFAST:BOOL=ON \
+          -DERF_OPENFAST_USE_STUB:BOOL=ON \
+          ${{github.workspace}}
+        cmake --build ${{runner.workspace}}/GALE/build-sycl --parallel 4 \
+          2>&1 | tee -a ${{runner.workspace}}/build-output.txt
+        ccache --evict-older-than "$(( $(date +%s) - build_start + 120 ))s"
+        ccache -s
+        du -hs ~/.cache/ccache
+
+    - name: Save Cache
+      if: ${{ !cancelled() && github.event_name == 'push' }}
+      uses: actions/cache/save@v6
+      with:
+        path: ~/.cache/ccache
+        key: ccache-${{ github.workflow }}-${{ github.job }}-git-${{ github.sha }}
+
+    - name: Report
+      if: always()
+      run: .github/workflows/scripts/build_report.sh ${{runner.workspace}}/build-output.txt gale

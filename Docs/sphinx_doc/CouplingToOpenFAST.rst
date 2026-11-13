@@ -44,7 +44,7 @@ search path; a moved installation or another build system needs it on the loader
 path (``DYLD_LIBRARY_PATH`` on macOS, ``LD_LIBRARY_PATH`` on Linux). Without an
 OpenFAST installation, ``-DERF_OPENFAST_USE_STUB=ON`` builds against a bundled
 stub library with the same C API; most regression tests run on it, and so does
-the ``Linux GCC OpenFAST stub`` CI job. Two cases run the real library on the
+the GCC and Clang jobs of the ``Linux OpenFAST stub`` CI workflow. Two cases run the real library on the
 IEA 15 MW reference turbine (below); the ``Linux GCC OpenFAST 5`` CI job builds
 OpenFAST 5.0.0 with ``Build/setup_openfast.sh`` (cached between runs) for them.
 
@@ -378,7 +378,7 @@ Tests
    ctest --test-dir cmake-build/Tests -L moving-bodies   # the canonical cases and the start-up aborts
    ctest --test-dir cmake-build/Tests -L restart-parity -R "OpenFAST|MovingBodies"
    ctest --test-dir cmake-build/Tests -L box-parity -R "OpenFAST|Actuator"
-   cmake-build/ERF/Tests/Unit/erf_unit_tests --gtest_filter='OpenFAST*:Actuator*:BodyExchange.*:FLLC*:WakeLines*:RunningStats*:Owned*:LogStreams*:TrimLog*:PrescribedCtDisk.*:MovingBodiesInputs.*'
+   .github/workflows/scripts/run_unit_tests.sh cmake-build/ERF/Tests/Unit/erf_unit_tests   # GALE's and ERF's moving-bodies unit tests
    ctest --test-dir cmake-build -L parallel -R "Actuator|BodyExchange"   # the same exchanges on 1, 2 and 4 ranks
 
 These CTests run on the stub library (``-DERF_OPENFAST_USE_STUB=ON``); their
