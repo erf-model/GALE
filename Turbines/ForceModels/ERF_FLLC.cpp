@@ -86,20 +86,36 @@ std::vector<Real>
 FLLC::fine_grid (const std::vector<Real>& r, const std::vector<Real>& eps_opt, Real eps_dr)
 {
     AMREX_ALWAYS_ASSERT_WITH_MESSAGE(eps_dr > Real(0.0), "FLLC::fine_grid: eps_dr must be positive");
+    // the walk runs in double; a step that lands within end_tol of a step (or a few roundings of
+    // Real at the tip, whichever is larger) short of the tip ends the grid at the tip, so the last
+    // two points are never one rounding apart, in double or in single precision
+    constexpr double end_tol = 1.0e-6;
     std::vector<Real> rf{r.front()};
-    const Real r_end = r.back();
-    while (rf.back() < r_end) {
-        const Real r0 = rf.back();
+    const double r_end = static_cast<double>(r.back());
+    double r0 = static_cast<double>(r.front());
+    while (r0 < r_end) {
         // the spacing the optimal kernel needs here and one step ahead; the smaller keeps
         // spacing <= epsilon_opt / eps_dr everywhere
-        const Real d1 = interp1(r, eps_opt, r0) / eps_dr;
-        const Real d2 = interp1(r, eps_opt, r0 + d1) / eps_dr;
-        const Real d = std::min(d1, d2);
-        AMREX_ALWAYS_ASSERT_WITH_MESSAGE(d > std::numeric_limits<Real>::epsilon() * std::max(Real(1.0), std::abs(r_end)),
+        const double d1 = static_cast<double>(interp1(r, eps_opt, static_cast<Real>(r0)) / eps_dr);
+        const double d2 = static_cast<double>(interp1(r, eps_opt, static_cast<Real>(r0 + d1)) / eps_dr);
+        const double d = std::min(d1, d2);
+        AMREX_ALWAYS_ASSERT_WITH_MESSAGE(d > std::numeric_limits<Real>::epsilon() * std::max(1.0, std::abs(r_end)),
                                          "FLLC::fine_grid: the optimal kernel width is zero somewhere (a zero chord?)");
-        rf.push_back(std::min(r0 + d, r_end));
+        const double tol = std::max(end_tol * d, 4.0 * static_cast<double>(std::numeric_limits<Real>::epsilon()) * std::abs(r_end));
+        if (r0 + d >= r_end - tol) {
+            rf.push_back(r.back());
+            break;
+        }
+        r0 += d;
+        rf.push_back(static_cast<Real>(r0));
     }
     return rf;
+}
+
+Real
+FLLC::max_stable_relax (Real eps_chord)
+{
+    return Real(4.0) * eps_chord / (Real(2.0) * eps_chord + lift_slope_allowance * kernel_peak);
 }
 
 void

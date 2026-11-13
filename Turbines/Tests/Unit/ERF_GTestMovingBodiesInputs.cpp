@@ -515,6 +515,67 @@ TEST(MovingBodiesInputs, FllcAutomaticWithAKeyItSetsOrAnUnknownValueAborts)
     }
 }
 
+// fllc_relax lies in (0, 1] and, with the correction on, below 4 eps_chord / (2 eps_chord + 1.057)
+// (0.642 at the default eps_chord 0.25, 0.442 at automatic's 0.15); fllc_eps_dr is positive and
+// defaults to 3, as automatic sets it
+TEST(MovingBodiesInputs, FllcRelaxStaysBelowTheStabilityBoundAndEpsDrDefaultsToThree)
+{
+    static int run = 0;
+    auto read_with = [&](const std::string& tag, const std::string& fllc, const std::vector<std::pair<std::string,std::string>>& kv) {
+        const std::string name = tag + std::to_string(++run);
+        set_turbine(name, "alm", "");
+        amrex::ParmParse pb("erf.moving_bodies." + name);
+        if (!fllc.empty()) { pb.add("fllc", fllc); }
+        for (const auto& [k, v] : kv) { pb.add(k.c_str(), v); }
+        return name;
+    };
+    {
+        read_with("Trelaxd", "", {});
+        const MovingBodyInputs b = only_body(MovingBodiesInputs::read());
+        EXPECT_TRUE(b.fllc);
+        EXPECT_EQ(b.fllc_eps_dr, amrex::Real(3.0));
+        EXPECT_EQ(b.fllc_relax, amrex::Real(0.1));
+    }
+    {
+        read_with("Trelaxok", "true", {{"fllc_relax", "0.64"}});
+        EXPECT_EQ(only_body(MovingBodiesInputs::read()).fllc_relax, amrex::Real(0.64));
+    }
+    {
+        const std::string name = read_with("Trelaxhi", "true", {{"fllc_relax", "0.65"}});
+        const std::string msg = erf_gtest::abort_message([] { MovingBodiesInputs::read(); });
+        EXPECT_NE(msg.find(name + ".fllc_relax = 0.65 "), std::string::npos) << msg;
+        EXPECT_NE(msg.find("stability bound 0.642167"), std::string::npos) << msg;
+    }
+    {
+        // a larger optimal kernel raises the bound
+        read_with("Trelaxec", "true", {{"fllc_relax", "0.7"}, {"fllc_eps_chord", "0.3"}});
+        EXPECT_EQ(only_body(MovingBodiesInputs::read()).fllc_relax, amrex::Real(0.7));
+    }
+    {
+        // automatic's eps_chord 0.15 sets the bound
+        read_with("Trelaxau", "automatic", {{"fllc_relax", "0.44"}});
+        EXPECT_EQ(only_body(MovingBodiesInputs::read()).fllc_relax, amrex::Real(0.44));
+        read_with("Trelaxau", "automatic", {{"fllc_relax", "0.45"}});
+        const std::string msg = erf_gtest::abort_message([] { MovingBodiesInputs::read(); });
+        EXPECT_NE(msg.find("stability bound 0.442078"), std::string::npos) << msg;
+    }
+    {
+        // the correction off: no stability bound, only the range
+        read_with("Trelaxoff", "false", {{"fllc_relax", "0.9"}});
+        EXPECT_FALSE(only_body(MovingBodiesInputs::read()).fllc);
+    }
+    for (const char* v : {"0", "-0.1", "1.5"}) {
+        const std::string name = read_with("Trelaxr", "false", {{"fllc_relax", v}});
+        const std::string msg = erf_gtest::abort_message([] { MovingBodiesInputs::read(); });
+        EXPECT_NE(msg.find(name + ".fllc_relax must lie in (0, 1]"), std::string::npos) << v << ": " << msg;
+    }
+    for (const char* v : {"0", "-1"}) {
+        const std::string name = read_with("Tepsdr", "true", {{"fllc_eps_dr", v}});
+        const std::string msg = erf_gtest::abort_message([] { MovingBodiesInputs::read(); });
+        EXPECT_NE(msg.find(name + ".fllc_eps_dr must be positive"), std::string::npos) << v << ": " << msg;
+    }
+}
+
 TEST(MovingBodiesInputs, TheRestartRecordKeepsFllcAutomaticAsAutomatic)
 {
     MovingBodyInputs b;

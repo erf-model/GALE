@@ -64,6 +64,7 @@ erf.moving_bodies.bodies                     = T1
 erf.moving_bodies.T1.type                    = openfast_turbine
 erf.moving_bodies.T1.mode                    = alm
 erf.moving_bodies.T1.fllc                    = true    # the alm default, stated so the gold does not follow a change of default
+erf.moving_bodies.T1.fllc_eps_dr             = 1.0     # the old default (now 3), kept so the Linux and macOS golds hold
 erf.moving_bodies.T1.fst_file                = IEA15_land_model/IEA15-land.fst
 erf.moving_bodies.T1.base_pos                = -306. 282. 0.   # the summit; z = 0 is the terrain surface there
 erf.moving_bodies.T1.num_force_points_blade  = 20

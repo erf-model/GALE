@@ -1,4 +1,5 @@
 #include "ERF_MovingBodiesInputs.H"
+#include "ERF_FLLC.H"
 
 #include <algorithm>
 #include <cctype>
@@ -343,6 +344,17 @@ MovingBodiesInputs::read ()
             ppb.query("fllc_eps_dr", b.fllc_eps_dr);
             if (!(b.fllc_eps_dr > 0.0) || !std::isfinite(b.fllc_eps_dr)) {
                 Abort(pre + ".fllc_eps_dr must be positive");
+            }
+            if (b.fllc) {
+                // the linearised correction loop grows from one update to the next above this bound
+                const amrex::Real relax_max = erf_actuator::FLLC::max_stable_relax(b.fllc_eps_chord);
+                if (!(b.fllc_relax < relax_max)) {
+                    auto g6 = [] (double v) { std::ostringstream o; o << std::setprecision(6) << v; return o.str(); };
+                    Abort(pre + ".fllc_relax = " + g6(b.fllc_relax) + " is at or above the stability bound " +
+                          g6(relax_max) + " for fllc_eps_chord = " + g6(b.fllc_eps_chord) +
+                          " (4 eps_chord / (2 eps_chord + 1.057), lift slope up to 1.4 x 2 pi, see ActuatorLine.rst): the correction would grow from one "
+                          "update to the next; use a smaller fllc_relax or a larger fllc_eps_chord");
+                }
             }
             // the keys of a ct_disk: an openfast_turbine takes its rotor, hub and yaw from its OpenFAST model
             for (const char* k : {"turbine", "ct", "rotor_radius", "hub_height", "yaw", "num_points_r"}) {

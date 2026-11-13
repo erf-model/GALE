@@ -186,8 +186,10 @@ For ``mode = alm``. FLLC is the filtered lifting-line correction.
      - ``true``, ``false``, ``automatic``
      - ``true`` (alm), ``false`` (adm, none)
    * - ``<name>.fllc_relax``
-     - Relaxation factor of the correction.
-     - (0, 1]
+     - Relaxation factor of the correction. With the correction on it must stay below
+       4 ``fllc_eps_chord`` / (2 ``fllc_eps_chord`` + 1.057): 0.642 at 0.25, 0.442 at 0.15 (see
+       :ref:`the stability bound <fllc-stability>`). The run stops at start-up otherwise.
+     - (0, 1]; below the bound
      - 0.1
    * - ``<name>.fllc_start_time``
      - Simulation time (s) from which the correction applies. This is ERF's time, not time since
@@ -199,9 +201,11 @@ For ``mode = alm``. FLLC is the filtered lifting-line correction.
      - > 0
      - 0.25
    * - ``<name>.fllc_eps_dr``
-     - Span grid spacing is optimal width / ``fllc_eps_dr``.
+     - Span grid spacing is optimal width / ``fllc_eps_dr``. On the IEA 15 MW blade, 1 gives
+       u\ :sub:`opt` within 13 to 43 % where the tip carries load, 3 within 2 %. The default was 1 before; a checkpoint
+       written then restarts only with ``fllc_eps_dr = 1`` given.
      - > 0
-     - 1.0
+     - 3
    * - ``alm_max_tip_cells``
      - Most cells a blade tip may sweep per step. Above it the run stops and names the largest
        ``erf.fixed_dt`` that passes.

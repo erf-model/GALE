@@ -52,7 +52,7 @@ public:
      * @param eps_les the kernel width of the run (m)
      * @param eps_chord optimal kernel width in chords
      * @param eps_dr the optimal kernel width over the fine-grid spacing (spacing = epsilon_opt / eps_dr)
-     * @param relax relaxation factor f in (0, 1]
+     * @param relax relaxation factor f in (0, 1]; the inputs keep it below max_stable_relax(eps_chord)
      */
     FLLC (std::string name, std::vector<amrex::Real> r, std::vector<amrex::Real> chord,
           amrex::Real eps_les, amrex::Real eps_chord, amrex::Real eps_dr, amrex::Real relax);
@@ -96,9 +96,36 @@ public:
                                   const std::vector<amrex::Real>& g_src, const std::vector<amrex::Real>& dr_src,
                                   const std::vector<amrex::Real>& eps_src, std::vector<amrex::Real>& u);
 
-    /** The fine span grid from r.front() to r.back() with spacing epsilon_opt(r) / eps_dr. */
+    /**
+     * The fine span grid from r.front() to r.back() with spacing epsilon_opt(r) / eps_dr. A step
+     * that ends within 1e-6 of a step (or four roundings of Real at r.back()) short of r.back()
+     * ends the grid at r.back(), so the last spacing is never a rounding residue.
+     */
     static std::vector<amrex::Real> fine_grid (const std::vector<amrex::Real>& r, const std::vector<amrex::Real>& eps_opt,
                                                amrex::Real eps_dr);
+
+    /**
+     * max_kernel_transform * eps: the largest value of the kernel's Fourier transform
+     * k^(q) = (pi |q| / 2) erfc(|q| eps / 2), reached at |q| eps / 2 = x*, the root of
+     * erfc(x) = 2 x exp(-x^2) / sqrt(pi) (x* = 0.53160): pi x* erfc(x*).
+     */
+    static constexpr amrex::Real kernel_peak = amrex::Real(0.75516217769063950);
+
+    /**
+     * The lift slope the stability bound allows for, in units of 2 pi: tabulated airfoil slopes
+     * near zero lift exceed the thin-airfoil 2 pi (the IEA 15 MW polars reach 1.37 times it).
+     */
+    static constexpr amrex::Real lift_slope_allowance = amrex::Real(1.4);
+
+    /**
+     * The largest relaxation factor for which the correction does not grow from one update to
+     * the next: 4 eps_chord / (2 eps_chord + lift_slope_allowance * kernel_peak), that is
+     * 4 eps_chord / (2 eps_chord + 1.057). It follows from the linearised loop in which the
+     * correction changes the angle of attack and so the lift, with lift slope
+     * lift_slope_allowance * 2 pi and a run kernel much wider than the optimal one. A lower lift
+     * slope or a narrower run kernel only raises the bound. See ActuatorLine.rst.
+     */
+    static amrex::Real max_stable_relax (amrex::Real eps_chord);
 
     /**
      * The span each point stands for: half the distance between its two neighbours (the end
