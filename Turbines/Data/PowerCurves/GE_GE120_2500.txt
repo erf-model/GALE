@@ -1,0 +1,43 @@
+# GE_GE120_2500
+# source: OpenEnergy database wind turbine library (supply.wind_turbine_library), https://openenergyplatform.org, turbine_type GE120/2500 (id 119); the database's own source: https://www.wind-turbine-models.com/turbines/310-general-electric-ge-2.5-120
+# licence: ODbL-1.0 (https://opendatacommons.org/licenses/odbl/1.0/), (c) Reiner Lemoine Institut
+# Contains information from the OEDB wind turbine library, made available under the ODbL.
+# hub heights offered: 110, 139 (give erf.moving_bodies.<name>.hub_height)
+# Written by make_power_curves.py; columns: wind speed (m/s), Ct (-), electrical power (kW)
+rotor_diameter 120
+rated_power 2500
+3 0.92 25
+3.5 0.85 89
+4 0.82 171
+4.5 0.82 269
+5 0.82 389
+5.5 0.83 533
+6 0.83 704
+6.5 0.83 906
+7 0.81 1136
+7.5 0.78 1400
+8 0.73 1674
+8.5 0.66 1934
+9 0.58 2160
+9.5 0.51 2316
+10 0.44 2416
+10.5 0.38 2477
+11 0.33 2514
+11.5 0.28 2528
+12 0.25 2530
+12.5 0.22 2530
+13 0.2 2530
+13.5 0.18 2530
+14 0.16 2530
+14.5 0.14 2530
+15 0.13 2530
+15.5 0.12 2530
+16 0.11 2530
+16.5 0.1 2530
+17 0.09 2530
+17.5 0.08 2530
+18 0.08 2530
+18.5 0.07 2530
+19 0.07 2530
+19.5 0.06 2530
+20 0.08 2530

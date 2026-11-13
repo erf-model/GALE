@@ -10,6 +10,8 @@
 #include <AMReX.H>
 #include <AMReX_REAL.H>
 
+#include "ERF_TurbinePowerCurve.H"
+
 /**
  * The actuator-line settings fllc = automatic applies. They come from the IEA 15 MW comparison with
  * stand-alone OpenFAST 5 + ROSCO at 5 to 14 m/s, which held within 5 % in power and thrust on 10 m and
@@ -72,7 +74,11 @@ struct MovingBodyInputs
     // ct_disk
     amrex::Real rotor_radius{0.0};           //!< disk radius (m)
     amrex::Real hub_height{0.0};             //!< disk centre above the base (m)
-    amrex::Real ct{0.0};                     //!< thrust coefficient on the upstream speed
+    amrex::Real ct{0.0};                     //!< thrust coefficient on the upstream speed (with turbine: unused, 0)
+    std::string turbine;                     //!< a table of the turbine library (Turbines/Data/PowerCurves/<turbine>.txt): Ct and
+                                             //!< power at the upstream speed, rotor diameter and hub height from it (empty: ct)
+    std::string turbine_file;                //!< the table file read for turbine (empty without)
+    erf_actuator::TurbinePowerCurve curve;   //!< the table read for turbine (empty without)
     amrex::Real yaw_deg{0.0};                //!< disk normal, degrees from +x in the horizontal plane
     int num_points_r{8};                     //!< polar grid: rings
     int num_points_t{16};                    //!< points per ring (ct_disk grid, and the turbine's actuator-disk rings)
@@ -119,6 +125,9 @@ struct MovingBodyInputs
  *   erf.moving_bodies.D1.rotor_radius = 120
  *   erf.moving_bodies.D1.hub_height  = 150
  *   erf.moving_bodies.D1.ct          = 0.75
+ *   erf.moving_bodies.D2.turbine     = NREL_5MW_126       (in place of ct and rotor_radius: Ct(U) and power(U) from the
+ *                                                          turbine library's table; hub_height defaults to the table's)
+ *   erf.moving_bodies.turbine_data_dir = <folder>          (the turbine library; default GALE's Turbines/Data/PowerCurves)
  *   erf.moving_bodies.diagnostics_int = 1
  *   erf.moving_bodies.diagnostics_format = per_turbine  (per_turbine: one file per body and log; per_rank: one per rank
  *                                                       and log; farm: one per log, gathered to the I/O rank)
@@ -151,6 +160,7 @@ struct MovingBodiesInputs
     std::vector<MovingBodyInputs> bodies;
     int diagnostics_int{1};                  //!< write a diagnostics row every this many steps
     std::string diagnostics_dir{"moving_bodies"};
+    std::string turbine_data_dir;            //!< the folder of the ct_disk turbine tables (default TurbinePowerCurve::default_dir())
     /**
      * Where the bodies' time-series logs (_erf, _flow, _correction, _fllc, _disk and _stats) go:
      * per_turbine, <output_root>_<log>.csv per body; per_rank, <diagnostics_dir>/rank<r>_<log>.csv

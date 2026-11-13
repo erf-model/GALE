@@ -113,6 +113,23 @@ flow for it and writes its log, statistics and wake lines.
 
 Test location: `Actuator_UniformCtDisk <https://github.com/erf-model/GALE/tree/development/Exec/CanonicalTests/MovingBodies/Actuator_UniformCtDisk>`__
 
+Turbine table on a prescribed disk
+----------------------------------
+
+Two disks side by side in a uniform 10.25 m/s flow for ten steps: ``T1`` names the turbine table
+``NREL_5MW_126`` and ``D1`` keeps a constant ``Ct = 0.75``, both of radius 63 m at hub 90 m.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 40 60
+
+   * - Test
+     - Checks
+   * - ``Actuator_TurbineCtDisk``
+     - Both disk logs against their golds to ten significant digits, then ``check_turbine_disk.py`` reads the table itself and requires, in every row, T1's ``ct`` and ``power_curve`` to be the table's values at its free-stream speed and both thrusts to be :math:`\tfrac{1}{2}\rho C_T U^2 \pi R^2` (``Tests/RunTurbineCtDisk.cmake``). Needs Python 3.
+
+Test location: `Actuator_TurbineCtDisk <https://github.com/erf-model/GALE/tree/development/Exec/CanonicalTests/MovingBodies/Actuator_TurbineCtDisk>`__
+
 OpenFAST rotor as an actuator disk
 ----------------------------------
 

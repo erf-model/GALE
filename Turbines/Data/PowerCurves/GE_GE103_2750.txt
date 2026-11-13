@@ -1,0 +1,53 @@
+# GE_GE103_2750
+# source: OpenEnergy database wind turbine library (supply.wind_turbine_library), https://openenergyplatform.org, turbine_type GE103/2750 (id 117); the database's own source: https://www.wind-turbine-models.com/turbines/747-general-electric-ge-2.75-103
+# licence: ODbL-1.0 (https://opendatacommons.org/licenses/odbl/1.0/), (c) Reiner Lemoine Institut
+# Contains information from the OEDB wind turbine library, made available under the ODbL.
+# hub heights offered: 75, 85, 98.3, 123.5 (give erf.moving_bodies.<name>.hub_height)
+# Written by make_power_curves.py; columns: wind speed (m/s), Ct (-), electrical power (kW)
+rotor_diameter 103
+rated_power 2750
+3 0.74 17
+3.5 0.73 55
+4 0.72 104
+4.5 0.73 169
+5 0.74 251
+5.5 0.75 352
+6 0.75 470
+6.5 0.75 610
+7 0.75 772
+7.5 0.75 959
+8 0.75 1170
+8.5 0.75 1405
+9 0.74 1656
+9.5 0.71 1899
+10 0.66 2120
+10.5 0.59 2291
+11 0.53 2441
+11.5 0.48 2567
+12 0.43 2661
+12.5 0.38 2730
+13 0.34 2768
+13.5 0.3 2780
+14 0.27 2780
+14.5 0.24 2780
+15 0.22 2780
+15.5 0.19 2780
+16 0.18 2780
+16.5 0.16 2780
+17 0.15 2780
+17.5 0.13 2780
+18 0.12 2780
+18.5 0.11 2780
+19 0.1 2780
+19.5 0.1 2780
+20 0.09 2780
+20.5 0.08 2780
+21 0.08 2780
+21.5 0.07 2780
+22 0.07 2780
+22.5 0.06 2780
+23 0.06 2780
+23.5 0.06 2780
+24 0.05 2780
+24.5 0.05 2780
+25 0.05 2780

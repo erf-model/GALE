@@ -1,0 +1,30 @@
+# Siemens_SWT120_3600
+# source: OpenEnergy database wind turbine library (supply.wind_turbine_library), https://openenergyplatform.org, turbine_type SWT120/3600 (id 61); the database's own source: http://www.windenergie-im-binnenland.de/powercurve.php
+# licence: ODbL-1.0 (https://opendatacommons.org/licenses/odbl/1.0/), (c) Reiner Lemoine Institut
+# Contains information from the OEDB wind turbine library, made available under the ODbL.
+# Written by make_power_curves.py; columns: wind speed (m/s), Ct (-), electrical power (kW)
+rotor_diameter 120
+hub_height 90
+rated_power 3600
+4 0.881 174
+5 0.875 379
+6 0.881 686
+7 0.881 1108
+8 0.874 1667
+9 0.88 2378
+10 0.829 3094
+11 0.595 3487
+12 0.417 3588
+13 0.316 3599
+14 0.248 3600
+15 0.2 3600
+16 0.165 3600
+17 0.138 3600
+18 0.117 3600
+19 0.1 3600
+20 0.087 3600
+21 0.076 3600
+22 0.067 3600
+23 0.06 3600
+24 0.054 3600
+25 0.048 3600

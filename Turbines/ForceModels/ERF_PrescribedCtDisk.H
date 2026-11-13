@@ -20,6 +20,9 @@ namespace erf_actuator {
  * upstream, the thrust is T = 1/2 rho Ct U^2 pi R^2, and each disk point carries the share
  * of -T n (the force on the fluid) proportional to its area. The disk-averaged normal
  * velocity U_d is sampled too, for the diagnostics (time, U, U_d, thrust, power = T U_d).
+ * Given a turbine table (MovingBodyInputs::turbine), Ct = Ct(U) is read from the table's thrust
+ * curve at each update and the table's power curve P(U) is logged too; outside the table's wind
+ * speeds both are zero.
  * The diagnostics file is written by one rank, the I/O rank unless set_writer() names another
  * (the disk's owner, which alone samples the flow and updates the thrust).
  */
@@ -52,6 +55,12 @@ public:
     amrex::Real disk_speed () const { return m_u_disk; }
     amrex::Real thrust () const { return m_thrust; }
     amrex::Real power () const { return m_thrust * m_u_disk; }
+    /** The thrust coefficient of the last update: the constant Ct, or the turbine table's Ct(U). */
+    amrex::Real ct () const { return m_ct; }
+    /** True when Ct and the power come from a turbine table. */
+    bool has_curve () const { return !m_curve.empty(); }
+    /** The turbine table's electrical power P(U) (W) at the last free-stream speed; T U_d without a table. */
+    amrex::Real power_curve () const { return has_curve() ? m_curve.power(m_u_inf) : power(); }
     std::array<amrex::Real,3> normal () const { return m_normal; }
     std::array<amrex::Real,3> center () const { return m_center; }
     amrex::Real radius () const { return m_radius; }
@@ -64,11 +73,17 @@ public:
     void set_writer (int rank) { m_writer = rank; }
     int writer () const { return m_writer; }
 
-    /** The columns of the _disk.csv row after its time. */
-    static const std::string& log_columns ();
-    static constexpr int log_size = 5;
-    /** The _disk.csv row after its time: u_inf, u_disk, thrust, power, plus the integrated source total. */
-    void log_row (amrex::Real spread_total, amrex::Real* row) const;
+    /**
+     * The columns of the _disk.csv row after its time. With curve (some disk of the run uses a
+     * turbine table), ct and power_curve follow, for every disk of the run.
+     */
+    static const std::string& log_columns (bool curve);
+    static constexpr int log_size (bool curve) { return curve ? 7 : 5; }
+    /**
+     * The _disk.csv row after its time: u_inf, u_disk, thrust, power, the integrated source total;
+     * with curve, then ct and power_curve().
+     */
+    void log_row (amrex::Real spread_total, bool curve, amrex::Real* row) const;
 
 private:
     std::string m_name;
@@ -77,6 +92,7 @@ private:
     std::array<amrex::Real,3> m_normal{{1.0, 0.0, 0.0}};
     amrex::Real m_radius{0.0};
     amrex::Real m_ct{0.0};
+    TurbinePowerCurve m_curve;
     amrex::Real m_rho{1.225};
     amrex::Real m_area_total{0.0};
     std::vector<amrex::Real> m_disk_pos, m_sample_pos, m_area, m_force;

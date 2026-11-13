@@ -83,6 +83,8 @@ MovingBodiesInputs::read ()
         Abort("erf.moving_bodies.diagnostics_int must be >= 1");
     }
     pp.query("diagnostics_dir", in.diagnostics_dir);
+    in.turbine_data_dir = erf_actuator::TurbinePowerCurve::default_dir();
+    pp.query("turbine_data_dir", in.turbine_data_dir);
     pp.query("diagnostics_format", in.diagnostics_format);
     if (!valid_diagnostics_format(in.diagnostics_format)) {
         Abort("erf.moving_bodies.diagnostics_format = " + in.diagnostics_format + ": use per_turbine, per_rank or farm");
@@ -157,6 +159,7 @@ MovingBodiesInputs::read ()
 
     std::set<std::string> seen, roots;
     bool any_alm = false;
+    bool any_turbine = false;
     for (const std::string& name : names) {
         if (!seen.insert(name).second) {
             Abort("erf.moving_bodies.bodies lists '" + name + "' twice");
@@ -341,6 +344,11 @@ MovingBodiesInputs::read ()
             if (!(b.fllc_eps_dr > 0.0) || !std::isfinite(b.fllc_eps_dr)) {
                 Abort(pre + ".fllc_eps_dr must be positive");
             }
+            // the keys of a ct_disk: an openfast_turbine takes its rotor, hub and yaw from its OpenFAST model
+            for (const char* k : {"turbine", "ct", "rotor_radius", "hub_height", "yaw", "num_points_r"}) {
+                warn_inactive(ppb, pre, k, "it is for a ct_disk; " + pre + " is an openfast_turbine, whose rotor comes from "
+                              + pre + ".fst_file");
+            }
         } else {
             // the keys of an openfast_turbine: a ct_disk has no model, rotor nodes, tower or nacelle
             for (const char* k : {"fst_file", "mode", "sampling", "num_force_points_blade", "num_force_points_tower", "nacelle_cd",
@@ -348,17 +356,40 @@ MovingBodiesInputs::read ()
                                   "fllc_eps_chord", "fllc_eps_dr", "correction_relax", "correction_time", "adm_spreading"}) {
                 warn_inactive(ppb, pre, k, "it is for an openfast_turbine; " + pre + " is a ct_disk, spread with " + pre + ".epsilon only");
             }
-            ppb.get("rotor_radius", b.rotor_radius);
-            if (!(b.rotor_radius > 0.0) || !std::isfinite(b.rotor_radius)) {
-                Abort(pre + ".rotor_radius must be positive");
+            if (ppb.query("turbine", b.turbine)) {
+                // Ct(U), power(U), rotor diameter and (when it gives one) hub height from the turbine library's table
+                any_turbine = true;
+                if (b.turbine.empty()) {
+                    Abort(pre + ".turbine must name a table of the turbine library (<turbine_data_dir>/<name>.txt)");
+                }
+                if (ppb.contains("ct")) {
+                    Abort(pre + ".ct and " + pre + ".turbine are both given: the thrust coefficient comes from the turbine's "
+                          "table; give one of them");
+                }
+                if (ppb.contains("rotor_radius")) {
+                    Abort(pre + ".rotor_radius and " + pre + ".turbine are both given: the radius is half the rotor_diameter "
+                          "of the turbine's table, which its curves belong to; leave rotor_radius out");
+                }
+                b.turbine_file = erf_actuator::TurbinePowerCurve::table_file(in.turbine_data_dir, b.turbine);
+                b.curve = erf_actuator::TurbinePowerCurve::read_file(b.turbine_file);
+                b.rotor_radius = Real(0.5) * b.curve.rotor_diameter();
+                b.hub_height = b.curve.hub_height();
+                if (!ppb.query("hub_height", b.hub_height) && !(b.hub_height > 0.0)) {
+                    Abort(pre + ".hub_height must be given: the table " + b.turbine_file + " gives no single hub height");
+                }
+            } else {
+                ppb.get("rotor_radius", b.rotor_radius);
+                if (!(b.rotor_radius > 0.0) || !std::isfinite(b.rotor_radius)) {
+                    Abort(pre + ".rotor_radius must be positive");
+                }
+                ppb.get("hub_height", b.hub_height);
+                ppb.get("ct", b.ct);
+                if (!(b.ct > 0.0 && b.ct < 1.0)) {
+                    Abort(pre + ".ct must lie in (0, 1)");
+                }
             }
-            ppb.get("hub_height", b.hub_height);
             if (!(b.hub_height > b.rotor_radius) || !std::isfinite(b.hub_height)) {
                 Abort(pre + ".hub_height must exceed rotor_radius so the disk clears the base");
-            }
-            ppb.get("ct", b.ct);
-            if (!(b.ct > 0.0 && b.ct < 1.0)) {
-                Abort(pre + ".ct must lie in (0, 1)");
             }
             ppb.query("yaw", b.yaw_deg);
             need_finite(pre + ".yaw", b.yaw_deg);
@@ -377,6 +408,9 @@ MovingBodiesInputs::read ()
         }
 
         in.bodies.push_back(b);
+    }
+    if (!any_turbine) {
+        warn_inactive(pp, "erf.moving_bodies", "turbine_data_dir", "no ct_disk names a turbine");
     }
     if (!any_alm) {
         warn_inactive(pp, "erf.moving_bodies", "alm_max_tip_cells", "no body has mode = alm");
@@ -440,7 +474,11 @@ MovingBodiesInputs::restart_record (const MovingBodyInputs& b)
                                {"fllc_eps_chord", num(b.fllc_eps_chord)}, {"fllc_eps_dr", num(b.fllc_eps_dr)}});
         }
     } else {
-        r.insert(r.end(), {{"rotor_radius", num(b.rotor_radius)}, {"hub_height", num(b.hub_height)}, {"ct", num(b.ct)},
+        // ct always (0 for a disk on a turbine table), so a restart that switches between a constant Ct and a
+        // table is caught either way; a table disk records the table's name too
+        r.push_back({"ct", num(b.ct)});
+        if (!b.turbine.empty()) { r.push_back({"turbine", b.turbine}); }
+        r.insert(r.end(), {{"rotor_radius", num(b.rotor_radius)}, {"hub_height", num(b.hub_height)},
                            {"yaw", num(b.yaw_deg)}, {"num_points_r", std::to_string(b.num_points_r)},
                            {"sample_diameters_upstream", num(b.sample_diameters_upstream)}});
     }

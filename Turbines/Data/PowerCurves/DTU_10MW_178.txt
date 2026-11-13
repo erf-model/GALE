@@ -1,0 +1,29 @@
+# DTU_10MW_178
+# source: NREL turbine-models archive, https://github.com/NatLabRockies/turbine-models, Offshore/DTU_Reference_v1_10MW_178.csv
+# licence: BSD-3-Clause, (c) 2020 Alliance for Sustainable Energy, LLC
+# Written by make_power_curves.py; columns: wind speed (m/s), Ct (-), electrical power (kW)
+rotor_diameter 178.3
+hub_height 119
+rated_power 10000
+4 0.923 280.2
+5 0.919 799.1
+6 0.904 1532.7
+7 0.858 2506.1
+8 0.814 3730.7
+9 0.814 5311.8
+10 0.814 7286.5
+11 0.814 9698.3
+12 0.577 10639.1
+13 0.419 10648.5
+14 0.323 10639.3
+15 0.259 10683.7
+16 0.211 10642
+17 0.175 10640
+18 0.148 10639.9
+19 0.126 10652.8
+20 0.109 10646.2
+21 0.095 10644
+22 0.084 10641.2
+23 0.074 10639.5
+24 0.066 10643.6
+25 0.059 10635.7

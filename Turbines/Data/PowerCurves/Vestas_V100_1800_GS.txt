@@ -1,0 +1,42 @@
+# Vestas_V100_1800_GS
+# source: OpenEnergy database wind turbine library (supply.wind_turbine_library), https://openenergyplatform.org, turbine_type V100/1800/GS (id 135); the database's own source: http://www.windenergie-im-binnenland.de/powercurve.php
+# licence: ODbL-1.0 (https://opendatacommons.org/licenses/odbl/1.0/), (c) Reiner Lemoine Institut
+# Contains information from the OEDB wind turbine library, made available under the ODbL.
+# Written by make_power_curves.py; columns: wind speed (m/s), Ct (-), electrical power (kW)
+rotor_diameter 100
+rated_power 1800
+3 0.87 12
+3.5 0.891 40
+4 0.882 93
+4.5 0.854 161
+5 0.825 241
+5.5 0.807 336
+6 0.802 446
+6.5 0.801 575
+7 0.803 727
+7.5 0.803 900
+8 0.796 1094
+8.5 0.772 1304
+9 0.724 1510
+9.5 0.648 1673
+10 0.559 1771
+10.5 0.474 1814
+11 0.401 1829
+11.5 0.343 1834
+12 0.297 1835
+12.5 0.259 1835
+13 0.228 1835
+13.5 0.203 1835
+14 0.181 1835
+14.5 0.163 1835
+15 0.146 1835
+15.5 0.132 1835
+16 0.12 1835
+16.5 0.11 1835
+17 0.101 1835
+17.5 0.093 1835
+18 0.086 1835
+18.5 0.079 1835
+19 0.074 1835
+19.5 0.069 1835
+20 0.064 1835

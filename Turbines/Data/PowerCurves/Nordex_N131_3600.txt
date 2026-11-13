@@ -1,0 +1,43 @@
+# Nordex_N131_3600
+# source: OpenEnergy database wind turbine library (supply.wind_turbine_library), https://openenergyplatform.org, turbine_type N131/3600 (id 15); the database's own source: http://www.nordex-online.com/de/produkte-service/windenergieanlagen/; https://www.wind-turbine-models.com/turbines/1466-nordex-n-131-3600-delta
+# licence: ODbL-1.0 (https://opendatacommons.org/licenses/odbl/1.0/), (c) Reiner Lemoine Institut
+# Contains information from the OEDB wind turbine library, made available under the ODbL.
+# hub heights offered: 84, 106, 112, 134 (give erf.moving_bodies.<name>.hub_height)
+# Written by make_power_curves.py; columns: wind speed (m/s), Ct (-), electrical power (kW)
+rotor_diameter 131
+rated_power 3600
+3 0.914 15
+3.5 0.904 90
+4 0.892 184
+4.5 0.879 301
+5 0.868 443
+5.5 0.856 610
+6 0.849 805
+6.5 0.847 1034
+7 0.845 1298
+7.5 0.844 1602
+8 0.833 1946
+8.5 0.822 2323
+9 0.786 2727
+9.5 0.736 3076
+10 0.689 3327
+10.5 0.55 3491
+11 0.458 3580
+11.5 0.39 3600
+12 0.338 3600
+12.5 0.295 3600
+13 0.261 3600
+13.5 0.232 3600
+14 0.207 3600
+14.5 0.186 3600
+15 0.169 3600
+15.5 0.153 3600
+16 0.14 3600
+16.5 0.128 3600
+17 0.117 3600
+17.5 0.108 3600
+18 0.1 3600
+18.5 0.093 3600
+19 0.086 3600
+19.5 0.08 3600
+20 0.075 3600

@@ -1,0 +1,43 @@
+# Nordex_N131_3000
+# source: OpenEnergy database wind turbine library (supply.wind_turbine_library), https://openenergyplatform.org, turbine_type N131/3000 (id 17); the database's own source: http://www.windenergie-im-http://www.windenergie-im-binnenland.de/powercurve.php
+# licence: ODbL-1.0 (https://opendatacommons.org/licenses/odbl/1.0/), (c) Reiner Lemoine Institut
+# Contains information from the OEDB wind turbine library, made available under the ODbL.
+# hub heights offered: 99, 114, 134 (give erf.moving_bodies.<name>.hub_height)
+# Written by make_power_curves.py; columns: wind speed (m/s), Ct (-), electrical power (kW)
+rotor_diameter 131
+rated_power 3000
+3 0.887 33
+3.5 0.852 104
+4 0.844 194
+4.5 0.843 306
+5 0.833 442
+5.5 0.839 607
+6 0.838 802
+6.5 0.837 1032
+7 0.837 1298
+7.5 0.801 1595
+8 0.761 1915
+8.5 0.72 2250
+9 0.676 2533
+9.5 0.634 2740
+10 0.509 2881
+10.5 0.421 2965
+11 0.357 2997
+11.5 0.307 3000
+12 0.267 3000
+12.5 0.234 3000
+13 0.207 3000
+13.5 0.184 3000
+14 0.165 3000
+14.5 0.149 3000
+15 0.134 3000
+15.5 0.122 3000
+16 0.111 3000
+16.5 0.102 3000
+17 0.093 3000
+17.5 0.086 3000
+18 0.079 3000
+18.5 0.074 3000
+19 0.068 3000
+19.5 0.064 3000
+20 0.059 3000

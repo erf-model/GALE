@@ -17,6 +17,8 @@ include $(GALE_TURBINES_DIR)/Motion/Make.package
 include $(GALE_TURBINES_DIR)/ForceModels/Make.package
 VPATH_LOCATIONS   += $(GALE_TURBINES_DIR)/GaleCore $(GALE_TURBINES_DIR)/Motion $(GALE_TURBINES_DIR)/ForceModels
 INCLUDE_LOCATIONS += $(GALE_TURBINES_DIR)/GaleCore $(GALE_TURBINES_DIR)/Motion $(GALE_TURBINES_DIR)/ForceModels
+# the turbine library of a ct_disk's erf.moving_bodies.<name>.turbine (ERF_TurbinePowerCurve.cpp)
+DEFINES += -DGALE_TURBINE_DATA_DIR=\"$(abspath $(GALE_TURBINES_DIR))/Data/PowerCurves\"
 
 ifeq ($(USE_OPENFAST), TRUE)
     ifeq ($(strip $(OPENFAST_HOME)),)

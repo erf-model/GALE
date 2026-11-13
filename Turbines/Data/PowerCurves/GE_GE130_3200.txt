@@ -1,0 +1,53 @@
+# GE_GE130_3200
+# source: OpenEnergy database wind turbine library (supply.wind_turbine_library), https://openenergyplatform.org, turbine_type GE130/3200 (id 114); the database's own source: https://www.wind-turbine-models.com/turbines/1290-general-electric-ge-3.2-130
+# licence: ODbL-1.0 (https://opendatacommons.org/licenses/odbl/1.0/), (c) Reiner Lemoine Institut
+# Contains information from the OEDB wind turbine library, made available under the ODbL.
+# hub heights offered: 85, 110, 134, 155 (give erf.moving_bodies.<name>.hub_height)
+# Written by make_power_curves.py; columns: wind speed (m/s), Ct (-), electrical power (kW)
+rotor_diameter 130
+rated_power 3200
+3 1 56
+3.5 0.9 128
+4 0.87 215
+4.5 0.85 321
+5 0.84 449
+5.5 0.83 606
+6 0.83 791
+6.5 0.83 1010
+7 0.83 1263
+7.5 0.82 1547
+8 0.79 1857
+8.5 0.74 2175
+9 0.68 2473
+9.5 0.61 2737
+10 0.55 2933
+10.5 0.48 3067
+11 0.42 3164
+11.5 0.37 3202
+12 0.32 3221
+12.5 0.28 3229
+13 0.25 3230
+13.5 0.22 3230
+14 0.2 3230
+14.5 0.18 3230
+15 0.16 3230
+15.5 0.14 3230
+16 0.13 3230
+16.5 0.12 3230
+17 0.11 3230
+17.5 0.1 3230
+18 0.09 3230
+18.5 0.09 3230
+19 0.08 3230
+19.5 0.08 3230
+20 0.07 3230
+20.5 0.07 3230
+21 0.06 3230
+21.5 0.06 3230
+22 0.05 3230
+22.5 0.05 3230
+23 0.05 3230
+23.5 0.05 3230
+24 0.04 3230
+24.5 0.04 3230
+25 0.04 3230

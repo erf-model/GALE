@@ -232,3 +232,43 @@ normal :math:`\mathbf{n}`, covered by a polar grid of points. It runs no OpenFAS
   0.977 of the free stream one diameter ahead, so the thrust is 4.6 % below nominal; at two
   diameters it is 1.4 % below.
 - ``air_density`` must match ERF's density at the disk centre within ``density_tolerance``.
+
+With ``turbine = <name>`` the disk represents a published turbine. Its table
+in GALE's turbine library (``Turbines/Data/PowerCurves/<name>.txt``, or
+``erf.moving_bodies.turbine_data_dir``) gives the thrust coefficient
+:math:`C_T(U)` and the electrical power :math:`P(U)` at a list of wind
+speeds, and the rotor diameter. At every update
+
+.. math::
+
+   T = \tfrac{1}{2}\,\rho\,C_T(U)\,U^2\,\pi R^2, \qquad R = D/2,
+
+where :math:`U` is the sampled free-stream speed, :math:`\rho` is
+``air_density`` and :math:`D` is the table's ``rotor_diameter``. Between
+rows :math:`C_T` and :math:`P` are interpolated linearly; below the first
+and above the last speed (cut-in and cut-out) both are zero, so a parked
+rotor puts no force in the flow. The tables were made at sea-level density,
+1.225 kg/m\ :sup:`3`. The disk log then adds the columns ``ct`` and
+``power_curve`` (the table's :math:`P(U)` in W) for every disk of the run; a
+constant-``ct`` disk in such a run logs its ``ct`` and ``T U_d``. Runs where
+no disk names a turbine keep the five columns. The tables hold published
+:math:`C_T` curves only. Turbines with only a power curve are left out:
+:math:`C_T` from ideal momentum theory, :math:`C_p = 4a(1-a)^2`,
+:math:`C_T = 4a(1-a)`, came out 29 to 34 % below the published
+:math:`C_T` at peak :math:`C_p` for the eight NREL, IEA, DTU and LEANWIND
+reference tables (25 to 37 % over all 44). The sources and licences of the
+tables are in ``Turbines/Data/PowerCurves/README.md``.
+
+The thrust jumps at the first and last table speeds: from zero to the
+cut-in thrust, and from the cut-out thrust to zero. :math:`U` is the
+instantaneous sampled speed, with no averaging and no hysteresis, so a disk
+whose free-stream speed fluctuates about a cut-in or cut-out speed switches
+its thrust on and off from one update to the next. Keep the inflow inside
+the table's range when this matters.
+
+The restart record of a disk holds its ``turbine`` name and its ``ct``
+(zero with a table), so a restart that switches a disk between a table and
+a constant ``ct``, or between tables, stops with a message. A table edited
+in place under the same name is not detected. The default table folder is
+the GALE source tree the code was built from; a relocated executable needs
+``erf.moving_bodies.turbine_data_dir``.

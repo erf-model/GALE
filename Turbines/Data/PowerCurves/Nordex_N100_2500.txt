@@ -1,0 +1,53 @@
+# Nordex_N100_2500
+# source: OpenEnergy database wind turbine library (supply.wind_turbine_library), https://openenergyplatform.org, turbine_type N100/2500 (id 22); the database's own source: not given
+# licence: ODbL-1.0 (https://opendatacommons.org/licenses/odbl/1.0/), (c) Reiner Lemoine Institut
+# Contains information from the OEDB wind turbine library, made available under the ODbL.
+# hub heights offered: 75, 85, 100 (give erf.moving_bodies.<name>.hub_height)
+# Written by make_power_curves.py; columns: wind speed (m/s), Ct (-), electrical power (kW)
+rotor_diameter 100
+rated_power 2500
+3 1.14 3
+3.5 1.06 46
+4 1 101
+4.5 0.945 171
+5 0.898 256
+5.5 0.858 356
+6 0.824 472
+6.5 0.817 608
+7 0.813 765
+7.5 0.81 945
+8 0.81 1148
+8.5 0.782 1372
+9 0.755 1615
+9.5 0.73 1877
+10 0.707 2108
+10.5 0.684 2282
+11 0.558 2401
+11.5 0.466 2473
+12 0.399 2498
+12.5 0.347 2500
+13 0.305 2500
+13.5 0.27 2500
+14 0.241 2500
+14.5 0.216 2500
+15 0.194 2500
+15.5 0.176 2500
+16 0.16 2500
+16.5 0.146 2500
+17 0.134 2500
+17.5 0.123 2500
+18 0.113 2500
+18.5 0.105 2500
+19 0.098 2500
+19.5 0.091 2500
+20 0.085 2500
+20.5 0.079 2500
+21 0.074 2500
+21.5 0.07 2500
+22 0.065 2500
+22.5 0.062 2500
+23 0.058 2500
+23.5 0.055 2500
+24 0.052 2500
+24.5 0.049 2500
+25 0.047 2500

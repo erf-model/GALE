@@ -93,10 +93,17 @@ erf.moving_bodies.T1.fllc_eps_dr     = 1.0         # > 0: span spacing = optimal
 # (section 2). OpenFAST keys given for a ct_disk print a warning.
 erf.moving_bodies.D1.type         = ct_disk
 erf.moving_bodies.D1.base_pos     = 1500. 600. 0.
-erf.moving_bodies.D1.rotor_radius = 120.           # required, > 0 (m)
-erf.moving_bodies.D1.hub_height   = 150.           # required, > rotor_radius (m above the base)
-erf.moving_bodies.D1.ct           = 0.75           # required, in (0, 1): thrust coefficient on the
-                                                   #   upstream speed
+erf.moving_bodies.D1.rotor_radius = 120.           # required without turbine, > 0 (m)
+erf.moving_bodies.D1.hub_height   = 150.           # required, > rotor_radius (m above the base);
+                                                   #   with turbine, the table's unless given, and
+                                                   #   required when the table gives no single one
+erf.moving_bodies.D1.ct           = 0.75           # required without turbine, in (0, 1): thrust
+                                                   #   coefficient on the upstream speed
+erf.moving_bodies.D2.type         = ct_disk
+erf.moving_bodies.D2.base_pos     = 2500. 600. 0.
+erf.moving_bodies.D2.turbine      = NREL_5MW_126   # unset by default: name of a table in
+                                                   #   turbine_data_dir; rotor_radius = D/2 and Ct(U)
+                                                   #   come from it; excludes ct and rotor_radius
 erf.moving_bodies.D1.yaw          = 0.0            # degrees from +x in the horizontal plane
 erf.moving_bodies.D1.num_points_r = 8              # >= 1: rings of the polar point grid
 
@@ -110,6 +117,10 @@ erf.moving_bodies.density_tolerance = 0.05         # >= 0 (relative): ERF's dens
 erf.moving_bodies.alm_max_tip_cells = 1.0          # > 0: most cells a blade tip may sweep per step;
                                                    #   the abort names the largest erf.fixed_dt
                                                    #   that passes
+erf.moving_bodies.turbine_data_dir  = Turbines/Data/PowerCurves  # folder of the turbine tables;
+                                                   #   default: that folder of the GALE source tree
+                                                   #   (build-time path); relative = from the run
+                                                   #   directory
 erf.moving_bodies.prescribed_velocity = 10. 0. 0.  # testing aid, unset by default: uniform velocity
                                                    #   given to every node in place of the flow;
                                                    #   no wake lines are then written

@@ -18,8 +18,13 @@ function(erf_structure_model_add target)
     ${_dir}/GaleCore/ERF_OwnedWakeLines.cpp
     ${_dir}/GaleCore/ERF_UniformMeshNorm.cpp
     ${_dir}/ForceModels/ERF_PrescribedCtDisk.cpp
+    ${_dir}/ForceModels/ERF_TurbinePowerCurve.cpp
     ${_dir}/ForceModels/ERF_FLLC.cpp
   )
+  # the turbine library a ct_disk's erf.moving_bodies.<name>.turbine reads from, unless
+  # erf.moving_bodies.turbine_data_dir names another folder
+  set_property(SOURCE ${_dir}/ForceModels/ERF_TurbinePowerCurve.cpp TARGET_DIRECTORY ${target} APPEND PROPERTY
+               COMPILE_DEFINITIONS GALE_TURBINE_DATA_DIR="${_dir}/Data/PowerCurves")
   # public: the unit tests include the model's headers
   foreach(_sub "" "/GaleCore" "/Motion" "/ForceModels")
     target_include_directories(${target} PUBLIC $<BUILD_INTERFACE:${_dir}${_sub}>)
@@ -55,6 +60,9 @@ function(erf_structure_model_add_unit_tests target)
   # sampler and spreader give over all the points; a rank no kernel reaches must receive nothing.
   # Motivation: the prescribed-Ct disk's point areas must sum to the disk area, its forces
   # to -T n with T from the upstream speed, and its inputs must be parsed with their ranges.
+  # Motivation: a turbine table must give its rows at their speeds, linear between them and zero
+  # outside; a malformed table must abort with its line; a ct_disk naming a turbine must take its
+  # radius, hub height and Ct(U) from the table and refuse a constant ct or a radius beside it.
   # Motivation: GALE's copies of the wake lines and the running statistics (GaleCore), written and
   # restored by a body's owner, and its log helpers must pass the same checks as the originals, and the
   # log helpers must keep many files open within the open-file limit and trim a log at a checkpoint.
@@ -69,6 +77,7 @@ function(erf_structure_model_add_unit_tests target)
     ${_dir}/ERF_GTestActuatorRestriction.cpp
     ${_dir}/ERF_GTestBodyExchange.cpp
     ${_dir}/ERF_GTestPrescribedCtDisk.cpp
+    ${_dir}/ERF_GTestTurbinePowerCurve.cpp
     ${_dir}/ERF_GTestOwnedWakeLines.cpp
     ${_dir}/ERF_GTestOwnedRunningStats.cpp
     ${_dir}/ERF_GTestGaleCellHeights.cpp

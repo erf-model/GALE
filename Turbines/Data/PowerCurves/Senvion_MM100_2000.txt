@@ -1,0 +1,27 @@
+# Senvion_MM100_2000
+# source: OpenEnergy database wind turbine library (supply.wind_turbine_library), https://openenergyplatform.org, turbine_type MM100/2000 (id 96); the database's own source: http://www.windenergie-im-binnenland.de/powercurve.php
+# licence: ODbL-1.0 (https://opendatacommons.org/licenses/odbl/1.0/), (c) Reiner Lemoine Institut
+# Contains information from the OEDB wind turbine library, made available under the ODbL.
+# Written by make_power_curves.py; columns: wind speed (m/s), Ct (-), electrical power (kW)
+rotor_diameter 100
+rated_power 2000
+3 1.01 20
+4 0.85 102
+5 0.8 239
+6 0.8 452
+7 0.8 746
+8 0.78 1126
+9 0.71 1559
+10 0.59 1901
+11 0.45 2000
+12 0.34 2000
+13 0.25 2000
+14 0.2 2000
+15 0.16 2000
+16 0.13 2000
+17 0.11 2000
+18 0.09 2000
+19 0.08 2000
+20 0.07 2000
+21 0.06 2000
+22 0.05 2000
