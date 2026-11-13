@@ -1,0 +1,144 @@
+# GALE master input reference
+#
+# Every GALE input, with its default, range and units. GALE's inputs are erf.structures.model and
+# the erf.moving_bodies.* keys. ERF's own inputs (mesh, solver, boundaries) are not listed here;
+# see the ERF documentation.
+#
+# This is a reference, not a runnable case. Some keys exclude each other; each one says which.
+# Runnable decks are in the folders next to this file.
+#
+# Conventions:
+#   - The value shown is the default. "required" means there is none.
+#   - Every value is range-checked at start-up. The run stops, naming the key, when one is out of
+#     range or not finite.
+#   - A key the chosen options do not use prints a warning.
+#   - A restart must keep every key that places or forces a body; a change stops the run.
+#   - Kernel widths (epsilon*) are in cells of the anchor level's x spacing.
+#
+# Kept in sync with MovingBodiesInputs::read (Turbines/ERF_MovingBodiesInputs.cpp) and
+# Docs/sphinx_doc/Inputs.rst.
+
+# =================================================================================================
+# 1. Turning GALE on
+# =================================================================================================
+erf.structures.model     = gale       # selects GALE; without it the keys below are ignored
+erf.moving_bodies.bodies = T1 D1      # required: body names, one block per name (no duplicates)
+
+# =================================================================================================
+# 2. Every body (openfast_turbine and ct_disk)
+# =================================================================================================
+erf.moving_bodies.T1.type        = openfast_turbine  # required: openfast_turbine | ct_disk
+erf.moving_bodies.T1.base_pos    = 750. 600. 0.      # required: tower base x y z (m); on a terrain-
+                                                     #   fitted mesh z is the height above the surface
+erf.moving_bodies.T1.epsilon     = 2.0               # > 0 (cells): width of the rotor's points.
+                                                     #   Excludes fllc = automatic, which sets it
+erf.moving_bodies.T1.output_root = moving_bodies/T1  # log-file prefix; default <diagnostics_dir>/<name>;
+                                                     #   must differ between bodies
+erf.moving_bodies.T1.num_points_t = 16               # >= 2: points per ring (mode = adm, ct_disk)
+erf.moving_bodies.T1.air_density = 1.225             # > 0 (kg/m^3): must equal the model's AirDens;
+                                                     #   checked against ERF's density at the hub
+erf.moving_bodies.T1.sample_diameters_upstream = 2.0 # > 0 (rotor diameters ahead of the hub);
+                                                     #   default 2.0 for a turbine (sampling = upstream),
+                                                     #   1.0 for a ct_disk
+
+# =================================================================================================
+# 3. OpenFAST turbine (type = openfast_turbine)
+# =================================================================================================
+# The OpenFAST model must set CompInflow = 2; AirDens = air_density; Wake_Mod = 0 with sampling = disk
+# (and mode = alm), 1 with upstream or disk_corrected; TwrShadow = 0 when tower force points are on.
+erf.moving_bodies.T1.fst_file = IEA15-land.fst     # required: OpenFAST primary file
+erf.moving_bodies.T1.mode     = adm                # adm (disk rings) | alm (actuator line) |
+                                                   #   none (one-way: no force into the flow)
+erf.moving_bodies.T1.num_force_points_blade = 50   # >= 1 (>= 2 with fllc): force points per blade.
+                                                   #   Excludes fllc = automatic (300)
+erf.moving_bodies.T1.num_force_points_tower = 0    # >= 0: tower force points; 0 = no tower force
+erf.moving_bodies.T1.nacelle_cd   = 0.0            # >= 0: nacelle drag coefficient; 0 = off
+erf.moving_bodies.T1.nacelle_area = 0.0            # >= 0 (m^2): must be > 0 when nacelle_cd > 0
+
+# --- 3a. Component kernel widths -----------------------------------------------------------------
+erf.moving_bodies.T1.epsilon_tower   = 2.0         # > 0 (cells); default epsilon. Aborts when given
+                                                   #   and num_force_points_tower was never set
+erf.moving_bodies.T1.epsilon_nacelle = 2.0         # > 0 (cells); default epsilon. Aborts when given
+                                                   #   and nacelle_cd was never set; nacelle_cd *
+                                                   #   nacelle_area must not exceed 2 pi eps^2 (m)
+
+# --- 3b. Actuator disk (mode = adm) --------------------------------------------------------------
+erf.moving_bodies.T1.adm_spreading = rings         # rings (one per blade node) | merged_rings (one
+                                                   #   per radial station)
+erf.moving_bodies.T1.sampling = disk_corrected     # disk | upstream | disk_corrected; default
+                                                   #   disk_corrected (adm), disk (alm, none);
+                                                   #   upstream and disk_corrected need mode = adm
+erf.moving_bodies.T1.correction_relax = -1         # disk_corrected: -1 (from the loop gain) or (0, 1];
+                                                   #   1 = unrelaxed update
+erf.moving_bodies.T1.correction_time  = -1         # disk_corrected with correction_relax = -1 (s):
+                                                   #   -1 = rotor radius / free stream; 0 = none; or > 0
+
+# --- 3c. Actuator line (mode = alm) --------------------------------------------------------------
+erf.moving_bodies.T1.fllc = true                   # true | false | automatic; default true (alm),
+                                                   #   false otherwise; needs mode = alm.
+                                                   #   automatic sets epsilon = 0.035 D,
+                                                   #   fllc_eps_chord = 0.15, fllc_eps_dr = 3,
+                                                   #   fllc_start_time = 5 s, num_force_points_blade
+                                                   #   = 300; giving any of those with it aborts
+erf.moving_bodies.T1.fllc_relax      = 0.1         # (0, 1]: relaxation of the correction
+erf.moving_bodies.T1.fllc_start_time = 0.0         # >= 0 (s, simulation time). Excludes automatic
+erf.moving_bodies.T1.fllc_eps_chord  = 0.25        # > 0 (chords): optimal kernel width. Excludes automatic
+erf.moving_bodies.T1.fllc_eps_dr     = 1.0         # > 0: span spacing = optimal width / fllc_eps_dr.
+                                                   #   Excludes automatic
+
+# =================================================================================================
+# 4. Prescribed-Ct disk (type = ct_disk)
+# =================================================================================================
+# Also uses base_pos, epsilon, output_root, num_points_t, air_density, sample_diameters_upstream
+# (section 2). OpenFAST keys given for a ct_disk print a warning.
+erf.moving_bodies.D1.type         = ct_disk
+erf.moving_bodies.D1.base_pos     = 1500. 600. 0.
+erf.moving_bodies.D1.rotor_radius = 120.           # required, > 0 (m)
+erf.moving_bodies.D1.hub_height   = 150.           # required, > rotor_radius (m above the base)
+erf.moving_bodies.D1.ct           = 0.75           # required, in (0, 1): thrust coefficient on the
+                                                   #   upstream speed
+erf.moving_bodies.D1.yaw          = 0.0            # degrees from +x in the horizontal plane
+erf.moving_bodies.D1.num_points_r = 8              # >= 1: rings of the polar point grid
+
+# =================================================================================================
+# 5. Run-wide
+# =================================================================================================
+erf.moving_bodies.anchor_level      = -1           # level the bodies live on; -1 = amr.max_level;
+                                                   #   otherwise 0 .. amr.max_level
+erf.moving_bodies.density_tolerance = 0.05         # >= 0 (relative): ERF's density at a hub vs the
+                                                   #   model's
+erf.moving_bodies.alm_max_tip_cells = 1.0          # > 0: most cells a blade tip may sweep per step;
+                                                   #   the abort names the largest erf.fixed_dt
+                                                   #   that passes
+erf.moving_bodies.prescribed_velocity = 10. 0. 0.  # testing aid, unset by default: uniform velocity
+                                                   #   given to every node in place of the flow;
+                                                   #   no wake lines are then written
+
+# =================================================================================================
+# 6. Diagnostics and statistics
+# =================================================================================================
+erf.moving_bodies.diagnostics_int    = 1           # >= 1 (steps between log rows)
+erf.moving_bodies.diagnostics_dir    = moving_bodies
+erf.moving_bodies.diagnostics_format = per_turbine # per_turbine | per_rank | farm
+erf.moving_bodies.avg_start          = 0.0         # >= 0 (s): statistics and wake averages start here
+erf.moving_bodies.stats_int          = 0           # >= 0 (steps between rewrites of _stats and
+                                                   #   _wake_avg); 0 = at every write
+erf.moving_bodies.max_open_logs      = 0           # >= 0: log files a rank keeps open; 0 = a quarter
+                                                   #   of the open-file limit
+erf.moving_bodies.timing_int         = 0           # >= 0 (steps between timing summaries); 0 = off
+
+# =================================================================================================
+# 7. Wake lines (behind every rotor)
+# =================================================================================================
+erf.moving_bodies.wake.lines_xD   = 2 4 7          # > 0 (rotor diameters behind the rotor); unset =
+                                                   #   no lines
+erf.moving_bodies.wake.half_width = 1.5            # > 0 (rotor diameters): half-length of each line
+erf.moving_bodies.wake.num_points = 61             # >= 2: points per line
+erf.moving_bodies.wake.int        = 0              # >= 0 (steps between samples); 0 = diagnostics_int
+
+# =================================================================================================
+# 8. Debugging and performance
+# =================================================================================================
+erf.moving_bodies.envelope_check_interval = 1      # >= 1 (steps between collective envelope checks)
+erf.moving_bodies.verify_tip_cells        = false  # true: check cached tip-travel cell heights
+                                                   #   against a fresh search every step (alm)
