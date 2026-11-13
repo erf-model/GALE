@@ -12,6 +12,9 @@ inputs are in `Docs/sphinx_doc/theory/MovingBodies.rst` and
 `Docs/sphinx_doc/Inputs.rst`; what each test checks is in
 `Docs/sphinx_doc/RegressionTests.rst`.
 
+`inputs_gale_master_reference` lists every GALE input with its default, range and units. It is a
+reference, not a case: it is not registered, and some of its keys exclude each other.
+
 Every case builds with `ERF_ENABLE_OPENFAST=ON`, `ERF_OPENFAST_USE_STUB=ON`,
 `ERF_ENABLE_FFT=ON` and MPI (`Actuator_UniformCtDisk` needs only
 `ERF_ENABLE_MOVING_BODIES=ON`, and `Actuator_CtDisk_TwoLevel` needs

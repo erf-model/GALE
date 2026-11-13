@@ -1,0 +1,25 @@
+/* GALE documentation: small layout adjustments on top of the Furo theme. */
+
+/* Keep wide reference tables readable: wrap cell text, align to top. */
+table.docutils td,
+table.docutils th {
+  vertical-align: top;
+}
+
+table.docutils td p {
+  margin: 0.15rem 0;
+}
+
+/* Input names in tables should not break mid-key. */
+table.inputs td:first-child code {
+  white-space: nowrap;
+}
+
+/* Cards on the landing page: equal height, no underline on the link. */
+.sd-card {
+  height: 100%;
+}
+
+.sd-card-title {
+  font-weight: 600;
+}
