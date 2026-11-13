@@ -205,10 +205,10 @@ compile and link only: their device kernels are never run. Every build is in dou
      - CUDA 12.2 (sm_80) with the unit tests, HIP ROCm 6.3.2 (gfx908), oneAPI SYCL; MPI, FFT
      - compile only
    * - ``Windows``
-     - MSVC without MPI, FFT (FFTW from vcpkg), unit tests; CUDA 12.6 (sm_80) without MPI
-     - MSVC: GALE's serial unit tests and the four GALE regression tests registered without
+     - MSVC without MPI, FFT (FFTW from vcpkg), unit tests
+     - GALE's serial unit tests and the four GALE regression tests registered without
        MPI (``OpenFAST_DriverOnly`` and the ``ShaftSourceChecker`` cases, none of which runs a
-       turbine's forcing on the flow); CUDA: compile only
+       turbine's forcing on the flow)
    * - ``Style``
      - (nothing)
      - no tabs, no trailing whitespace, codespell, on GALE's files
@@ -227,3 +227,9 @@ other jobs those are listed but do not fail the job
 ``Turbines/ERFStructureModel.cmake`` builds into ``erf_unit_tests`` and fails if one of them is
 not linked in. Compiler caches use the GitHub Actions cache; they are restored on every run and
 saved only on pushes to ``development``.
+
+There is no Windows CUDA job. On Windows, ``nvcc`` refuses an extended ``__device__`` lambda
+whose enclosing function has internal linkage, that is a ``static`` function or any function in
+an anonymous namespace. Twenty-six of ERF's source files write their kernels that way, so GALE
+cannot be compiled for CUDA on Windows until ERF changes. GALE's own two such kernels are
+written with external linkage. ``Linux GPU`` compiles the same kernels with ``nvcc``.

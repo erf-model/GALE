@@ -387,7 +387,7 @@ void expect_spreading_matches (const SlabMesh& m)
     ex.spread_forces(pos, force, eps, std::vector<Real>(3, Real(0.0)), m.znd.get(), m.detj.get(), m.geom, ax, ay, az);
     // on a uniform mesh covered by the boxes every kernel is normalised on its owner: no partial sums travel
     if (!m.znd) { EXPECT_EQ(ex.remote_normalisations(), 0L); }
-    long remote = ex.remote_normalisations();
+    amrex::Long remote = ex.remote_normalisations();
     amrex::ParallelDescriptor::ReduceLongSum(remote);
     if (m.znd) { EXPECT_GT(remote, 0L); }
     erf_actuator::spread_forces(all_pos, all_force, all_eps, m.znd.get(), m.detj.get(), m.geom, gx, gy, gz);
@@ -461,7 +461,7 @@ TEST(BodyExchange, ARankNoKernelReachesReceivesNothing)
         EXPECT_EQ(sx.norm0(0, 0, true), Real(0.0));
     } else if (np > 1) {
         // every point twice from the owner: to be sampled, then to be spread
-        EXPECT_EQ(ex.points_received(), static_cast<long>(2 * (p.size() / 3)));
+        EXPECT_EQ(ex.points_received(), static_cast<amrex::Long>(2 * (p.size() / 3)));
     }
     // and the force is all there
     const Real total = erf_actuator::integrate_source(0, sx, nullptr, m.geom);

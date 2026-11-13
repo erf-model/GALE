@@ -159,6 +159,20 @@ finish_cell_heights (std::vector<Real>& found, Real big, std::vector<Real>& dz)
     }
 }
 
+// a column range of one region in one box of z_phys_nd, for the batched reduction
+struct CellHeightPiece
+{
+    int box;      // the box's local index in z_phys_nd
+    int region;
+    int ilo, jlo, klo, khi;
+    int nx;       // columns along x (the piece has nx times ny columns)
+};
+
+} // namespace
+
+// Defined here, outside the anonymous namespace above: on Windows, nvcc refuses an extended
+// __device__ lambda whose enclosing function has internal linkage. The helpers it calls stay
+// internal, which that rule allows.
 // the shared body of min_cell_heights (weigh false: every spacing in full) and tip_cell_heights:
 // one reduction per region
 void
@@ -197,17 +211,6 @@ cell_heights (const MultiFab* z_phys_nd, const Geometry& geom, const std::vector
     }
     finish_cell_heights(found, big, dz);
 }
-
-// a column range of one region in one box of z_phys_nd, for the batched reduction
-struct CellHeightPiece
-{
-    int box;      // the box's local index in z_phys_nd
-    int region;
-    int ilo, jlo, klo, khi;
-    int nx;       // columns along x (the piece has nx times ny columns)
-};
-
-} // namespace
 
 void
 tip_cell_heights_batched (const MultiFab* z_phys_nd, const Geometry& geom, const std::vector<Real>& rows, std::vector<Real>& dz)

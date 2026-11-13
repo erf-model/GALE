@@ -573,7 +573,7 @@ BodyExchange::sample_velocity (const MultiFab& U, const MultiFab& V, const Multi
             const auto n = static_cast<std::size_t>(buf[k++]);
             all_pos.insert(all_pos.end(), buf.begin() + k, buf.begin() + k + 3 * n);
             k += 3 * n;
-            if (s != me) { m_points_received += static_cast<long>(n); }
+            if (s != me) { m_points_received += static_cast<amrex::Long>(n); }
         }
         AMREX_ALWAYS_ASSERT_WITH_MESSAGE(k == buf.size(), "BodyExchange::sample_velocity: a message is longer than its sections");
     }
@@ -785,7 +785,7 @@ BodyExchange::spread_forces (const std::vector<std::vector<Real>>& pos, const st
                     ++n_remote_from[s];
                 }
             }
-            if (s != me) { m_points_received += static_cast<long>(n); }
+            if (s != me) { m_points_received += static_cast<amrex::Long>(n); }
         }
         AMREX_ALWAYS_ASSERT_WITH_MESSAGE(k == buf.size(), "BodyExchange::spread_forces: a message is longer than its sections");
     }
