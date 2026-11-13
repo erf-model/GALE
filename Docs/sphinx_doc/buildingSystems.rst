@@ -196,13 +196,21 @@ Set build variables in the ``GNUmakefile``:
         - (none)
         - paths
       * - ``USE_MOVING_BODIES``
-        - Enables the moving-bodies framework (``erf.moving_bodies.*``: turbines, prescribed-Ct disks; see :doc:`/CouplingToOpenFAST`), the actuator core for bodies in the flow (velocity sampling at points, force spreading onto the momentum sources; see :ref:`sec:ActuatorCore`) and the structure coupling (see :ref:`sec:StructureCoupling`)
+        - Enables the actuator core for bodies in the flow (velocity sampling at points, force spreading onto the momentum sources; see :ref:`sec:ActuatorCore`) and the structure coupling (see :ref:`sec:StructureCoupling`)
         - FALSE
         - TRUE/FALSE
       * - ``STRUCTURE_HOME``
-        - Structure model directories to compile in, space separated, each with a ``Make.package`` (needs ``USE_MOVING_BODIES=TRUE``; see :ref:`sec:StructureCoupling`)
+        - Structure model directories to compile in, space separated, each with a ``Make.package`` (needs ``USE_MOVING_BODIES=TRUE``; see :ref:`sec:StructureCoupling`). GALE's moving bodies (model ``gale``) are compiled in only when ``$(ERF_HOME)/Turbines`` is listed here
         - (none)
         - paths
+      * - ``USE_OPENFAST``
+        - Builds GALE's OpenFAST turbine coupling (read only by ``Turbines/Make.package``, so it needs ``$(ERF_HOME)/Turbines`` in ``STRUCTURE_HOME``; ignored otherwise)
+        - FALSE
+        - TRUE/FALSE
+      * - ``OPENFAST_HOME``
+        - OpenFAST install prefix (``include/FAST_Library.h``, ``lib/libopenfastlib``), for ``USE_OPENFAST=TRUE``
+        - (none)
+        - path
       * - ``USE_DUST``
         - Enables the dust coupling (atmosphere side; dust models plug into it, see :ref:`sec:DustCoupling`); adds the dust scalars to the state
         - FALSE
@@ -597,7 +605,7 @@ CMake can also generate makefiles for the Ninja build system for faster compilat
      - (none)
      - paths
    * - ``ERF_ENABLE_MOVING_BODIES``
-     - Enables the moving-bodies framework (``erf.moving_bodies.*``: turbines, prescribed-Ct disks; see :doc:`/CouplingToOpenFAST`), the actuator core for bodies in the flow (velocity sampling at points, force spreading onto the momentum sources; see :ref:`sec:ActuatorCore`) and the structure coupling (see :ref:`sec:StructureCoupling`)
+     - Enables the actuator core for bodies in the flow (velocity sampling at points, force spreading onto the momentum sources; see :ref:`sec:ActuatorCore`) and the structure coupling (see :ref:`sec:StructureCoupling`), and compiles in GALE's moving bodies (``erf.moving_bodies.*``: turbines, prescribed-Ct disks; ``Turbines/``, structure model ``gale``; see :doc:`/CouplingToOpenFAST`) whether or not ``ERF_STRUCTURE_MODEL_DIRS`` names that directory
      - OFF
      - ON/OFF
    * - ``ERF_STRUCTURE_MODEL_DIRS``

@@ -1,4 +1,4 @@
-# Deck for the bundled OpenFAST stub (Source/MovingBodies/OpenFAST/Stub): an IEA-15-MW-sized
+# Deck for the bundled OpenFAST stub (Turbines/OpenFAST/Stub): an IEA-15-MW-sized
 # rigid rotor turning at a fixed speed, with a uniform-Ct disk model for the loads.
 dt = 0.01
 num_blades = 3

@@ -3048,10 +3048,12 @@ Moving Bodies (OpenFAST turbines)
 The moving-bodies framework couples ERF to OpenFAST turbines through OpenFAST's
 external-inflow interface, and also drives prescribed-Ct disks that need no OpenFAST; see
 :ref:`sec:MovingBodies` for the coupling. The framework and the ``ct_disk`` bodies are built
-with ``-DERF_ENABLE_MOVING_BODIES=ON`` (cmake; ``USE_MOVING_BODIES = TRUE`` with GNU Make);
-``openfast_turbine`` bodies need ``-DERF_ENABLE_OPENFAST=ON`` as well, which switches the
-framework on by itself (GNU Make: ``USE_OPENFAST = TRUE`` with ``USE_MOVING_BODIES = TRUE`` and
-``OPENFAST_HOME`` set to the OpenFAST install prefix).
+with ``-DERF_ENABLE_MOVING_BODIES=ON`` (cmake), which also compiles in the bodies' directory
+``Turbines/``; ``openfast_turbine`` bodies need ``-DERF_ENABLE_OPENFAST=ON`` as well, which switches the
+framework on by itself. GNU Make compiles the bodies when ``Turbines/`` is listed as a structure model
+directory: ``USE_MOVING_BODIES = TRUE`` with ``STRUCTURE_HOME = $(ERF_HOME)/Turbines``, and
+``USE_OPENFAST = TRUE`` with ``OPENFAST_HOME`` set to the OpenFAST install prefix for
+``openfast_turbine`` bodies.
 
 The bodies run as the structure model ``gale`` (:ref:`sec:StructureCoupling`), which
 ``erf.structures.model = gale`` selects; their own inputs stay under ``erf.moving_bodies``.

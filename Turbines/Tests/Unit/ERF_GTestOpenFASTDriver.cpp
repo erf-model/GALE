@@ -1,5 +1,5 @@
 // Contracts of the OpenFAST driver and the erf.moving_bodies inputs, checked against the
-// bundled stub library (Source/MovingBodies/OpenFAST/Stub), whose geometry and disk model are
+// bundled stub library (Turbines/OpenFAST/Stub), whose geometry and disk model are
 // known in closed form.
 
 #include <array>

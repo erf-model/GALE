@@ -125,7 +125,7 @@ erf.moving_bodies.timing_int         = {a.timing_int}
             names.append(name)
             if a.bodies == "turbine":
                 with open(os.path.join(a.out, f"{name}.fst"), "w") as f:
-                    f.write(f"""# stub turbine {name} (Source/MovingBodies/OpenFAST/Stub); the two OpenFAST-format lines name the AeroDyn file
+                    f.write(f"""# stub turbine {name} (Turbines/OpenFAST/Stub); the two OpenFAST-format lines name the AeroDyn file
 2                CompAero    - aerodynamic loads from AeroDyn
 "aerodyn.dat"    AeroFile    - the AeroDyn file the start-up checks read
 dt = 0.01

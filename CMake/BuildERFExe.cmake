@@ -374,46 +374,6 @@ function(build_erf_lib erf_lib_name)
     target_compile_definitions(${erf_lib_name} PUBLIC ERF_USE_WINDFARM)
   endif()
 
-  if(ERF_ENABLE_MOVING_BODIES)
-    target_sources(${erf_lib_name} PRIVATE
-      ${SRC_DIR}/MovingBodies/ERF_MovingBodies.cpp
-      ${SRC_DIR}/MovingBodies/ERF_GaleTurbineModel.cpp
-      ${SRC_DIR}/MovingBodies/ERF_MovingBodiesInputs.cpp
-      ${SRC_DIR}/MovingBodies/Core/ERF_ActuatorSampling.cpp
-      ${SRC_DIR}/MovingBodies/Core/ERF_ActuatorSpreading.cpp
-      ${SRC_DIR}/MovingBodies/Core/ERF_WakeLines.cpp
-      ${SRC_DIR}/MovingBodies/GaleCore/ERF_ActuatorRestriction.cpp
-      ${SRC_DIR}/MovingBodies/GaleCore/ERF_BodyExchange.cpp
-      ${SRC_DIR}/MovingBodies/GaleCore/ERF_CellHeights.cpp
-      ${SRC_DIR}/MovingBodies/GaleCore/ERF_OwnedWakeLines.cpp
-      ${SRC_DIR}/MovingBodies/GaleCore/ERF_UniformMeshNorm.cpp
-      ${SRC_DIR}/MovingBodies/ForceModels/ERF_PrescribedCtDisk.cpp
-      ${SRC_DIR}/MovingBodies/ForceModels/ERF_FLLC.cpp
-    )
-    target_include_directories(${erf_lib_name} PUBLIC $<BUILD_INTERFACE:${SRC_DIR}/MovingBodies>)
-    target_include_directories(${erf_lib_name} PUBLIC $<BUILD_INTERFACE:${SRC_DIR}/MovingBodies/Core>)
-    target_include_directories(${erf_lib_name} PUBLIC $<BUILD_INTERFACE:${SRC_DIR}/MovingBodies/GaleCore>)
-    target_include_directories(${erf_lib_name} PUBLIC $<BUILD_INTERFACE:${SRC_DIR}/MovingBodies/Motion>)
-    target_include_directories(${erf_lib_name} PUBLIC $<BUILD_INTERFACE:${SRC_DIR}/MovingBodies/ForceModels>)
-    target_compile_definitions(${erf_lib_name} PUBLIC ERF_USE_MOVING_BODIES)
-    if(ERF_ENABLE_OPENFAST)
-      target_sources(${erf_lib_name} PRIVATE
-        ${SRC_DIR}/MovingBodies/OpenFAST/ERF_OpenFASTDriver.cpp
-        ${SRC_DIR}/MovingBodies/OpenFAST/ERF_OpenFASTAudit.cpp
-        ${SRC_DIR}/MovingBodies/ForceModels/ERF_OpenFASTRotor.cpp
-      )
-      target_include_directories(${erf_lib_name} PUBLIC $<BUILD_INTERFACE:${SRC_DIR}/MovingBodies/OpenFAST>)
-      target_compile_definitions(${erf_lib_name} PUBLIC ERF_USE_OPENFAST)
-      if(ERF_OPENFAST_USE_STUB)
-        target_link_libraries(${erf_lib_name} PUBLIC erf_openfast_stub)
-      else()
-        target_include_directories(${erf_lib_name} PUBLIC ${ERF_OPENFAST_INCLUDE_DIRS})
-        target_link_libraries(${erf_lib_name} PUBLIC openfastlib ${ERF_OPENFAST_FORTRAN_LIBS})
-        target_link_directories(${erf_lib_name} PUBLIC ${ERF_OPENFAST_FORTRAN_DIRS})
-      endif()
-    endif()
-  endif()
-
   if(ERF_ENABLE_FIRE)
     # The fire coupling, atmosphere side, shared by every fire engine
     target_sources(${erf_lib_name} PRIVATE
@@ -489,13 +449,19 @@ function(build_erf_lib erf_lib_name)
   endif()
 
   if(ERF_ENABLE_MOVING_BODIES)
-    # The structure coupling (the actuator core is added with the moving bodies above).
+    # The actuator core: velocity sampling at points, Gaussian force spreading onto the
+    # momentum sources, wake sampling lines and running statistics, for bodies in the flow.
     target_sources(${erf_lib_name} PRIVATE
+      ${SRC_DIR}/MovingBodies/Core/ERF_ActuatorSampling.cpp
+      ${SRC_DIR}/MovingBodies/Core/ERF_ActuatorSpreading.cpp
+      ${SRC_DIR}/MovingBodies/Core/ERF_WakeLines.cpp
       ${SRC_DIR}/MovingBodies/Coupling/ERF_StructureModelRegistry.cpp
       ${SRC_DIR}/MovingBodies/Coupling/ERF_StructureCoupling.cpp
       ${SRC_DIR}/MovingBodies/Coupling/ERF_StructureCoarseSource.cpp
     )
+    target_include_directories(${erf_lib_name} PUBLIC $<BUILD_INTERFACE:${SRC_DIR}/MovingBodies/Core>)
     target_include_directories(${erf_lib_name} PUBLIC $<BUILD_INTERFACE:${SRC_DIR}/MovingBodies/Coupling>)
+    target_compile_definitions(${erf_lib_name} PUBLIC ERF_USE_MOVING_BODIES)
 
     # Structure models live outside ERF, each in a directory that provides
     # ERFStructureModel.cmake defining erf_structure_model_add(target), as the

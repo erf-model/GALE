@@ -208,7 +208,7 @@ option(ERF_ENABLE_NOAHMP "Enable Noah-MP" OFF)
 
 #Other parameterizations
 option(ERF_ENABLE_WINDFARM "Enable wind farm parameterizations" OFF)
-option(ERF_ENABLE_MOVING_BODIES "Enable the moving-bodies framework (erf.moving_bodies.*), the actuator core and the structure coupling (Source/MovingBodies)" OFF)
+option(ERF_ENABLE_MOVING_BODIES "Enable the actuator core and the structure coupling (Source/MovingBodies) and compile in GALE's moving bodies (Turbines/, erf.moving_bodies.*, structure model gale)" OFF)
 option(ERF_ENABLE_OPENFAST "Enable the OpenFAST turbine coupling (implies ERF_ENABLE_MOVING_BODIES)" OFF)
 option(ERF_OPENFAST_USE_STUB "Build the OpenFAST coupling against the bundled stub library instead of OpenFAST (for testing)" OFF)
 option(ERF_BUILD_ROSCO "Download and build the ROSCO turbine controller library (libdiscon) in the build tree; needs ERF_ENABLE_OPENFAST with the OpenFAST library" OFF)
@@ -672,9 +672,9 @@ if(ERF_ENABLE_OPENFAST)
     # run where OpenFAST is not installed.
     message(STATUS "Using the bundled OpenFAST stub library (ERF_OPENFAST_USE_STUB=ON)")
     add_library(erf_openfast_stub STATIC
-      ${PROJECT_SOURCE_DIR}/Source/MovingBodies/OpenFAST/Stub/ERF_OpenFASTStub.cpp)
+      ${PROJECT_SOURCE_DIR}/Turbines/OpenFAST/Stub/ERF_OpenFASTStub.cpp)
     target_include_directories(erf_openfast_stub PUBLIC
-      $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/Source/MovingBodies/OpenFAST/Stub>)
+      $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/Turbines/OpenFAST/Stub>)
     # erf_srclib is exported through ERFTargets, so its link dependency must be exported too
     install(TARGETS erf_openfast_stub EXPORT ERFTargets ARCHIVE DESTINATION lib)
   else()
@@ -712,6 +712,27 @@ if(ERF_ENABLE_OPENFAST)
 
   message(STATUS "OpenFAST configuration complete")
   list(POP_BACK CMAKE_MESSAGE_CONTEXT)
+endif()
+
+########################## GALE TURBINES ##############################
+
+# GALE's moving bodies (Turbines/, structure model "gale", with the OpenFAST coupling) are
+# compiled in with the moving-bodies framework, whether or not ERF_STRUCTURE_MODEL_DIRS names
+# the directory. ERF_GALE_TURBINES_DIR tells Tests/CTestList.cmake to add the model's tests.
+if(ERF_ENABLE_MOVING_BODIES)
+  set(ERF_GALE_TURBINES_DIR "${PROJECT_SOURCE_DIR}/Turbines")
+  get_filename_component(_erf_gale_real "${ERF_GALE_TURBINES_DIR}" REALPATH)
+  set(_erf_gale_listed OFF)
+  foreach(_d IN LISTS ERF_STRUCTURE_MODEL_DIRS)
+    get_filename_component(_d_real "${_d}" REALPATH BASE_DIR "${PROJECT_SOURCE_DIR}/Exec")   # as build_erf_lib resolves it
+    if(_d_real STREQUAL _erf_gale_real)
+      set(_erf_gale_listed ON)
+    endif()
+  endforeach()
+  if(NOT _erf_gale_listed)
+    list(APPEND ERF_STRUCTURE_MODEL_DIRS "${ERF_GALE_TURBINES_DIR}")
+  endif()
+  message(STATUS "Structure model directories: ${ERF_STRUCTURE_MODEL_DIRS}")
 endif()
 
 ########################## ROSCO ##################################

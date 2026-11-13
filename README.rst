@@ -196,8 +196,10 @@ case checks. The cases run under CTest:
   loads. They are registered when the build is given ``ROSCO_DIR`` or
   ``ERF_BUILD_ROSCO=ON``.
 
-The unit tests of the samplers, the force spreading, the body exchange and the
-OpenFAST driver are in ``Tests/Unit/MovingBodies``.
+The unit tests of the samplers and the force spreading are in
+``Tests/Unit/MovingBodies``; those of the body exchange, the OpenFAST driver and
+the rest of the turbine model are in ``Turbines/Tests/Unit``, and the model's
+regression tests are registered in ``Turbines/Tests/ERFTurbinesTests.cmake``.
 
 Data and acknowledgements
 -------------------------
@@ -232,10 +234,15 @@ ERF holds a coupling interface for models of structures in the flow
 tools (``Source/MovingBodies/Core``). A model outside ERF registers with that
 interface by name, and adding one changes no file of ERF.
 
-Today GALE's turbine module sits in ``Source/MovingBodies`` and is called from
-ERF's time step directly. The planned next step is to move it behind the ERF
-interface and to put the body solvers behind one interface inside GALE, so that
-OpenFAST becomes one engine among others that can be added the same way.
+GALE's turbine module is such a model. It sits in ``Turbines/``, registers as
+structure model ``gale`` and is compiled in from there
+(``Turbines/ERFStructureModel.cmake`` for CMake, ``Turbines/Make.package`` for
+GNU Make). The CMake build adds it whenever the moving-bodies framework is on;
+a GNU Make build needs ``STRUCTURE_HOME = $(ERF_HOME)/Turbines``.
+The planned next steps are to take ERF in as a submodule, so that GALE holds
+only its own files, and to put the body solvers behind one interface inside
+GALE, so that OpenFAST becomes one engine among others that can be added the
+same way.
 
 Development model
 -----------------

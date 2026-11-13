@@ -3,7 +3,7 @@
 Moving Bodies: OpenFAST Turbines
 ================================
 
-The moving-bodies framework (``Source/MovingBodies``) represents wind turbines
+The moving-bodies framework (``Turbines/``) represents wind turbines
 whose aerodynamics and structural response are computed by
 `OpenFAST <https://openfast.readthedocs.io>`_ while ERF supplies the wind. It
 is separate from the wind farm parameterizations of :ref:`sec:WindFarmModels`,
@@ -12,16 +12,18 @@ blade-element solution on the turbine's own blade and tower nodes.
 
 It builds on the actuator core (``Source/MovingBodies/Core``,
 :ref:`sec:ActuatorCore`), which it uses unchanged. What the framework adds
-to the core lives in ``Source/MovingBodies/GaleCore``: the exchange of a
-body's points with the ranks it touches (``BodyExchange``), the restriction
-of the sources to coarser levels, the cell heights that limit a blade tip,
+to the core lives in ``Turbines/GaleCore``: the exchange of a
+body's points with the ranks it touches (``BodyExchange``), the conversion
+of an earlier checkpoint's face forces into a source (``ActuatorRestriction``), the cell heights that limit a blade tip,
 a kernel's normalisation summed on one rank, the phase timers, the
 diagnostics files of many bodies per rank (``LogStreams``), and copies of the
 core's ``WakeLines`` and ``RunningStats`` that a body's owner writes and
 restores (``OwnedWakeLines``, ``OwnedRunningStats``).
 
 The bodies reach ERF as the structure model ``gale``
-(``ERF_GaleTurbineModel.cpp``, :ref:`sec:StructureCoupling`), selected with
+(``Turbines/ERF_GaleTurbineModel.cpp``, :ref:`sec:StructureCoupling`), compiled in from
+their own directory as any structure model is (``Turbines/ERFStructureModel.cmake``,
+``Turbines/Make.package``), and selected with
 ``erf.structures.model = gale``. ERF calls it at the times it calls every structure
 model: it starts the bodies once the mesh exists, steps them at each step of their
 level, adds their momentum source on that level, restricts that source onto the

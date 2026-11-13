@@ -18,6 +18,7 @@ on:
       - 'Exec/ERF_Prob.*'
       - 'Tests/StructureModelExample/**'
       - 'Source/MovingBodies/**'
+      - 'Turbines/**'
       - 'Submodules/AMReX'
       - '.github/workflows/parent-project.yml'
   pull_request:
@@ -32,6 +33,7 @@ on:
       - 'Exec/ERF_Prob.*'
       - 'Tests/StructureModelExample/**'
       - 'Source/MovingBodies/**'
+      - 'Turbines/**'
       - 'Submodules/AMReX'
       - '.github/workflows/parent-project.yml'
   workflow_dispatch:
@@ -115,8 +117,10 @@ jobs:
         cmake -S Tests/ParentExecutable -B $B -DCMAKE_BUILD_TYPE:STRING=Release \
           -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DERF_ENABLE_ALL_WARNINGS:BOOL=ON \
           2>&1 | tee ${{ runner.temp }}/configure-exec-output.txt
-        # (bash -e does not stop on a negated command, so the check exits itself)
-        if grep -q "ERF structure model directory" ${{ runner.temp }}/configure-exec-output.txt; then
+        # (bash -e does not stop on a negated command, so the check exits itself); GALE's own
+        # model (Turbines/), which ERF adds with the moving bodies, is not the parent's
+        if grep "ERF structure model directory" ${{ runner.temp }}/configure-exec-output.txt \
+             | grep -v "ERF structure model directory: ${{ github.workspace }}/Turbines$" > /dev/null; then
           echo "the parent executable must not hand ERF a model directory"; exit 1
         fi
         cmake --build $B --target parent_model fvolumesum --parallel 4

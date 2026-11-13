@@ -1,6 +1,6 @@
 # MovingBodies at 1000+ turbines: bottlenecks and PR plan
 
-These are working notes for scaling `Source/MovingBodies` (branch `ERF-MovingBodies` of `hgopalan/ERF`)
+These are working notes for scaling GALE's moving bodies (`Turbines/` since G3 PR 3, with ERF's actuator core in `Source/MovingBodies`; branch `ERF-MovingBodies` of `hgopalan/ERF`)
 to farms of 1000+ OpenFAST turbines. The work is split into 18 PRs, one issue each, to be done one at a time.
 
 - **Code analysed:** `ERF-MovingBodies` at `3d427e7` (#528), which is newer than the `repo.MD` snapshot
@@ -826,7 +826,7 @@ None of these needs a code change.
 
 | File | What is there |
 |---|---|
-| `Source/MovingBodies/ERF_MovingBodies.cpp` | `gather_rows` 44, `write_checkpoint` 223, `choose_owners` 357, `report_participants` 423, `turbine_table` 475, `update_tip_cells` 488, `read_checkpoint` 654, `advance` 860, `build_wake_lines` 999, `write_wake_diagnostics` 1097, `write_total_load` 1133, `write_source_diagnostics` 1173, `spread_sources` 1194, `add_momentum_sources` 1299, `supply_velocities` 1340, `check_levels` 1432, `check_coverage` 1500 |
+| `Turbines/ERF_MovingBodies.cpp` | `gather_rows` 44, `write_checkpoint` 223, `choose_owners` 357, `report_participants` 423, `turbine_table` 475, `update_tip_cells` 488, `read_checkpoint` 654, `advance` 860, `build_wake_lines` 999, `write_wake_diagnostics` 1097, `write_total_load` 1133, `write_source_diagnostics` 1173, `spread_sources` 1194, `add_momentum_sources` 1299, `supply_velocities` 1340, `check_levels` 1432, `check_coverage` 1500 |
 | `Source/MovingBodies/Core/ERF_BodyExchange.cpp` | `sections` 62, `cells_within` 73, `ranks_touching` 132, `choose_owners` 144, `find_participants` 373, `ensure_envelopes` 387, `sample_velocity` 482, `spread_forces` 612 |
 | `Source/MovingBodies/Core/ERF_ActuatorSpreading.cpp` | `KernelFaces` 123, `spread_partial_norms` 337, `uniform_mesh_norm` 431, `add_scaled_kernels` 476, `integrate_source` 609 |
 | `Source/MovingBodies/Core/ERF_ActuatorSampling.H` | `ZBounds` 131 (`k_range` 142) |
@@ -834,12 +834,12 @@ None of these needs a code change.
 | `Source/MovingBodies/Core/ERF_DiagnosticsLog.H` | `open_log` 24, `trim_log_after` 57 |
 | `Source/MovingBodies/Core/ERF_RunningStats.H` | `write` 95, `write_state` 108, `read_state` 124 |
 | `Source/MovingBodies/Core/ERF_WakeLines.cpp` | `write_instantaneous` 112, `write_average` 127 |
-| `Source/MovingBodies/ForceModels/ERF_OpenFASTRotor.cpp` | `turbine_points` 241, `adm_rings` 266 |
-| `Source/MovingBodies/ForceModels/ERF_PrescribedCtDisk.cpp` | `open_diagnostics` 96, `write_diagnostics` 106 |
-| `Source/MovingBodies/OpenFAST/ERF_OpenFASTDriver.cpp` | `check_induction` 47, `check_tower_shadow_off` 74, constructor 87, `step` 346, `check_lockstep` 393, log writes 564–593 |
-| `Source/MovingBodies/OpenFAST/ERF_OpenFASTAudit.cpp` | `openfast_value` 18 |
-| `Source/MovingBodies/ERF_MovingBodiesInputs.H` | Input defaults (see §1) |
-| `Source/MovingBodies/ERF_MovingBodiesInputs.cpp` | Global keys and wake keys parsed at 76–126 |
+| `Turbines/ForceModels/ERF_OpenFASTRotor.cpp` | `turbine_points` 241, `adm_rings` 266 |
+| `Turbines/ForceModels/ERF_PrescribedCtDisk.cpp` | `open_diagnostics` 96, `write_diagnostics` 106 |
+| `Turbines/OpenFAST/ERF_OpenFASTDriver.cpp` | `check_induction` 47, `check_tower_shadow_off` 74, constructor 87, `step` 346, `check_lockstep` 393, log writes 564–593 |
+| `Turbines/OpenFAST/ERF_OpenFASTAudit.cpp` | `openfast_value` 18 |
+| `Turbines/ERF_MovingBodiesInputs.H` | Input defaults (see §1) |
+| `Turbines/ERF_MovingBodiesInputs.cpp` | Global keys and wake keys parsed at 76–126 |
 | `Source/TimeIntegration/ERF_Advance.cpp` | The `check_levels` and `advance` calls, 174–182 |
 | `Source/TimeIntegration/ERF_TI_slow_rhs_pre.H` | The `add_momentum_sources` call, 219–224 |
 | `Source/ERF_MakeNewArrays.cpp` | `z_phys_nd` (55) and `detJ_cc` (125), always allocated |
