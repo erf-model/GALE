@@ -184,14 +184,6 @@ ERF::WriteCheckpointFile () const
     // ---- ParallelDescriptor::IOProcessor() creates the directories
     PreBuildDirectorHierarchy(checkpointname, "Level_", nlevels, true);
 
-#ifdef ERF_USE_MOVING_BODIES
-    // the bodies' state and the OpenFAST turbines' own checkpoints, under <chk>/moving_bodies
-    if (moving_bodies) {
-        const int lev = std::min(moving_bodies->anchor_level(), finest_level);
-        moving_bodies->write_checkpoint(checkpointname, grids[lev], dmap[lev]);
-    }
-#endif
-
     if (sbm_state_manager) {
         // A checkpoint holds one accepted spectrum per level, so it may only be
         // written at a synchronized instant with no partial step or reflux.
@@ -2405,7 +2397,6 @@ ERF::ReadCheckpointFile ()
         }
     }
 #endif
-
 }
 
 /**

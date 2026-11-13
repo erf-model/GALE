@@ -1,16 +1,22 @@
 #!/usr/bin/env python3
-"""Turn a checkpoint into the layout an earlier version of the moving bodies wrote.
+"""Turn a checkpoint into a layout an earlier version of the moving bodies wrote.
 
-The moving bodies now write the anchor level's momentum source (N/m^3) to
-<chk>/moving_bodies/StructureCoarseSource/{Level,x_faces,y_faces,z_faces}, the layout ERF uses
-for a structure model. Earlier versions wrote the anchor level's face forces (N), the source times the face
-volume, to <chk>/moving_bodies/force_{x,y,z}. This script rewrites a checkpoint written now
-into the earlier layout, so that the restart test can check that such a checkpoint is still read:
+ERF writes the anchor level's momentum source (N/m^3) of structure model "gale" to
+<chk>/StructureCoarseSource/{Level,x_faces,y_faces,z_faces}. Earlier versions wrote it elsewhere:
 
-    python3 make_legacy_checkpoint.py <chk> <face volume in m^3>
+  bodies_dir  the bodies' own hooks, before they became structure model "gale", wrote the same
+              source to <chk>/moving_bodies/StructureCoarseSource;
+  force       older versions wrote the anchor level's face forces (N), the source times the face
+              volume, to <chk>/moving_bodies/force_{x,y,z}.
+
+This script rewrites a checkpoint written now into one of those layouts, so that the restart
+tests can check that such a checkpoint is still read:
+
+    python3 make_legacy_checkpoint.py <chk> bodies_dir
+    python3 make_legacy_checkpoint.py <chk> force <face volume in m^3>
 
 The face volume is dx dy dz of the anchor level (a uniform-dz mesh, where the face Jacobian
-is 1). moving_bodies/StructureCoarseSource is removed afterwards.
+is 1). <chk>/StructureCoarseSource is removed afterwards.
 """
 import array
 import os
@@ -57,18 +63,26 @@ def scale_fabs(header_path, old_prefix, new_prefix, out_dir, factor):
 
 
 def main():
-    if len(sys.argv) != 3:
+    if len(sys.argv) < 3 or sys.argv[2] not in ("bodies_dir", "force"):
+        sys.exit(__doc__)
+    if len(sys.argv) != (4 if sys.argv[2] == "force" else 3):
         sys.exit(__doc__)
     chk = sys.argv[1]
-    volume = float(sys.argv[2])
+    src_dir = os.path.join(chk, "StructureCoarseSource")
     out_dir = os.path.join(chk, "moving_bodies")
-    src_dir = os.path.join(out_dir, "StructureCoarseSource")
     if not os.path.isfile(os.path.join(src_dir, "x_faces_H")):
         sys.exit(f"{src_dir}: no x_faces_H")
+    if not os.path.isdir(out_dir):
+        sys.exit(f"{out_dir}: no such directory")
+    if sys.argv[2] == "bodies_dir":
+        shutil.move(src_dir, os.path.join(out_dir, "StructureCoarseSource"))
+        print(f"{chk}: StructureCoarseSource moved to moving_bodies/StructureCoarseSource")
+        return
+    volume = float(sys.argv[3])
     for face, force in (("x_faces", "force_x"), ("y_faces", "force_y"), ("z_faces", "force_z")):
         scale_fabs(os.path.join(src_dir, face + "_H"), face, force, out_dir, volume)
     shutil.rmtree(src_dir)
-    print(f"{chk}: moving_bodies/StructureCoarseSource rewritten as moving_bodies/force_x, _y, _z (face volume {volume} m^3)")
+    print(f"{chk}: StructureCoarseSource rewritten as moving_bodies/force_x, _y, _z (face volume {volume} m^3)")
 
 
 if __name__ == "__main__":

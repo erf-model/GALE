@@ -41,6 +41,7 @@ erf.plot_vars_1  = density x_velocity y_velocity z_velocity theta
 # The default sampling (disk_corrected) recovers the free stream; with epsilon = 2 cells of 50 m its
 # filter width is about 2 rotor radii, past the 1.25 the factor was fitted for (the start-up log
 # warns). That is fine for a regression of this feature; the calibrated set-up is OpenFAST_ADM_DiskCorrected.
+erf.structures.model                         = gale
 erf.moving_bodies.bodies                     = T1
 erf.moving_bodies.T1.type                    = openfast_turbine
 erf.moving_bodies.T1.mode                    = adm

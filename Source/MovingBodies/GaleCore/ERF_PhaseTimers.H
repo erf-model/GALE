@@ -41,7 +41,7 @@ public:
         Statistics,    //!< the running statistics and their files
         Wake,          //!< sampling and writing the wake lines (and setting them up on a fresh start)
         AddSources,    //!< adding the sources to ERF's right-hand sides, every RK stage
-        CheckLevels,   //!< the finer-level check ERF calls every coarse step
+        CheckLevels,   //!< support_boxes(), the bodies' support ERF checks against a finer level each anchor step
         Checkpoint,    //!< writing the bodies' checkpoint
         NumPhases
     };

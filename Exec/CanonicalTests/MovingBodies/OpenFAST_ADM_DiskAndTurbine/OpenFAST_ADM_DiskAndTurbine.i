@@ -40,6 +40,7 @@ erf.plot_vars_1  = density x_velocity y_velocity z_velocity theta
 # an IEA-15-MW-sized stub rotor as a disk and a uniform-Ct disk of the same size behind it, both
 # sampling the flow; T1's default sampling (disk_corrected) has a filter width of about 2 rotor radii
 # (epsilon = 2 cells of 50 m), past the 1.25 the factor was fitted for (the start-up log warns)
+erf.structures.model                         = gale
 erf.moving_bodies.bodies                     = T1 D2
 erf.moving_bodies.T1.type                    = openfast_turbine
 erf.moving_bodies.T1.mode                    = adm

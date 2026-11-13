@@ -266,10 +266,6 @@
                          get_eb(level), true);
 
 #ifdef ERF_USE_MOVING_BODIES
-        // The moving bodies' momentum sources, fixed over the step
-        if (moving_bodies) {
-            moving_bodies->add_momentum_sources(level, xmom_src, ymom_src, zmom_src);
-        }
         // The structures' force on the air (erf.structures.model), fixed over the step
         if (m_structure_model && level == m_structure_model->level(finest_level)) {
             m_structure_model->add_momentum_sources(level, xmom_src, ymom_src, zmom_src);

@@ -20,6 +20,17 @@ diagnostics files of many bodies per rank (``LogStreams``), and copies of the
 core's ``WakeLines`` and ``RunningStats`` that a body's owner writes and
 restores (``OwnedWakeLines``, ``OwnedRunningStats``).
 
+The bodies reach ERF as the structure model ``gale``
+(``ERF_GaleTurbineModel.cpp``, :ref:`sec:StructureCoupling`), selected with
+``erf.structures.model = gale``. ERF calls it at the times it calls every structure
+model: it starts the bodies once the mesh exists, steps them at each step of their
+level, adds their momentum source on that level, restricts that source onto the
+coarser levels, writes it to ``<chk>/StructureCoarseSource`` and stops the run when a
+finer level covers the bodies. On a uniform-dz mesh ERF hands a structure model no
+heights or Jacobian; the model then gives the bodies the flat node heights
+``prob_lo z + k dz`` and a Jacobian of 1, the values ERF holds on such a mesh, so the
+bodies take the same path on every mesh.
+
 Coupling
 --------
 
@@ -681,9 +692,12 @@ level's source, so a restart gives the coarser levels the same sources. ERF's
 average-down of the state after every coarse step still replaces the covered
 coarse cells with the anchor level's. Only the anchor level's
 source is written to ``moving_bodies/momentum_source.csv``. A finer level than the anchor may exist elsewhere, but not over the
-bodies: the average-down would overwrite their force there, so before every
-coarse step the run aborts if a finer level reaches a rotor, with its kernel's
-reach, or a disk. Everything the bodies read or write on the level must lie on
+bodies: the average-down would overwrite their force there, so after every
+step of the anchor level, before the next, ERF aborts if the next finer level touches the bodies'
+support (``MovingBodies::support_boxes()``): for each turbine a cube about the hub of
+half-width the tip radius plus the kernel's reach (three kernel widths and one
+cell), and the boxes of its tower and nacelle points with the same reach; for each
+disk a cube about the hub of half-width its radius plus that reach. Everything the bodies read or write on the level must lie on
 its grids: at the first step and whenever the level's grids change, every node
 with the kernel's reach, every disk point, and every wake sampling point is
 checked against the anchor level's box union (periodic directions wrap), and a
@@ -812,9 +826,8 @@ turbine's node loads (``<name>_nodes.dat``) and lifting-line correction
 (``<name>_fllc.dat``) written by that rank too, the wake lines' running sums
 and the bodies' statistics. With an anchor level above 0, the anchor level's
 source that the coarser levels' first steps after the restart restrict onto
-their faces goes to ``<chk>/moving_bodies/StructureCoarseSource`` (``Level``, ``x_faces``,
-``y_faces``, ``z_faces``), the layout ERF writes to ``<chk>/StructureCoarseSource``
-for a structure model, which may run alongside the bodies. A restart may run on another number of ranks: the
+their faces is ERF's to write, to ``<chk>/StructureCoarseSource`` (``Level``, ``x_faces``,
+``y_faces``, ``z_faces``), as for every structure model. A restart may run on another number of ranks: the
 owners are chosen again from its boxes, and each reads its turbines' files
 (tested with the stub library, from two ranks to one). On a restart the
 turbines are restored with ``FAST_ExtInfw_Restart`` instead of being
@@ -822,10 +835,13 @@ initialised, ERF checks that the time index OpenFAST reports is the one its
 own checkpoint expects, and the run continues with the next step; the anchor
 level's momentum sources are not stored but rebuilt at that step from the
 restored loads, as they would have been in the run being continued, while the
-coarser levels take theirs from the stored source. A checkpoint of an earlier
-version, which stored the anchor level's face forces as ``moving_bodies/force_x``,
-``force_y`` and ``force_z``, is read too: the forces are turned into the source
-on the restart's grids. A checkpoint written before either was stored restarts
+coarser levels take theirs from the stored source. Checkpoints of earlier
+versions are read too. One written before the bodies became structure model
+``gale`` holds the source in ``moving_bodies/StructureCoarseSource``; an older one
+holds the anchor level's face forces as ``moving_bodies/force_x``, ``force_y`` and
+``force_z``, which are turned into the source on the restart's grids. In either case,
+when ``<chk>/StructureCoarseSource`` is missing, the model writes the source there,
+inside the checkpoint, before ERF reads it. A checkpoint written before either was stored restarts
 with an unforced first coarse step, and the log says so. With ``fllc = automatic`` the kernel width is set again
 from the restored rotor. The diagnostics
 files keep their rows up to the checkpoint, dropping any that a run which went
@@ -922,14 +938,13 @@ checks (the coverage check, the audits, the disks' density check), the
 sampling (``MovingBodies::supply_velocities()``), the OpenFAST step
 (``OpenFASTDriver::step()``, every turbine's ``FAST_CFD_Step`` calls on its
 owner), the spreading (``MovingBodies::spread_sources()``, the zeroing of the
-source and the actuator lines' tip cells included, and
-``MovingBodies::make_coarse_sources()`` at each step of a coarser level), each diagnostics writer,
+source and the actuator lines' tip cells included), each diagnostics writer,
 the statistics and the wake lines (their set-up included). Inside the
 exchanges they cover the routing of the points to ranks, the envelope check,
 each message round (``BodyExchange::sample_velocity``: the points and the
 replies; ``BodyExchange::spread_forces``: the points, the partial norms and
 the scales) and the sampling and spreading kernels. Outside ``advance()`` they
-cover ``add_momentum_sources()``, ``check_levels()``, the checkpoint write
+cover ``add_momentum_sources()``, ``support_boxes()`` (timed as ``check_levels``), the checkpoint write
 and read (the trimming of the logs on a restart included) and the start-up:
 the constructor, ``set_ground()`` and the owner choice. A region that holds
 a collective (a message round, the gather of the logs, a reduction) includes

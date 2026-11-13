@@ -3053,6 +3053,12 @@ with ``-DERF_ENABLE_MOVING_BODIES=ON`` (cmake; ``USE_MOVING_BODIES = TRUE`` with
 framework on by itself (GNU Make: ``USE_OPENFAST = TRUE`` with ``USE_MOVING_BODIES = TRUE`` and
 ``OPENFAST_HOME`` set to the OpenFAST install prefix).
 
+The bodies run as the structure model ``gale`` (:ref:`sec:StructureCoupling`), which
+``erf.structures.model = gale`` selects; their own inputs stay under ``erf.moving_bodies``.
+Without that line the run has no bodies, and ``amrex.parmparse.verbose = 1`` lists the
+``erf.moving_bodies`` keys as never read. ``erf.structures.model = gale`` without
+``erf.moving_bodies.bodies`` aborts.
+
 The run aborts at start-up, naming the input, unless it has:
 
 - the anelastic solver and a fixed time step (``erf.fixed_dt``) whose step on the bodies' level
@@ -3064,8 +3070,9 @@ The run aborts at start-up, naming the input, unless it has:
   steps, since ERF would cut the last one, unless ``max_step`` ends the run first;
 - the bodies on one level, the anchor level (``erf.moving_bodies.anchor_level``), whose grids
   cover every body point with its kernel's reach; the coarser levels carry the anchor level's
-  force summed onto their faces; no finer level may cover any of them, since the average-down
-  would overwrite the force there;
+  force summed onto their faces; no finer level may cover any of them (each turbine's hub with its
+  tip radius, its tower and nacelle points and every disk, with the kernel's reach), since the
+  average-down would overwrite the force there;
 - with an ``openfast_turbine``, no floating-point traps (``amrex.fpe_trap_invalid``,
   ``amrex.fpe_trap_zero`` and ``amrex.fpe_trap_overflow`` all off), since OpenFAST raises
   exceptions of its own; runs with ``ct_disk`` bodies only may trap.
@@ -3090,11 +3097,18 @@ with OpenFAST turbines the stop time must not lie past the one they were started
 keeps it in its own checkpoint); the run aborts otherwise, naming the changed input. The diagnostics files keep
 their rows up to the checkpoint and continue from there. A run started from a checkpoint
 written without bodies (a precursor) starts the bodies afresh at the checkpoint's time.
+A checkpoint of an earlier version, with the anchor level's source under ``moving_bodies/``,
+is converted on the restart: the source is written into the checkpoint as
+``StructureCoarseSource``. If the checkpoint cannot be written (read only), the levels
+below the anchor take their first step after the restart without the bodies' force, and
+the log says so. The bodies do not run with ``erf.terrain_type = EB``.
 
 +--------------------------------------------------------+----------------------------------------------------------+--------------------------+--------------------------+
 | Parameter                                              | Definition                                               | Acceptable Values        | Default                  |
 +========================================================+==========================================================+==========================+==========================+
-| **erf.moving_bodies.bodies**                           | names of the bodies; the framework is off when absent    | Strings                  | none                     |
+| **erf.moving_bodies.bodies**                           | names of the bodies, read with erf.structures.model =    | Strings                  | none (needed with        |
+|                                                        | gale                                                     |                          | erf.structures.model =   |
+|                                                        |                                                          |                          | gale)                    |
 +--------------------------------------------------------+----------------------------------------------------------+--------------------------+--------------------------+
 | **erf.moving_bodies.<name>.type**                      | kind of body                                             | openfast_turbine,        | must be set              |
 |                                                        |                                                          | ct_disk                  |                          |

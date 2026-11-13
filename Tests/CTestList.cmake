@@ -1987,7 +1987,7 @@ if(ERF_ENABLE_OPENFAST AND ERF_OPENFAST_USE_STUB AND ERF_ENABLE_FFT AND ERF_ENAB
       DATALOG_SIGDIGITS 10 OVERRUN)
 
   # The same restart from a checkpoint in the layout of an earlier version: the anchor level's face
-  # forces (N) in moving_bodies/force_x, _y, _z instead of its source (N/m^3) in StructureCoarseSource.
+  # forces (N) in moving_bodies/force_x, _y, _z instead of its source (N/m^3) in <chk>/StructureCoarseSource.
   # make_legacy_checkpoint.py rewrites the step-5 checkpoint that way (the face volume is
   # (25 m)^3 on level 1); the restart turns the forces back into the source, so level 0's first step
   # after it carries the force and step 10 matches the straight run to rounding. Without the
@@ -1999,7 +1999,25 @@ if(ERF_ENABLE_OPENFAST AND ERF_OPENFAST_USE_STUB AND ERF_ENABLE_FFT AND ERF_ENAB
       unset(TEST_FILES_DIR)
       resolve_test_exe("" "erf_exec" _legacy_exe)
       add_test(NAME ${TEST_NAME}
-               COMMAND sh -c "rm -rf plt0* rplt0* chk0* moving_bodies T1_* && ${MPI_COMMANDS} ${_legacy_exe} OpenFAST_ADM_TwoLevel_Restart.i erf.check_int=5 > straight.log 2>&1 && test -f chk00005/moving_bodies/StructureCoarseSource/x_faces_H && ${ERF_TEST_PYTHON} make_legacy_checkpoint.py chk00005 15625 > legacy.log 2>&1 && ${MPI_COMMANDS} ${_legacy_exe} OpenFAST_ADM_TwoLevel_Restart.i erf.restart=chk00005 erf.plot_file_1=rplt > restart.log 2>&1 && grep -q 'face forces of an earlier version' restart.log && ${MPI_FCOMP_COMMANDS} ${FCOMPARE_EXE} --abort_if_not_all_found --abs_tol 0 --rel_tol 1.0e-10 plt00010 rplt00010"
+               COMMAND sh -c "rm -rf plt0* rplt0* chk0* moving_bodies T1_* && ${MPI_COMMANDS} ${_legacy_exe} OpenFAST_ADM_TwoLevel_Restart.i erf.check_int=5 > straight.log 2>&1 && test -f chk00005/StructureCoarseSource/x_faces_H && ${ERF_TEST_PYTHON} make_legacy_checkpoint.py chk00005 force 15625 > legacy.log 2>&1 && ${MPI_COMMANDS} ${_legacy_exe} OpenFAST_ADM_TwoLevel_Restart.i erf.restart=chk00005 erf.plot_file_1=rplt > restart.log 2>&1 && grep -q 'face forces of an earlier version' restart.log && ${MPI_FCOMP_COMMANDS} ${FCOMPARE_EXE} --abort_if_not_all_found --abs_tol 0 --rel_tol 1.0e-10 plt00010 rplt00010"
+               WORKING_DIRECTORY ${CURRENT_TEST_BINARY_DIR})
+      set_tests_properties(${TEST_NAME} PROPERTIES
+          LABELS "regression;moving-bodies" TIMEOUT 600 PROCESSORS ${NP}
+          ATTACHED_FILES_ON_FAIL "${CURRENT_TEST_BINARY_DIR}/straight.log;${CURRENT_TEST_BINARY_DIR}/legacy.log;${CURRENT_TEST_BINARY_DIR}/restart.log")
+  endif()
+
+  # The same restart from a checkpoint of the bodies' own hooks, before they became structure model
+  # "gale": the anchor level's source in <chk>/moving_bodies/StructureCoarseSource. The model writes it
+  # to <chk>/StructureCoarseSource, where ERF reads it, so the restart matches the straight run exactly.
+  # Without the conversion level 0 takes its first step after the restart unforced.
+  if(NOT "${ERF_TEST_PYTHON}" STREQUAL "" AND ERF_ENABLE_FCOMPARE)
+      set(TEST_NAME OpenFAST_ADM_TwoLevel_RestartBodiesDir)
+      set(TEST_FILES_DIR OpenFAST_ADM_TwoLevel_Restart)
+      setup_test()
+      unset(TEST_FILES_DIR)
+      resolve_test_exe("" "erf_exec" _legacy_exe)
+      add_test(NAME ${TEST_NAME}
+               COMMAND sh -c "rm -rf plt0* rplt0* chk0* moving_bodies T1_* && ${MPI_COMMANDS} ${_legacy_exe} OpenFAST_ADM_TwoLevel_Restart.i erf.check_int=5 > straight.log 2>&1 && test -f chk00005/StructureCoarseSource/x_faces_H && ${ERF_TEST_PYTHON} make_legacy_checkpoint.py chk00005 bodies_dir > legacy.log 2>&1 && ${MPI_COMMANDS} ${_legacy_exe} OpenFAST_ADM_TwoLevel_Restart.i erf.restart=chk00005 erf.plot_file_1=rplt > restart.log 2>&1 && grep -q \"bodies' own directory\" restart.log && test -f chk00005/StructureCoarseSource/x_faces_H && ${MPI_FCOMP_COMMANDS} ${FCOMPARE_EXE} --abort_if_not_all_found --abs_tol 0 --rel_tol 0 plt00010 rplt00010"
                WORKING_DIRECTORY ${CURRENT_TEST_BINARY_DIR})
       set_tests_properties(${TEST_NAME} PROPERTIES
           LABELS "regression;moving-bodies" TIMEOUT 600 PROCESSORS ${NP}
@@ -3946,7 +3964,7 @@ if(ERF_ENABLE_OPENFAST AND ERF_OPENFAST_USE_STUB AND ERF_ENABLE_FFT AND ERF_ENAB
   add_test_abort(MovingBodies_CtDiskDensityMismatch ${_mb_cases}/Actuator_UniformCtDisk Actuator_UniformCtDisk.i
       "D1[.]air_density = 1[.]2.*more than erf[.]moving_bodies[.]density_tolerance" "erf.moving_bodies.D1.air_density=1.2")
   add_test_abort(MovingBodies_FinerLevelOverTheBodies ${_mb_cases}/OpenFAST_ADM_TwoLevel OpenFAST_ADM_TwoLevel.i
-      "level 1, finer than the bodies' level 0" "erf.moving_bodies.anchor_level=0")
+      "structure model .gale. couples to level 0, but level 1 covers part of its support" "erf.moving_bodies.anchor_level=0")
   # with the bodies above level 0 the coarser levels take their force only with two-way coupling
   add_test_abort(MovingBodies_OneWayAboveLevel0 ${_mb_cases}/OpenFAST_ADM_TwoLevel OpenFAST_ADM_TwoLevel.i
       "the coarser levels take their force only with erf[.]coupling_type = TwoWay" "erf.coupling_type=OneWay")
@@ -6482,9 +6500,17 @@ if(ERF_ENABLE_MPI AND NOT WIN32)   # the launchers below run through sh -c, as t
                      "structure.example.level must be -1 .the finest level. or 0 to amr.max_level = 0, got 1"
                      "structure.example.level=1")
     elseif(NOT ERF_STRUCTURE_MODEL_DIRS)
+      # GALE's bodies are compiled into ERF itself as structure model "gale" until they move to
+      # their own model directory, so the list of models is "gale" rather than "none"
       add_test_abort(Structures_Abort_NoModelBuiltIn ${_smx_src} inputs_structure_example
-                     "erf.structures.model = .example. is not one of the structure models compiled in .none"
+                     "erf.structures.model = .example. is not one of the structure models compiled in .(none|.gale.)"
                      "")
+      if(ERF_ENABLE_MOVING_BODIES)
+        # gale selected in a deck that lists no bodies
+        add_test_abort(Structures_Abort_GaleNoBodies ${_smx_src} inputs_structure_example
+                       "erf.structures.model = gale: no bodies are given; list them in erf.moving_bodies.bodies"
+                       "erf.structures.model=gale")
+      endif()
     endif()
   else()
     add_test_abort(Structures_Abort_NoCoupling ${_smx_src} inputs_structure_example

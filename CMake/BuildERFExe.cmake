@@ -377,6 +377,7 @@ function(build_erf_lib erf_lib_name)
   if(ERF_ENABLE_MOVING_BODIES)
     target_sources(${erf_lib_name} PRIVATE
       ${SRC_DIR}/MovingBodies/ERF_MovingBodies.cpp
+      ${SRC_DIR}/MovingBodies/ERF_GaleTurbineModel.cpp
       ${SRC_DIR}/MovingBodies/ERF_MovingBodiesInputs.cpp
       ${SRC_DIR}/MovingBodies/Core/ERF_ActuatorSampling.cpp
       ${SRC_DIR}/MovingBodies/Core/ERF_ActuatorSpreading.cpp

@@ -13,6 +13,7 @@
 #include <AMReX_Geometry.H>
 #include <AMReX_MultiFab.H>
 #include <AMReX_REAL.H>
+#include <AMReX_RealBox.H>
 
 #include "ERF_BodyExchange.H"
 #include "ERF_BodyMotion.H"
@@ -31,11 +32,9 @@
 #include "ERF_OpenFASTDriver.H"
 #endif
 
-struct SolverChoice;
-
 /**
- * Owner of the moving bodies (OpenFAST turbines in this version) and the single place ERF
- * talks to them: created once from erf.moving_bodies.*, advanced once per ERF step on the
+ * Owner of the moving bodies (OpenFAST turbines in this version), which ERF reaches through
+ * structure model "gale" (ERF_GaleTurbineModel.cpp): created once from erf.moving_bodies.*, advanced once per ERF step on the
  * anchor level. Each step the flow velocity is sampled at every body's velocity nodes (or the
  * prescribed uniform velocity is used) and handed to the bodies, which are then stepped; the
  * forces of the bodies (the OpenFAST turbines' loads as actuator-disk rings or as actuator
@@ -53,14 +52,18 @@ class MovingBodies
 {
 public:
     /**
-     * Read erf.moving_bodies.*, check the solver settings and initialise the bodies.
-     * Returns nullptr when no bodies are given.
-     * @param fixed_dt ERF's fixed step on every level (the anchor level's is OpenFAST's coupling step)
+     * Check the solver settings and initialise the bodies of in (erf.moving_bodies.*, read by the
+     * caller; in.active must be true). Called by the structure model "gale" (ERF_GaleTurbineModel.cpp)
+     * from its initialize().
+     * @param all_anelastic no level of the run is FullyCompressible
+     * @param two_way erf.coupling_type is TwoWay
+     * @param fixed_dt_anchor ERF's fixed step on the anchor level (OpenFAST's coupling step); not
+     *        positive without erf.fixed_dt
      * @param stop_elapsed the seconds from the start to ERF's stop time, used when the run stops
      *        at stop_datetime (stop_time, or max_step times erf.fixed_dt, otherwise)
      */
-    static std::unique_ptr<MovingBodies> create (const SolverChoice& sc, int max_level,
-                                                 const amrex::Vector<double>& fixed_dt, bool restarting,
+    static std::unique_ptr<MovingBodies> create (MovingBodiesInputs in, int max_level, bool all_anelastic,
+                                                 bool two_way, double fixed_dt_anchor, bool restarting,
                                                  double stop_elapsed);
 
     /**
@@ -68,13 +71,10 @@ public:
      * step count, the time the bodies started, OpenFAST's stop time, whether OpenFAST's first
      * solution was taken, the anchor level and step, and one record of every body's placing and
      * forcing inputs) and each OpenFAST turbine's own checkpoint <chkdir>/moving_bodies/<name>.chkp.
-     * With the bodies above level 0, the anchor level's source the coarser levels take at their next
-     * step goes to <chkdir>/moving_bodies/StructureCoarseSource, in the layout ERF writes to
-     * <chkdir>/StructureCoarseSource for a structure model.
-     * @param grids_anchor,dmap_anchor the anchor level's boxes and their distribution now
+     * The anchor level's source the coarser levels take at their next step is ERF's to write
+     * (<chkdir>/StructureCoarseSource, ERF::write_structure_coarse_source_checkpoint).
      */
-    void write_checkpoint (const std::string& chkdir, const amrex::BoxArray& grids_anchor,
-                           const amrex::DistributionMapping& dmap_anchor);
+    void write_checkpoint (const std::string& chkdir);
 
     /**
      * At the end of the run (collective): rewrite the statistics and the wake averages sampled since
@@ -87,14 +87,23 @@ public:
      * before the first step, with ERF's time. A changed body or setting aborts naming the input; the
      * logs lose the rows written after the checkpoint. A checkpoint without bodies (a precursor)
      * starts the bodies at that time. The anchor level's momentum source is rebuilt from the
-     * restored OpenFAST loads at its first step; until then the coarser levels take the source read
-     * from <chkdir>/moving_bodies/StructureCoarseSource (or, from a checkpoint that has only the older
-     * moving_bodies/force_{x,y,z} face forces, those forces turned into the source).
-     * @param detJ_anchor the anchor level's detJ_cc, as advance() gets it (used only to turn the older face
-     *        forces into the source, with the volumes they were made with)
+     * restored OpenFAST loads at its first step; until then ERF gives the coarser levels the source
+     * of its own checkpoint (see read_earlier_coarse_source() for the layouts of earlier versions).
      */
-    void read_checkpoint (const std::string& chkdir, double time, const amrex::BoxArray& grids_anchor,
-                          const amrex::DistributionMapping& dmap_anchor, const amrex::MultiFab* detJ_anchor);
+    void read_checkpoint (const std::string& chkdir, double time);
+
+    /**
+     * The anchor level's source (N/m^3) in a checkpoint of an earlier version, which ERF does not
+     * read: <chkdir>/moving_bodies/StructureCoarseSource (the bodies' own hooks, before they became
+     * structure model "gale"), or the older face forces (N) in <chkdir>/moving_bodies/force_{x,y,z},
+     * turned into the source with the volumes they were made with. Collective. Returns false, with
+     * src cleared, when the checkpoint holds neither, or a source on another level than the anchor.
+     * @param grids_anchor,dmap_anchor the anchor level's boxes and their distribution now (for the forces)
+     * @param detJ_anchor the anchor level's detJ_cc, as advance() gets it
+     */
+    bool read_earlier_coarse_source (const std::string& chkdir, const amrex::BoxArray& grids_anchor,
+                                     const amrex::DistributionMapping& dmap_anchor, const amrex::MultiFab* detJ_anchor,
+                                     std::array<amrex::MultiFab,3>& src) const;
 
     /**
      * Place the bodies on the terrain: the height of the terrain surface (the k = 0 node plane
@@ -104,20 +113,19 @@ public:
      * footprint (the column under its base, widened by the model's rotor radius) while that keeps the
      * turbines evenly spread and apart from turbines of another OpenFAST time step, otherwise the nearest
      * rank that does (erf_actuator::choose_owners); and each prescribed-Ct disk's, by the same rule among
-     * the disks alone (its footprint widened by its rotor_radius). Called once by ERF when the mesh exists: on a fresh start from
-     * InitData, before the step-0 checkpoint or plotfile (it then initialises OpenFAST); on a restart
-     * before read_checkpoint(), once the mesh is read. The heights are written to
-     * <diagnostics_dir>/ground.csv. Aborts when the anchor level has no grids (finest_level below it).
+     * the disks alone (its footprint widened by its rotor_radius). Called once by structure model "gale" when ERF starts it, once the mesh
+     * exists: on a fresh start before the step-0 checkpoint or plotfile (it then initialises OpenFAST); on a
+     * restart before read_checkpoint(), once the mesh is read. The heights are written to
+     * <diagnostics_dir>/ground.csv.
      * @param grids,dmap the anchor level's (cell-centred) boxes and their distribution over the ranks
      */
     void set_ground (const amrex::MultiFab* z_phys_nd, const amrex::Geometry& geom, const amrex::BoxArray& grids,
-                     const amrex::DistributionMapping& dmap, double time, int finest_level);
-    bool ground_set () const { return m_ground_set; }
+                     const amrex::DistributionMapping& dmap, double time);
 
     /**
      * Advance the bodies by one ERF step of the anchor level. The forces are spread on the anchor
-     * level's grids; on any other level the call does nothing (make_coarse_sources() gives the
-     * coarser levels the force). Finer levels are not supported (the anchor is the finest unless
+     * level's grids; on any other level the call does nothing (ERF gives the coarser levels the force,
+     * ERF::make_structure_coarse_sources). Finer levels are not supported (the anchor is the finest unless
      * asked otherwise).
      * @param cons the level's conserved state at the start of the step (its density is audited at the hubs on the first step)
      * @param U,V,W the level's face-centred velocities at the start of the step, ghost cells filled
@@ -132,9 +140,8 @@ public:
 
     /**
      * Add the bodies' momentum sources (N/m^3, held fixed over the step) to ERF's face-centred
-     * momentum right-hand sides: on the anchor level the spread forces, on a coarser level the
-     * anchor level's source restricted onto its faces by make_coarse_sources(); a no-op on a finer level, and
-     * until the bodies carry a force.
+     * momentum right-hand sides of the anchor level: the forces spread at the latest step. A no-op on
+     * another level, and until the bodies carry a force.
      */
     void add_momentum_sources (int lev, amrex::MultiFab& xmom_src, amrex::MultiFab& ymom_src,
                                amrex::MultiFab& zmom_src) const;
@@ -142,35 +149,13 @@ public:
     bool has_sources () const { return m_src_defined; }
 
     /**
-     * Called by ERF at the start of each step of a level lev below the anchor level L
-     * (erf.coupling_type = TwoWay, which create() requires with the bodies above level 0): the
-     * anchor level's source of its latest step, or before that step after a restart the source read
-     * from the checkpoint, restricted onto level lev's faces by erf_structure::restrict_face_sources,
-     * as ERF::make_structure_coarse_sources does for a structure model. Before the anchor level's
-     * first step since the start, and after a regrid of the anchor level until its next step, level
-     * lev takes the step without the source.
-     * @param detJ per level, detJ_cc on a stretched or terrain-following mesh, else nullptr
+     * Where the bodies' force can be nonzero, as of the latest step, the same on every rank
+     * (collective): for each rotor or disk, a box about its hub or centre holding the rotor with
+     * the kernel's reach, and for each group of a turbine's force points (rotor, tower, nacelle)
+     * the box that holds every point with its kernel's reach (3 epsilon dx + dx, dx the anchor
+     * level's). In metres, z as the physical height. Empty before set_ground().
      */
-    void make_coarse_sources (int lev, const amrex::Vector<amrex::BoxArray>& grids,
-                              const amrex::Vector<amrex::DistributionMapping>& dmap,
-                              const amrex::Vector<amrex::Geometry>& geom,
-                              const amrex::Vector<amrex::IntVect>& ref_ratio,
-                              const amrex::Vector<const amrex::MultiFab*>& detJ);
-
-    /**
-     * Called by ERF on a level below the anchor level when the anchor level no longer exists (a regrid
-     * removed it): level lev takes its step without the bodies' source, as ERF clears a structure
-     * model's coarse source at every step (check_levels() then stops the run at the finest level).
-     */
-    void drop_coarse_source (int lev);
-
-    /**
-     * Called by ERF at every coarse step: abort when the anchor level has no grids, or when a level
-     * finer than the anchor covers part of a rotor or disk with the kernel's reach (the force lives on
-     * the anchor level and those below it only, and ERF's average-down would overwrite it there).
-     */
-    void check_levels (int finest_level, const amrex::Vector<amrex::BoxArray>& grids,
-                       const amrex::Vector<amrex::Geometry>& geoms) const;
+    std::vector<amrex::RealBox> support_boxes () const;
 
     /** The level the bodies are sampled and forced on: amr.max_level unless erf.moving_bodies.anchor_level says otherwise. */
     int anchor_level () const { return m_anchor; }
@@ -194,7 +179,7 @@ private:
      * mean and slowest turbine, then start counting again.
      */
     void report_timing ();
-    mutable erf_actuator::PhaseTimers m_timers;   // also timed by the const check_levels() and add_momentum_sources()
+    mutable erf_actuator::PhaseTimers m_timers;   // also timed by the const support_boxes() and add_momentum_sources()
     int m_timing_from{-1};                        //!< the first step of the next timing summary (-1: before the first step)
 
     /**
@@ -230,18 +215,6 @@ private:
     bool m_src_defined{false};
     amrex::MultiFab m_src_x, m_src_y, m_src_z;                         //!< anchor-level momentum sources
     amrex::Geometry m_anchor_geom;                                     //!< set by set_ground()
-    // after a restart, until the anchor level's first step, the anchor level's source read from the
-    // checkpoint (on the grids it was written with), which the coarser levels take meanwhile
-    std::array<amrex::MultiFab,3> m_chk_src;
-    std::vector<std::array<amrex::MultiFab,3>> m_crse_src;             //!< per level below the anchor: its sources for this step
-    std::vector<int> m_crse_src_defined;                               //!< per level below the anchor: m_crse_src set for this step
-    amrex::BoxArray m_step_ba;                                         //!< the anchor level's grids at its latest step
-    amrex::DistributionMapping m_step_dm;                              //!< and their distribution
-    /** Whether the anchor level stepped on these grids, i.e. since its last regrid. */
-    bool stepped_on_grids (const amrex::BoxArray& grids_anchor, const amrex::DistributionMapping& dmap_anchor) const;
-    /** The anchor level's source of its latest step on these grids (zero where the bodies put none), as add_momentum_sources() adds it. */
-    void anchor_source (const amrex::BoxArray& grids_anchor, const amrex::DistributionMapping& dmap_anchor,
-                        std::array<amrex::MultiFab,3>& src) const;
 
     /** Spread the bodies' forces onto the momentum sources (defined on first use). */
     void spread_sources (const amrex::MultiFab& U, const amrex::MultiFab* z_phys_nd,

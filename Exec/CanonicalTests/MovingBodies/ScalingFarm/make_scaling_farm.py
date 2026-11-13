@@ -162,6 +162,7 @@ erf.moving_bodies.{name}.air_density            = 1.0
 erf.moving_bodies.{name}.output_root            = turbines/{name}
 """ + (f"erf.moving_bodies.{name}.num_points_t           = {a.ring_points}\n" if a.mode == "adm" else
        f"erf.moving_bodies.{name}.fllc                   = false\n"))
+    deck.append("erf.structures.model = gale\n")
     deck.append("erf.moving_bodies.bodies = " + " ".join(names) + "\n")
     with open(os.path.join(a.out, "farm.i"), "w") as f:
         f.write("\n".join(deck))

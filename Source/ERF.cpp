@@ -257,8 +257,6 @@ ERF::Evolve ()
     WriteAtFinalTime();
 
 #ifdef ERF_USE_MOVING_BODIES
-    // the moving bodies' summary files rewritten every stats_int steps, and every log, complete
-    if (moving_bodies) { moving_bodies->finalize(); }
     // The structure model closes its own files and solvers, after the last plotfile and checkpoint
     if (m_structure_model) { m_structure_model->finalize(); }
 #endif
@@ -2303,19 +2301,6 @@ ERF::InitData_post ()
     const std::string& pv2d_2 = "plot2d_vars_2"; appendPlotVariables(pv2d_2,plot2d_var_names_2);
 
 #ifdef ERF_USE_MOVING_BODIES
-    // place the bodies on the terrain now that the mesh exists, before the step-0 checkpoint or
-    // plotfile, where the structure model starts: on a fresh start this initialises OpenFAST, and
-    // on a restart the bodies' state and the OpenFAST turbines' own checkpoints are read next
-    if (moving_bodies && !moving_bodies->ground_set()) {
-        const int lev = std::min(moving_bodies->anchor_level(), finest_level);
-        moving_bodies->set_ground((moving_bodies->anchor_level() <= finest_level) ? z_phys_nd[lev].get() : nullptr, Geom(lev),
-                                  grids[lev], dmap[lev], t_new[0], finest_level);
-        if (!restart_chkfile.empty()) {
-            // detJ_cc as advance() passes it, with which an earlier version made the face forces it wrote
-            moving_bodies->read_checkpoint(restart_chkfile, t_new[0], grids[lev], dmap[lev], detJ_cc[lev].get());
-        }
-    }
-
     // The structure model starts once the mesh and the initial (or restart) state
     // exist, before the step-0 outputs
     if (m_structure_model) { initialize_structure_model(); }

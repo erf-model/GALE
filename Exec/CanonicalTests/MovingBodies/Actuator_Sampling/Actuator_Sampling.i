@@ -32,6 +32,7 @@ erf.plot_int_1   = 5
 erf.plot_vars_1  = density x_velocity y_velocity z_velocity theta
 
 # an IEA-15-MW-sized stub rotor at hub height 150 m, velocities sampled from the flow
+erf.structures.model                         = gale
 erf.moving_bodies.bodies                     = T1
 erf.moving_bodies.T1.type                    = openfast_turbine
 erf.moving_bodies.T1.mode                    = none

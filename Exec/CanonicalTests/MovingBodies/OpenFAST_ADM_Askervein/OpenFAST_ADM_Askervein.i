@@ -58,6 +58,7 @@ erf.plot_file_1  = plt
 erf.plot_int_1   = 10
 erf.plot_vars_1  = x_velocity y_velocity z_velocity   # density and theta stay uniform
 
+erf.structures.model                         = gale
 erf.moving_bodies.bodies                     = T1
 erf.moving_bodies.T1.type                    = openfast_turbine
 erf.moving_bodies.T1.mode                    = adm
