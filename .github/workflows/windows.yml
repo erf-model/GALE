@@ -91,6 +91,9 @@ jobs:
     - name: Configure Project and Generate Build System
       shell: pwsh
       run: |
+        # vcpkg's FFTW is a DLL; FFTW_DLL makes fftw3.h import its data symbols (fftw_version,
+        # which ERF's build description prints), else the link fails on them
+        $env:CXXFLAGS = "/DFFTW_DLL"
         cmake -S . -B build -G Ninja `
           -DCMAKE_C_COMPILER=cl `
           -DCMAKE_CXX_COMPILER=cl `
@@ -140,7 +143,8 @@ jobs:
     - name: Moving-Bodies Unit Tests
       shell: bash
       run: |
-        export PATH="$(cygpath -u "${VCPKG_INSTALLATION_ROOT}")/installed/x64-windows/bin:${PATH}"
+        vcpkg_root=$(cygpath -u "${VCPKG_INSTALLATION_ROOT}")
+        export PATH="${vcpkg_root}/installed/x64-windows/bin:${PATH}"
         .github/workflows/scripts/run_unit_tests.sh build/ERF/Tests/Unit/erf_unit_tests.exe
 
     - name: Shuffle Stress Check
@@ -219,9 +223,10 @@ jobs:
       run: |
         ccache -z
         $build_start = [int](Get-Date -UFormat %s)
+        # Arguments with a dot are quoted: pwsh splits -DX=8.0 into -DX=8 and .0
         cmake -S . -B build-cuda -G Ninja `
           -DCMAKE_BUILD_TYPE:STRING=Release `
-          -DCMAKE_SYSTEM_VERSION=10.0.22621.0 `
+          "-DCMAKE_SYSTEM_VERSION=10.0.22621.0" `
           -DCMAKE_C_COMPILER=cl `
           -DCMAKE_CXX_COMPILER=cl `
           -DCMAKE_CUDA_COMPILER=nvcc `
@@ -229,7 +234,7 @@ jobs:
           -DCMAKE_CUDA_COMPILER_LAUNCHER=ccache `
           -DAMReX_CUDA_ERROR_CROSS_EXECUTION_SPACE_CALL=ON `
           -DAMReX_CUDA_ERROR_CAPTURE_THIS=ON `
-          -DAMReX_CUDA_ARCH=8.0 `
+          "-DAMReX_CUDA_ARCH=8.0" `
           -DERF_DIM:STRING=3 `
           -DERF_ENABLE_MPI:BOOL=OFF `
           -DERF_ENABLE_CUDA:BOOL=ON `
