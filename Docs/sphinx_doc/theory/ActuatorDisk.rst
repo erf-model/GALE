@@ -221,13 +221,20 @@ normal :math:`\mathbf{n}`, covered by a polar grid of points. It runs no OpenFAS
 
 .. math::
 
-   T = \tfrac{1}{2}\, \rho\, C_T\, U^2\, \pi R^2 .
+   T = \tfrac{1}{2}\, \rho\, C_T\, U\,|U|\, \pi R^2 .
 
 - :math:`U` is the area-weighted normal velocity sampled on the same grid
   ``sample_diameters_upstream`` diameters upstream; :math:`\rho` is the body's ``air_density``.
 - Each disk point carries the share of :math:`-T\mathbf{n}` proportional to its area.
+- :math:`U\,|U|` keeps the sign of the flow. A flow against the normal (:math:`U < 0`) gives
+  :math:`T < 0`, so the disk slows it too. The sample plane then lies downstream of the disk, in
+  its own wake, so this thrust is a drag that damps the reversed flow, not a momentum-theory
+  thrust.
 - The log records the upstream and disk-averaged speeds, the thrust, the power :math:`T U_d` and
-  the integrated source along the normal.
+  the integrated source along the normal. The ``power`` column is :math:`T U_d`, the rate of work
+  the disk extracts from the flow, not the turbine's electrical power. It is negative only when
+  the upstream and disk speeds have opposite signs (a turning flow), when the force speeds up the
+  flow at the disk.
 - The upstream sample still feels the disk. In vortex-cylinder theory at :math:`C_T = 0.75` it reads
   0.977 of the free stream one diameter ahead, so the thrust is 4.6 % below nominal; at two
   diameters it is 1.4 % below.
@@ -241,15 +248,17 @@ speeds, and the rotor diameter. At every update
 
 .. math::
 
-   T = \tfrac{1}{2}\,\rho\,C_T(U)\,U^2\,\pi R^2, \qquad R = D/2,
+   T = \tfrac{1}{2}\,\rho\,C_T(U)\,U\,|U|\,\pi R^2, \qquad R = D/2,
 
 where :math:`U` is the sampled free-stream speed, :math:`\rho` is
-``air_density`` and :math:`D` is the table's ``rotor_diameter``. Between
+``air_density`` and :math:`D` is the table's ``rotor_diameter``. Each table
+:math:`C_T` must lie in [0, 2]; a constant ``ct`` lies in (0, 1). Between
 rows :math:`C_T` and :math:`P` are interpolated linearly; below the first
 and above the last speed (cut-in and cut-out) both are zero, so a parked
-rotor puts no force in the flow. The tables were made at sea-level density,
+rotor puts no force in the flow. Table speeds are not negative, so a reversed
+flow (:math:`U < 0`) gives a table disk no thrust. The tables were made at sea-level density,
 1.225 kg/m\ :sup:`3`. The disk log then adds the columns ``ct`` and
-``power_curve`` (the table's :math:`P(U)` in W) for every disk of the run; a
+``power_curve`` (the table's :math:`P(U)` in W; ``power`` stays :math:`T U_d`) for every disk of the run; a
 constant-``ct`` disk in such a run logs its ``ct`` and ``T U_d``. Runs where
 no disk names a turbine keep the five columns. The tables hold published
 :math:`C_T` curves only. Turbines with only a power curve are left out:

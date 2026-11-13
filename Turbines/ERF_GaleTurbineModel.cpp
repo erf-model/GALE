@@ -19,6 +19,7 @@
 #include <AMReX_VisMF.H>
 
 #include <fstream>
+#include <string>
 
 using namespace amrex;
 
@@ -53,12 +54,15 @@ public:
         if (!m_in.active) {
             Abort("erf.structures.model = gale: no bodies are given; list them in erf.moving_bodies.bodies");
         }
-        // with EB terrain ERF hands the model no heights and no Jacobian (a uniform-dz mesh), while the
-        // bodies would need the plane offset and the cut-cell volumes; refused rather than run on flat ones
+        // with EB or ImmersedForcing terrain the mesh is uniform in z with no heights or Jacobian. GALE
+        // places bodies only on fitted meshes: it does not ask for the immersed surface
+        // (StructureInit::immersed_terrain_surface) and has no cut-cell volumes for EB, so the bodies
+        // would stand on prob_lo z with their kernels in the terrain; refused rather than run on flat ground
         TerrainType terrain = TerrainType::None;
         ParmParse("erf").query_enum_case_insensitive("terrain_type", terrain);
-        if (terrain == TerrainType::EB) {
-            Abort("erf.structures.model = gale does not run with erf.terrain_type = EB; use StaticFittedMesh or ImmersedForcing terrain");
+        if (terrain == TerrainType::EB || terrain == TerrainType::ImmersedForcing) {
+            Abort(std::string("erf.structures.model = gale does not run with erf.terrain_type = ") +
+                  (terrain == TerrainType::EB ? "EB" : "ImmersedForcing") + "; GALE places bodies only on terrain-fitted meshes: use StaticFittedMesh");
         }
         m_anchor = MovingBodiesInputs::resolve_anchor_level(m_in.anchor_level, max_level);
         // the anchor level is checked now, as level() is asked for before initialize(); the other

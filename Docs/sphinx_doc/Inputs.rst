@@ -16,7 +16,8 @@ General rules:
 - A key the chosen options do not use gives a warning. One exception aborts: ``epsilon_tower``
   or ``epsilon_nacelle`` given while the tower or nacelle switch is not set at all.
 - A restart must keep every key that places or forces a body. A change stops the run, naming
-  the key.
+  the key. A key the body does not use may change: ``nacelle_area`` without ``nacelle_cd``, and
+  ``correction_time`` with a fixed ``correction_relax``.
 - Run requirements (solver, time step, levels, traps) are in :doc:`Limitations`.
 - Every key is also in one annotated deck, :ref:`sec:MasterReference`.
 
@@ -225,8 +226,8 @@ apply.
    * - ``<name>.turbine``
      - Name of a turbine table, ``<turbine_data_dir>/<name>.txt`` (``NREL_5MW_126``, say; the
        list is in ``Turbines/Data/PowerCurves/README.md``). The radius is half the table's rotor
-       diameter, and Ct is the table's Ct(U) at the upstream speed, zero outside the table. Not
-       with ``ct`` or ``rotor_radius``.
+       diameter, and Ct is the table's Ct(U) at the upstream speed, zero outside the table. The
+       table's Ct values must lie in [0, 2]. Not with ``ct`` or ``rotor_radius``.
      - table name
      - unset
    * - ``<name>.rotor_radius``

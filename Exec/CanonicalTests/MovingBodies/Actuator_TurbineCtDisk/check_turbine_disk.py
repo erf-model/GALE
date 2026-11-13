@@ -6,7 +6,7 @@ Usage: check_turbine_disk.py <T1_disk.csv> <turbine table .txt> <D1_disk.csv> <D
 The table is read here independently of ERF (keys rotor_diameter, hub_height, rated_power, then
 rows "U Ct P_kW"), and Ct(U), P(U) interpolated linearly. In every row of T1's log the ct column
 must equal the table's Ct at u_inf, power_curve the table's P(u_inf) in W, and thrust
-1/2 rho ct u_inf^2 pi (D/2)^2; in D1's log ct must be the constant Ct, the thrust the same law with
+1/2 rho ct u_inf |u_inf| pi (D/2)^2; in D1's log ct must be the constant Ct, the thrust the same law with
 it, and power_curve the disk power thrust * u_disk. All to 1e-7 relative. Exits 1 on a mismatch.
 """
 import bisect
@@ -72,13 +72,13 @@ def main():
         cts.append(ct)
         ok = close(float(r["ct"]), ct, "T1 ct vs table Ct(u_inf)", k, ok)
         ok = close(float(r["power_curve"]), 1000.0 * interp(table, 2, u), "T1 power_curve vs table P(u_inf)", k, ok)
-        ok = close(float(r["thrust"]), 0.5 * rho * ct * u * u * area, "T1 thrust vs 1/2 rho Ct U^2 A", k, ok)
+        ok = close(float(r["thrust"]), 0.5 * rho * ct * u * abs(u) * area, "T1 thrust vs 1/2 rho Ct U|U| A", k, ok)
     if max(cts) - min(cts) <= 0.0:
         sys.exit("check_turbine_disk.py: T1's Ct never changed; the run does not exercise Ct(U)")
     for k, r in enumerate(d1, 1):
         u = float(r["u_inf"])
         ok = close(float(r["ct"]), ct_d1, "D1 ct vs its constant", k, ok)
-        ok = close(float(r["thrust"]), 0.5 * rho * ct_d1 * u * u * area, "D1 thrust vs 1/2 rho Ct U^2 A", k, ok)
+        ok = close(float(r["thrust"]), 0.5 * rho * ct_d1 * u * abs(u) * area, "D1 thrust vs 1/2 rho Ct U|U| A", k, ok)
         ok = close(float(r["power_curve"]), float(r["thrust"]) * float(r["u_disk"]), "D1 power_curve vs T u_disk", k, ok)
     print(f"T1: {len(t1)} rows, Ct {min(cts):.6f} to {max(cts):.6f} from the table; D1: {len(d1)} rows at Ct {ct_d1}"
           + ("" if ok else "; MISMATCH"))

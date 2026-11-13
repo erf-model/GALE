@@ -7,7 +7,7 @@ Two prescribed actuator disks side by side in a uniform 10.25 m/s anelastic flow
 rotor radius (63 m), hub height (90 m), thrust coefficient Ct(U) and power curve
 P(U) come from the table. `D1` is a constant-Ct disk of the same size (Ct = 0.75).
 In every row, T1's Ct must be the table's Ct at its sampled free-stream speed, and
-both thrusts must be 1/2 rho Ct U^2 pi R^2. Over the run T1's free-stream speed
+both thrusts must be 1/2 rho Ct U|U| pi R^2. Over the run T1's free-stream speed
 falls from 10.25 to 10.19 m/s, across the table row at 10.2 m/s.
 
 ## Files

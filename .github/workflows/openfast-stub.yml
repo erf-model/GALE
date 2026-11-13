@@ -189,7 +189,7 @@ jobs:
 
     - name: Actuator Parallel Unit Tests
       run: |
-        ctest -R "erf_parallel_tests[.](ActuatorSampling|ActuatorSpreading|BodyExchange)" --output-on-failure --no-tests=error
+        ctest -R "erf_parallel_tests[.](ActuatorSampling|ActuatorSpreading|BodyExchange|ModelFacts)" --output-on-failure --no-tests=error
       working-directory: ${{runner.workspace}}/GALE/build
 
     - name: Upload backtraces from failed tests

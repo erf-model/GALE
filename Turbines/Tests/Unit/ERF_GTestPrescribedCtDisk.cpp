@@ -1,6 +1,6 @@
 // Contracts of the prescribed uniform-Ct disk: its point areas sum to pi R^2, its sampling
 // points sit one diameter upstream along the normal, its force on the fluid is -T n with
-// T = 1/2 rho Ct U^2 pi R^2 from the area-weighted upstream normal speed, and the ct_disk
+// T = 1/2 rho Ct U |U| pi R^2 from the area-weighted upstream normal speed (a reversed flow is slowed), and the ct_disk
 // inputs are parsed with their ranges.
 
 #include <array>
@@ -88,6 +88,22 @@ TEST(PrescribedCtDisk, ForceIsMinusThrustAlongTheNormalFromTheUpstreamSpeed)
     EXPECT_NEAR(sum[0], -T, rel_tol * T);
     EXPECT_NEAR(sum[1], 0.0, rel_tol * T);
     EXPECT_NEAR(sum[2], 0.0, rel_tol * T);
+}
+
+TEST(PrescribedCtDisk, ReversedFlowIsSlowedNotPushed)
+{
+    erf_actuator::PrescribedCtDisk d(disk_inputs(0.0));
+    const int n = d.num_points();
+    // a flow of 10 m/s against the normal (along -x): the force on the fluid must point along +x,
+    // against the flow, with the magnitude of the forward case
+    std::vector<Real> v(3 * n, 0.0);
+    for (int k = 0; k < n; ++k) { v[3*k] = -10.0; }
+    d.update(v, v);
+    const Real T = 0.5 * 1.2 * 0.75 * 100.0 * pi * 120.0 * 120.0;
+    EXPECT_NEAR(d.thrust(), -T, rel_tol * T);
+    Real sum_x = 0.0;
+    for (int k = 0; k < n; ++k) { sum_x += d.forces()[3*k]; }
+    EXPECT_NEAR(sum_x, T, rel_tol * T);
 }
 
 TEST(PrescribedCtDisk, YawTurnsTheNormalAndTheForce)

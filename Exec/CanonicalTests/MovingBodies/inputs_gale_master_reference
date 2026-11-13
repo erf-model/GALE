@@ -12,7 +12,9 @@
 #   - Every value is range-checked at start-up. The run stops, naming the key, when one is out of
 #     range or not finite.
 #   - A key the chosen options do not use prints a warning.
-#   - A restart must keep every key that places or forces a body; a change stops the run.
+#   - A restart must keep every key that places or forces a body; a change stops the run. Keys a
+#     body does not use are not compared: nacelle_area without nacelle_cd, correction_time with a
+#     fixed correction_relax.
 #   - Kernel widths (epsilon*) are in cells of the anchor level's x spacing.
 #
 # Kept in sync with MovingBodiesInputs::read (Turbines/ERF_MovingBodiesInputs.cpp) and

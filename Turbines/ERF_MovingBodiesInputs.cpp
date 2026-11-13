@@ -459,7 +459,10 @@ MovingBodiesInputs::restart_record (const MovingBodyInputs& b)
                            {"num_force_points_blade", std::to_string(b.num_force_points_blade)},
                            {"num_force_points_tower", std::to_string(b.num_force_points_tower)},
                            {"fllc", b.fllc_automatic ? "automatic" : (b.fllc ? "1" : "0")}});
-        if (b.mode != "none") { r.insert(r.end(), {{"nacelle_cd", num(b.nacelle_cd)}, {"nacelle_area", num(b.nacelle_area)}}); }
+        if (b.mode != "none") { r.push_back({"nacelle_cd", num(b.nacelle_cd)}); }
+        // the area only with a nacelle drag; a checkpoint that recorded it without one restarts (only the
+        // entries recorded here are compared)
+        if (b.mode != "none" && b.nacelle_cd > 0.0) { r.push_back({"nacelle_area", num(b.nacelle_area)}); }
         // the widths in cells, as given or taken from epsilon, after the switches that turn their points on
         // (with fllc = automatic, a width taken from epsilon is recorded as automatic: it is set from the rotor later)
         auto width = [&] (Real own) { return (own > 0.0) ? num(own) : (b.fllc_automatic ? automatic() : num(b.epsilon)); };
@@ -467,7 +470,9 @@ MovingBodiesInputs::restart_record (const MovingBodyInputs& b)
         if (b.mode != "none" && b.nacelle_cd > 0.0) { r.push_back({"epsilon_nacelle", width(b.epsilon_nacelle)}); }
         if (b.sampling == "upstream") { r.push_back({"sample_diameters_upstream", num(b.sample_diameters_upstream)}); }
         if (b.sampling == "disk_corrected") {
-            r.insert(r.end(), {{"correction_relax", num(b.correction_relax)}, {"correction_time", num(b.correction_time)}});
+            r.push_back({"correction_relax", num(b.correction_relax)});
+            // the time scale only sets the relaxation taken from the update's gain (correction_relax = -1)
+            if (b.correction_relax <= 0.0) { r.push_back({"correction_time", num(b.correction_time)}); }
         }
         if (b.fllc) {
             r.insert(r.end(), {{"fllc_relax", num(b.fllc_relax)}, {"fllc_start_time", num(b.fllc_start_time)},

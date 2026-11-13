@@ -20,16 +20,23 @@ The run checks these at start-up and stops, naming the input, when one is not me
        compressible solver is not supported.
    * - Fixed time step
      - ``erf.fixed_dt``. The bodies' step must be a whole multiple of every OpenFAST ``DT``.
+       ``erf.init_shrink`` must be 1 (the default), because it changes ERF's first step. This is
+       also checked on a restart from a later step, where ERF would not apply it.
    * - Known stop time
      - ``stop_time``, ``max_step × erf.fixed_dt`` or ``stop_datetime``. The span must be a whole
-       number of steps unless ``max_step`` ends the run first.
+       number of steps unless ``max_step`` ends the run first. ``max_step × erf.fixed_dt`` assumes
+       every step since :math:`t = 0` had length ``erf.fixed_dt``; after a leg with another step, set
+       ``stop_time``. A run with ``max_step = 0`` and no ``stop_time`` is refused.
    * - Floating-point traps off
      - With OpenFAST turbines, ``amrex.fpe_trap_invalid``, ``_zero`` and ``_overflow`` must be 0.
        OpenFAST raises exceptions of its own. Runs with ``ct_disk`` bodies only may trap.
    * - Map factors of 1
      - Checked at every step of the anchor level.
-   * - No EB terrain
-     - The bodies do not run with ``erf.terrain_type = EB``. Terrain-fitted meshes are supported.
+   * - No EB or immersed terrain
+     - The bodies do not run with ``erf.terrain_type = EB`` or ``ImmersedForcing``. GALE places bodies
+       only on terrain-fitted meshes and does not yet use the immersed surface ERF can provide, so
+       they would stand on the bottom of the domain. Terrain-fitted
+       meshes (``StaticFittedMesh``) are supported.
    * - Two-way coupling above level 0
      - With the anchor level above 0, ``erf.coupling_type`` must be ``TwoWay`` (the default).
    * - Same OpenFAST ``DT`` per rank

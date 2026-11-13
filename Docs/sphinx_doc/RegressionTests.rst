@@ -126,7 +126,7 @@ Two disks side by side in a uniform 10.25 m/s flow for ten steps: ``T1`` names t
    * - Test
      - Checks
    * - ``Actuator_TurbineCtDisk``
-     - Both disk logs against their golds to ten significant digits, then ``check_turbine_disk.py`` reads the table itself and requires, in every row, T1's ``ct`` and ``power_curve`` to be the table's values at its free-stream speed and both thrusts to be :math:`\tfrac{1}{2}\rho C_T U^2 \pi R^2` (``Tests/RunTurbineCtDisk.cmake``). Needs Python 3.
+     - Both disk logs against their golds to ten significant digits, then ``check_turbine_disk.py`` reads the table itself and requires, in every row, T1's ``ct`` and ``power_curve`` to be the table's values at its free-stream speed and both thrusts to be :math:`\tfrac{1}{2}\rho C_T U|U| \pi R^2` (``Tests/RunTurbineCtDisk.cmake``). Needs Python 3; without it the test is not registered and CMake says so.
 
 Test location: `Actuator_TurbineCtDisk <https://github.com/erf-model/GALE/tree/development/Exec/CanonicalTests/MovingBodies/Actuator_TurbineCtDisk>`__
 
@@ -328,6 +328,26 @@ exist to catch. Within one platform the answers are reproducible; one and two ra
 1e-15.
 
 Test location: `OpenFAST_ADM_Askervein <https://github.com/erf-model/GALE/tree/development/Exec/CanonicalTests/MovingBodies/OpenFAST_ADM_Askervein>`__, `OpenFAST_ALM_Askervein <https://github.com/erf-model/GALE/tree/development/Exec/CanonicalTests/MovingBodies/OpenFAST_ALM_Askervein>`__
+
+IEA 15 MW under ROSCO
+---------------------
+
+These tests need a real OpenFAST build that knows a ROSCO library (``ROSCO_DIR`` or
+``-DERF_BUILD_ROSCO=ON``) and Python 3 (label ``rosco``). The IEA 15 MW turbine runs under its
+ROSCO controller on a flat domain at 9 m/s for ten steps.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 40 60
+
+   * - Test
+     - Checks
+   * - ``OpenFAST_IEA15_PowerCurve_adm_20m``, ``_adm_10m``, ``_alm_10m``, ``_alm_5m``
+     - The disk on one and two levels, the line on two and three. Each makes its run folder with the case's ``prepare.py``, requires that ServoDyn loaded ROSCO, and compares rotor speed, thrust, torque and power in ``T1_erf.csv`` with ``gold/<deck>_T1_erf.csv.gold`` to six digits (``Tests/RunIEA15PowerCurve.cmake``). The gold was made on macOS arm64 with OpenFAST 5.0.0 and ROSCO 2.10.1.
+   * - ``ROSCO_Library``
+     - The ROSCO library loads and exports ``DISCON``, the entry point ServoDyn calls.
+
+Test location: `OpenFAST_IEA15_PowerCurve <https://github.com/erf-model/GALE/tree/development/Exec/CanonicalTests/MovingBodies/OpenFAST_IEA15_PowerCurve>`__
 
 Wake sampling lines
 -------------------

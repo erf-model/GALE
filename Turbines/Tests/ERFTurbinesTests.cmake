@@ -901,7 +901,7 @@ if(ERF_ENABLE_MOVING_BODIES AND ERF_ENABLE_FFT AND ERF_ENABLE_MPI AND NOT WIN32)
   endif()
 
   # A disk naming the turbine table NREL_5MW_126 beside a constant-Ct disk: in every row the first must
-  # take Ct and the power from the table at its free-stream speed and both must give T = 1/2 rho Ct U^2 A
+  # take Ct and the power from the table at its free-stream speed and both must give T = 1/2 rho Ct U |U| A
   # (check_turbine_disk.py reads the table itself); both logs carry the ct and power_curve columns.
   if(ERF_TEST_PYTHON)
       function(add_test_turbine_ct_disk TEST_NAME TEST_FILES_DIR)
@@ -929,6 +929,8 @@ if(ERF_ENABLE_MOVING_BODIES AND ERF_ENABLE_FFT AND ERF_ENABLE_MPI AND NOT WIN32)
               ATTACHED_FILES_ON_FAIL "${CURRENT_TEST_BINARY_DIR}/simulation.log")
       endfunction()
       add_test_turbine_ct_disk(Actuator_TurbineCtDisk Actuator_TurbineCtDisk)
+  else()
+      message(WARNING "Actuator_TurbineCtDisk is not registered: check_turbine_disk.py needs a Python 3 interpreter")
   endif()
 
   # The same disk with the domain in one box and split unevenly in x and y: plotfile and disk
@@ -1224,6 +1226,14 @@ if(ERF_ENABLE_OPENFAST AND ERF_OPENFAST_USE_STUB AND ERF_ENABLE_FFT AND ERF_ENAB
   # two turbines whose OpenFAST models step with different dt on one rank, which steps them together
   add_test_abort(MovingBodies_MixedTimeSteps_OneRank ${_mb_cases}/OpenFAST_ADM_TwoTurbines OpenFAST_ADM_TwoTurbines.i
       "use different time steps [(]25 vs 50 substeps per ERF step[)]" "erf.moving_bodies.T2.fst_file=stub_turbine_dt002.fst")
+  # ERF hands the model no heights with EB or ImmersedForcing terrain: the bodies would stand on
+  # prob_lo z with their kernels in the terrain; ImmersedForcing must stop the run, naming it
+  add_test_abort(MovingBodies_ImmersedForcingTerrainRefused ${_mb_cases}/OpenFAST_ADM_Restart OpenFAST_ADM_Restart.i
+      "does not run with erf[.]terrain_type = ImmersedForcing" "erf.terrain_type=ImmersedForcing")
+  # erf.init_shrink below 1 shortens ERF's first step: the run must stop at the start, naming the key,
+  # not at step 1 with a step-change message
+  add_test_abort(MovingBodies_InitShrinkRefused ${_mb_cases}/OpenFAST_ADM_Restart OpenFAST_ADM_Restart.i
+      "erf[.]init_shrink = 0[.]5[0-9]* changes ERF's first step" "erf.init_shrink=0.5")
   add_test_abort(MovingBodies_StopTimeNotWholeSteps ${_mb_cases}/OpenFAST_ADM_Restart OpenFAST_ADM_Restart.i
       "steps of erf[.]fixed_dt = 0[.]5.*not a whole" "stop_time=4.75 max_step=-1")
   # on two levels the stop time must be a whole number of level-0 steps, which ERF cuts, not of the
@@ -1292,7 +1302,7 @@ if(ERF_ENABLE_OPENFAST AND ERF_OPENFAST_USE_STUB AND ERF_ENABLE_FFT AND ERF_ENAB
   add_test_abort(MovingBodies_ALMTipTravelPhysicalCells_Verify ${_mb_cases}/OpenFAST_ADM_Terrain OpenFAST_ADM_Terrain.i
       "the blade tip sweeps 1[.]11[0-9]* cells per step.*limiting cell height 41[.]65"
       "erf.moving_bodies.T1.mode=alm erf.moving_bodies.T1.fllc=false erf.moving_bodies.verify_tip_cells=1")
-  foreach(_t MovingBodies_AnchorLevelAboveFinest MovingBodies_StopTimeNotWholeSteps MovingBodies_CtDiskDensityMismatch
+  foreach(_t MovingBodies_AnchorLevelAboveFinest MovingBodies_StopTimeNotWholeSteps MovingBodies_ImmersedForcingTerrainRefused MovingBodies_InitShrinkRefused MovingBodies_CtDiskDensityMismatch
              MovingBodies_MixedTimeSteps_OneRank
              MovingBodies_FinerLevelOverTheBodies MovingBodies_FPETrapsRefused MovingBodies_CorrectionRelaxOutOfRange
              MovingBodies_ALMTipTravelLimit MovingBodies_ALMTipTravelPhysicalCells MovingBodies_ALMTipTravelStretched
@@ -1315,6 +1325,33 @@ if(ERF_ENABLE_OPENFAST AND ERF_OPENFAST_USE_STUB AND ERF_ENABLE_FFT AND ERF_ENAB
   file(COPY ${_files} DESTINATION "${_dir}/")
   resolve_test_exe("" "erf_exec" TEST_EXE)
   add_test(NAME ${_t} COMMAND sh -c "rm -rf T1_erf.csv moving_bodies && ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 1 ${MPIEXEC_PREFLAGS} ${TEST_EXE} OpenFAST_ADM_Restart.i max_step=100 erf.plot_int_1=-1 erf.check_int=-1 amrex.call_addr2line=0 'start_datetime=\"2020-01-01 00:00:00\"' 'stop_datetime=\"2020-01-01 00:00:07\"' > ${_t}.log 2>&1 && tail -n 1 T1_erf.csv | grep -q '^7,'")
+  set_tests_properties(${_t} PROPERTIES TIMEOUT 600 PROCESSORS 1 WORKING_DIRECTORY "${_dir}/"
+      LABELS "regression;moving-bodies" ATTACHED_FILES_ON_FAIL "${_dir}/${_t}.log")
+
+  # A run that stops at max_step with no stop_time: the turbines must be started for max_step
+  # steps of erf.fixed_dt (4 x 0.5 s = 2 s). Before, ERF's default stop time (the largest double,
+  # written into ParmParse by ERF's queryAdd) was read back as the stop time, and OpenFAST was
+  # started for 1.797693135e+308 s.
+  set(_t MovingBodies_MaxStepWithoutStopTime)
+  set(_dir ${CMAKE_CURRENT_BINARY_DIR}/test_files/${_t})
+  file(MAKE_DIRECTORY ${_dir})
+  file(GLOB _files "${_mb_cases}/OpenFAST_ADM_Restart/*")
+  file(COPY ${_files} DESTINATION "${_dir}/")
+  file(READ "${_dir}/OpenFAST_ADM_Restart.i" _deck)
+  string(REGEX REPLACE "\nstop_time[^\n]*" "" _deck "${_deck}")
+  file(WRITE "${_dir}/MaxStepOnly.i" "${_deck}")
+  resolve_test_exe("" "erf_exec" TEST_EXE)
+  add_test(NAME ${_t} COMMAND sh -c "rm -rf T1_erf.csv moving_bodies && ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 1 ${MPIEXEC_PREFLAGS} ${TEST_EXE} MaxStepOnly.i max_step=4 erf.plot_int_1=-1 erf.check_int=-1 amrex.call_addr2line=0 > ${_t}.log 2>&1 && grep -q 'run stop time 2 s' ${_t}.log && tail -n 1 T1_erf.csv | grep -q '^2,'")
+  set_tests_properties(${_t} PROPERTIES TIMEOUT 600 PROCESSORS 1 WORKING_DIRECTORY "${_dir}/"
+      LABELS "regression;moving-bodies" ATTACHED_FILES_ON_FAIL "${_dir}/${_t}.log")
+  # The same deck with neither stop_time nor max_step: the OpenFAST stop time is unknown, and the run
+  # must stop at the start, saying so
+  set(_t MovingBodies_NoStopTimeRefused)
+  set(_dir ${CMAKE_CURRENT_BINARY_DIR}/test_files/${_t})
+  file(MAKE_DIRECTORY ${_dir})
+  file(COPY ${_files} DESTINATION "${_dir}/")
+  file(WRITE "${_dir}/MaxStepOnly.i" "${_deck}")
+  add_test(NAME ${_t} COMMAND sh -c "${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 1 ${MPIEXEC_PREFLAGS} ${TEST_EXE} MaxStepOnly.i max_step=-1 erf.plot_int_1=-1 erf.check_int=-1 amrex.call_addr2line=0 > ${_t}.log 2>&1; grep -q 'set stop_time or max_step so the OpenFAST stop time is known' ${_t}.log")
   set_tests_properties(${_t} PROPERTIES TIMEOUT 600 PROCESSORS 1 WORKING_DIRECTORY "${_dir}/"
       LABELS "regression;moving-bodies" ATTACHED_FILES_ON_FAIL "${_dir}/${_t}.log")
 endif()
