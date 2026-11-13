@@ -1018,15 +1018,33 @@ if(ERF_ENABLE_OPENFAST AND NOT ERF_OPENFAST_USE_STUB AND ERF_ENABLE_FFT AND ERF_
   # an actuator disk and an actuator line with its tower and nacelle. Each test copies the model
   # (Exec/CanonicalTests/MovingBodies/IEA15_land_model) and the Askervein terrain file next to its deck.
   # The plotfile, the sampled flow log and the turbine's loads, torque and power (T1_erf.csv) are compared
-  # with golds made on macOS arm64 (Apple clang, Release, Homebrew gfortran, Accelerate) with OpenFAST 5.0.0,
-  # at tolerances that allow for another compiler, CPU and maths library inside OpenFAST and ERF: OpenFAST's
-  # loads cross to ERF in single precision (rounding is at most 6e-8 relative, of order 1e-8 relative in the
-  # flow), and 1-rank and 2-rank runs agree to 1e-15 and to every printed digit. The load check is an identity:
-  # minus the total load for the line (8 digits), minus the shaft component of the thrust for the disk (1e-8,
-  # Tests/check_openfast_shaft_source.py).
+  # with golds at 1e-6 relative and six printed digits, and the golds are per platform: "_macOS" for
+  # macOS arm64 (Apple clang, Release, Homebrew gfortran, Accelerate) and "_Linux" for the CI job
+  # (GCC 11, Release, OpenFAST 5.0.0 from Build/setup_openfast.sh), both with OpenFAST 5.0.0.
+  #
+  # One gold set cannot serve both at a useful tolerance. The two platforms agree exactly for the first
+  # four steps, then part: the line's filtered lifting-line correction (T1_fllc.csv, du_max 6e-5 relative
+  # at step 4) and the disk's correction (T1_correction.csv, from 1e-9 at step 1) feed their own output
+  # back, so a last-bit difference in a filter - a different libm and Fortran compiler - grows over the
+  # ten steps to 4e-5 relative in the velocities, 1e-3 in the thrust and 4e-3 in the power. Passing one
+  # gold set on both would need about 1e-4 on the plotfile and 1e-2 on the power, which is coarser than
+  # the changes these cases exist to catch. Within one platform the answers are reproducible: OpenFAST's
+  # loads cross to ERF in single precision (rounding is at most 6e-8 relative, of order 1e-8 relative in
+  # the flow), and 1-rank and 2-rank runs agree to 1e-15 and to every printed digit. A gold set is
+  # refreshed on the platform it belongs to. The load check is an identity and holds on both platforms:
+  # minus the total load for the line (8 digits), minus the shaft component of the thrust for the disk
+  # (1e-8, Tests/check_openfast_shaft_source.py).
+  # Darwin takes the macOS golds; every other system this job runs on (Linux) takes the Linux ones.
+  if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
+      set(ASKERVEIN_GOLD_PLATFORM "macOS")
+  else()
+      set(ASKERVEIN_GOLD_PLATFORM "Linux")
+  endif()
   function(add_test_openfast_real TEST_NAME LOG FORCE_COLUMN)
       set(TEST_FILES_DIR ${TEST_NAME})
       gale_setup_test()
+      # the gold plotfile of this platform (gale_setup_test set PLOT_GOLD to the name without a suffix)
+      set(PLOT_GOLD ${PLOT_GOLD}_${ASKERVEIN_GOLD_PLATFORM})
       file(COPY ${TEST_SOURCE_ROOT}/IEA15_land_model DESTINATION ${CURRENT_TEST_BINARY_DIR})
       file(COPY ${ERF_SOURCE_DIR}/Exec/CanonicalTests/Real_Terrain/Askervein/askervein.txt DESTINATION ${CURRENT_TEST_BINARY_DIR})
       resolve_test_exe("" "erf_exec" TEST_EXE)
@@ -1045,11 +1063,11 @@ if(ERF_ENABLE_OPENFAST AND NOT ERF_OPENFAST_USE_STUB AND ERF_ENABLE_FFT AND ERF_
           "-DRTOL=1.0e-6"
           "-DATOL=1.0e-6"
           "-DFLOW_CSV=${LOG}"
-          "-DFLOW_GOLD=${CURRENT_TEST_SOURCE_DIR}/${LOG}.gold"
+          "-DFLOW_GOLD=${CURRENT_TEST_SOURCE_DIR}/${LOG}.${ASKERVEIN_GOLD_PLATFORM}.gold"
           "-DSIGDIGITS=6"
           "-DZERO_EXPONENT=-4"
           "-DTURBINE_CSV=T1_erf.csv"
-          "-DTURBINE_GOLD=${CURRENT_TEST_SOURCE_DIR}/T1_erf.csv.gold"
+          "-DTURBINE_GOLD=${CURRENT_TEST_SOURCE_DIR}/T1_erf.csv.${ASKERVEIN_GOLD_PLATFORM}.gold"
           "-DTURBINE_COLUMNS=time;rotor_speed;thrust_x;torque;power;tower_x;nacelle_x;load_x"
           "-DFORCE_COLUMN=${FORCE_COLUMN}"
           "-DSOURCE_CSV=moving_bodies/momentum_source.csv"

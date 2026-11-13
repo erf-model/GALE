@@ -1,51 +1,122 @@
-name: Linux GCC OpenFAST stub
+name: Linux OpenFAST stub
 
 # GALE's moving bodies and their OpenFAST turbine coupling, compiled into ERF (the
 # Submodules/ERF submodule) and built against the bundled OpenFAST stub library (no OpenFAST
-# installation needed): all of GALE's regression and abort cases with their restart-parity,
-# restart-abort and box-parity twins, and the actuator unit tests (serial, and the sampling and
-# spreading ones also on two ranks). The anelastic FFT Poisson solve the decks use needs
-# ERF_ENABLE_FFT, which the AMReX dependency script provides through libfftw3.
+# installation needed), with GCC 11 and with Clang 15: all of GALE's regression and abort cases
+# with their restart-parity, restart-abort and box-parity twins, and the moving-bodies unit tests
+# (serial, and the sampling and spreading ones also on two ranks). The anelastic FFT Poisson solve
+# the decks use needs ERF_ENABLE_FFT, which the AMReX dependency scripts provide through libfftw3.
+# Both legs build in double precision; single precision is not built.
+#
+# Neither leg passes -march, so neither compiler emits fused multiply-adds on x86-64 and the
+# Clang leg compares against the same gold files as the GCC leg.
+#
+# Diagnostics: the GCC leg fails on any diagnostic in GALE's or ERF's files, as before (ERF's own
+# GCC builds are warning-free with the same flags). ERF has no Linux Clang job, so the Clang leg
+# fails on GALE's diagnostics only and lists ERF's.
+#
+# Once a week (and by hand, with erf_ref) the same jobs run with Submodules/ERF moved to the
+# head of ERF's development branch, so a change upstream that breaks GALE shows up before the
+# next submodule update. Those runs carry the ERF ref in their job names. An fcompare difference
+# in them can come from a numerics change in ERF rather than a defect; it is resolved by regolding
+# when the submodule is moved. The step summary links the ERF changes since the pinned commit.
+#
+# The ccache is restored on every run but saved only on pushes to development, as in ERF's CI, so
+# pull requests do not fill the repository's 10 GB cache with one entry per push. On development,
+# runs are not cancelled, but GitHub keeps only the newest pending run of a concurrency group.
 
 on:
   push:
     branches: [development]
+    paths-ignore: ['Docs/**', '**.md', '**.rst']
   pull_request:
     types: [opened, synchronize, reopened]
+    paths-ignore: ['Docs/**', '**.md', '**.rst']
+  schedule:
+    # Mondays 06:00 UTC, against the head of ERF's development branch
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+    inputs:
+      erf_ref:
+        description: "ERF branch, tag or full commit SHA to build against (empty: the pinned submodule)"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
 
 concurrency:
-  group: ${{ github.event.pull_request.number || github.ref }}-${{ github.head_ref }}-openfast-stub
+  group: ${{ github.event.pull_request.number || github.ref }}-${{ github.head_ref }}-${{ github.event_name }}-openfast-stub
   cancel-in-progress: ${{ github.ref != 'refs/heads/development' }}
 
 jobs:
   stub:
-    name: GNU@9.3 C++17 - OpenFAST stub, moving bodies
+    name: >-
+      ${{ matrix.name }} - OpenFAST stub, moving bodies${{
+      github.event_name == 'schedule' && ' - ERF development' ||
+      (inputs.erf_ref && format(' - ERF {0}', inputs.erf_ref) || '') }}
     runs-on: ubuntu-22.04
     timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: GCC 11
+            compiler: gcc
+            deps: Submodules/ERF/Submodules/AMReX/.github/workflows/dependencies/dependencies.sh
+            cc: gcc
+            cxx: g++
+            report: gale-erf
+          - name: Clang 15
+            compiler: clang
+            deps: Submodules/ERF/Submodules/AMReX/.github/workflows/dependencies/dependencies_clang.sh 15
+            cc: clang-15
+            cxx: clang++-15
+            report: gale
+    env:
+      # The schedule moves ERF to its development head; a manual run moves it to erf_ref if set
+      ERF_REF: ${{ github.event_name == 'schedule' && 'development' || inputs.erf_ref || '' }}
 
     steps:
 
     - uses: actions/checkout@v7
       with:
         submodules: true
+        persist-credentials: false
+
+    - name: ERF at ${{ env.ERF_REF }}
+      if: env.ERF_REF != ''
+      run: |
+        pinned=$(git ls-tree HEAD Submodules/ERF | awk '{print $3}')
+        git -C Submodules/ERF fetch --depth 1 origin "${ERF_REF}"
+        git -C Submodules/ERF checkout --detach FETCH_HEAD
+        head=$(git -C Submodules/ERF rev-parse HEAD)
+        {
+          echo "Building against ERF ${head} (${ERF_REF}); pinned: ${pinned}"
+          echo ""
+          echo "ERF changes since the pinned commit: https://github.com/erf-model/ERF/compare/${pinned}...${head}"
+        } | tee -a "$GITHUB_STEP_SUMMARY"
 
     # ERF's own submodules that this build uses (not RRTMGP, WW3, ekat, Noah-MP)
     - name: ERF Submodules
       run: git -C Submodules/ERF submodule update --init --depth 1 Submodules/AMReX Submodules/googletest
 
     - name: Install Dependencies
-      run: Submodules/ERF/Submodules/AMReX/.github/workflows/dependencies/dependencies.sh
+      run: |
+        ${{ matrix.deps }}
+        # dependencies_clang.sh installs no MPI
+        sudo apt-get install -y --no-install-recommends libopenmpi-dev openmpi-bin
 
     - name: Install CCache
       run: Submodules/ERF/Submodules/AMReX/.github/workflows/dependencies/dependencies_ccache.sh
 
-    - name: Set Up Cache
-      uses: actions/cache@v6
+    - name: Restore Cache
+      uses: actions/cache/restore@v6
       with:
         path: ~/.cache/ccache
-        key: ccache-${{ github.workflow }}-${{ github.job }}-git-${{ github.sha }}
+        key: ccache-${{ github.workflow }}-${{ github.job }}-${{ matrix.compiler }}-git-${{ github.sha }}
         restore-keys: |
-             ccache-${{ github.workflow }}-${{ github.job }}-git-
+             ccache-${{ github.workflow }}-${{ github.job }}-${{ matrix.compiler }}-git-
 
     - name: Configure Project and Generate Build System
       run: |
@@ -53,6 +124,8 @@ jobs:
           -B${{runner.workspace}}/GALE/build \
           -DCMAKE_INSTALL_PREFIX:PATH=${{runner.workspace}}/GALE/install \
           -DCMAKE_BUILD_TYPE:STRING=RelWithDebInfo \
+          -DCMAKE_C_COMPILER=${{ matrix.cc }} \
+          -DCMAKE_CXX_COMPILER=${{ matrix.cxx }} \
           -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
           -DERF_DIM:STRING=3 \
           -DERF_ENABLE_MPI:BOOL=ON \
@@ -74,26 +147,32 @@ jobs:
         export CCACHE_COMPRESSLEVEL=10
         export CCACHE_MAXSIZE=400M
         ccache -z
+        build_start=$(date +%s)
 
         cmake --build ${{runner.workspace}}/GALE/build --parallel 2 --verbose \
           2>&1 | tee -a ${{runner.workspace}}/build-output.txt;
 
+        # Keep only what this build used (ccache touches an object on every hit), as ERF's CI does
+        ccache --evict-older-than "$(( $(date +%s) - build_start + 120 ))s"
         ccache -s
         du -hs ~/.cache/ccache
 
-    - name: Report
-      run: |
-        egrep "Warning:|Error:|warning:|error:" ${{runner.workspace}}/build-output.txt \
-          | egrep -v "Submodules/ERF/Submodules/AMReX" | sort | uniq \
-          | awk 'BEGIN{i=0}{print $0}{i++}END{print "Warnings: "i}' > ${{runner.workspace}}/build-output-warnings.txt
-        cat ${{runner.workspace}}/build-output-warnings.txt
-        return=$(tail -n 1 ${{runner.workspace}}/build-output-warnings.txt | awk '{print $2}')
-        exit ${return}
+    - name: Save Cache
+      if: ${{ !cancelled() && github.event_name == 'push' }}
+      uses: actions/cache/save@v6
+      with:
+        path: ~/.cache/ccache
+        key: ccache-${{ github.workflow }}-${{ github.job }}-${{ matrix.compiler }}-git-${{ github.sha }}
 
-    - name: Actuator and OpenFAST Unit Tests
+    # See the header for the scope of each leg
+    - name: Report
+      run: .github/workflows/scripts/build_report.sh ${{runner.workspace}}/build-output.txt ${{ matrix.report }}
+
+    # GALE's suites (from the files Turbines/ERFStructureModel.cmake builds into erf_unit_tests)
+    # and ERF's moving-bodies suites; fails if a GALE suite is not linked in
+    - name: Moving-Bodies Unit Tests
       run: |
-        ERF/Tests/Unit/erf_unit_tests --gtest_filter='ActuatorSampling.*:ActuatorSpreading.*:BodyExchange.*:WakeLines.*:RunningStats.*:OwnedWakeLines.*:OwnedRunningStats.*:LogStreams.*:TrimLog.*:PrescribedCtDisk.*:OpenFAST*:FLLC.*:MovingBodiesInputs.*'
-      working-directory: ${{runner.workspace}}/GALE/build
+        .github/workflows/scripts/run_unit_tests.sh ${{runner.workspace}}/GALE/build/ERF/Tests/Unit/erf_unit_tests
 
     # every unit test three times in shuffled orders, in one process; the ERF CI job runs this
     # only in builds without the moving bodies, so this is where their unit tests get it
@@ -117,6 +196,6 @@ jobs:
       if: failure()
       uses: actions/upload-artifact@v7
       with:
-        name: backtraces-openfast-stub
+        name: backtraces-openfast-stub-${{ matrix.compiler }}
         path: ${{runner.workspace}}/GALE/build/Tests/**/Backtrace.*
         if-no-files-found: ignore

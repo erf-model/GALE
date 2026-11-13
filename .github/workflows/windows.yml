@@ -1,0 +1,163 @@
+name: Windows
+
+# GALE on Windows with MSVC, without MPI (as ERF's pull-request Windows job):
+#
+#   msvc   builds erf_exec and the unit tests with GALE's moving bodies, the OpenFAST coupling
+#          against the bundled stub and the FFT solver (FFTW from vcpkg), with AMReX assertions
+#          on, then runs GALE's serial unit tests and the GALE regression tests that are
+#          registered without MPI: OpenFAST_DriverOnly (OpenFAST alone, with no forcing on a
+#          flow; its gold file comes from a two-rank run and matches on one rank) and the three
+#          ShaftSourceChecker cases (a Python checker, no erf_exec run). No serial case runs a
+#          turbine's forcing on the flow; GALE's forcing cases need MPI and run in the Linux
+#          jobs. The test commands use sh -c, which comes from Git for Windows on the runner.
+#
+# This builds in double precision; single precision is not built.
+#
+# There is no Windows CUDA job. nvcc on Windows refuses an extended __device__ lambda whose
+# enclosing function has internal linkage, which 26 of ERF's source files rely on (see the
+# tracking issue). A Windows CUDA job can be added once ERF compiles that way; Linux CUDA
+# already covers nvcc.
+#
+# A diagnostic in a GALE file fails the job. Diagnostics in ERF files and toolchain lines are
+# listed but do not fail it: ERF's Windows job builds without warning flags and without the FFT
+# solver.
+#
+# The ccache is restored on every run but saved only on pushes to development, as in ERF's CI, so
+# pull requests do not fill the repository's 10 GB cache with one entry per push. On development,
+# runs are not cancelled, but GitHub keeps only the newest pending run of a concurrency group.
+
+on:
+  push:
+    branches: [development]
+    paths-ignore: ['Docs/**', '**.md', '**.rst']
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths-ignore: ['Docs/**', '**.md', '**.rst']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.event.pull_request.number || github.ref }}-${{ github.head_ref }}-windows
+  cancel-in-progress: ${{ github.ref != 'refs/heads/development' }}
+
+env:
+  CCACHE_VERSION: 4.10.2
+  CCACHE_COMPRESS: 1
+  CCACHE_COMPRESSLEVEL: 10
+
+jobs:
+  msvc:
+    name: Windows MSVC - OpenFAST stub, moving bodies
+    runs-on: windows-latest
+    timeout-minutes: 120
+    env:
+      CCACHE_MAXSIZE: 500M
+
+    steps:
+
+    - uses: actions/checkout@v7
+      with:
+        submodules: true
+        persist-credentials: false
+
+    - name: ERF Submodules
+      shell: bash
+      run: git -C Submodules/ERF submodule update --init --depth 1 Submodules/AMReX Submodules/googletest
+
+    - name: Install ccache
+      shell: pwsh
+      run: |
+        Invoke-WebRequest https://github.com/ccache/ccache/releases/download/v$env:CCACHE_VERSION/ccache-$env:CCACHE_VERSION-windows-x86_64.zip -OutFile ccache.zip
+        Expand-Archive ccache.zip -DestinationPath $env:RUNNER_TEMP
+        "$env:RUNNER_TEMP\ccache-$env:CCACHE_VERSION-windows-x86_64" | Out-File -FilePath $env:GITHUB_PATH -Append
+        "CCACHE_DIR=$env:RUNNER_TEMP\ccache" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+    - name: Restore Cache
+      uses: actions/cache/restore@v6
+      with:
+        path: ${{ runner.temp }}\ccache
+        key: ccache-${{ github.workflow }}-${{ github.job }}-git-${{ github.sha }}
+        restore-keys: |
+             ccache-${{ github.workflow }}-${{ github.job }}-git-
+
+    - name: Install FFTW (vcpkg)
+      run: vcpkg install fftw3:x64-windows
+
+    - name: Set up the MSVC environment
+      uses: ilammy/msvc-dev-cmd@v1
+
+    - name: Configure Project and Generate Build System
+      shell: pwsh
+      run: |
+        # vcpkg's FFTW is a DLL; FFTW_DLL makes fftw3.h import its data symbols (fftw_version,
+        # which ERF's build description prints), else the link fails on them
+        $env:CXXFLAGS = "/DFFTW_DLL"
+        cmake -S . -B build -G Ninja `
+          -DCMAKE_C_COMPILER=cl `
+          -DCMAKE_CXX_COMPILER=cl `
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache `
+          -DCMAKE_MSVC_DEBUG_INFORMATION_FORMAT=Embedded `
+          -DCMAKE_POLICY_DEFAULT_CMP0141=NEW `
+          -DCMAKE_BUILD_TYPE:STRING=RelWithDebInfo `
+          "-DCMAKE_TOOLCHAIN_FILE=$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" `
+          -DVCPKG_TARGET_TRIPLET=x64-windows `
+          -DAMReX_ASSERTIONS:BOOL=ON `
+          -DERF_DIM:STRING=3 `
+          -DERF_ENABLE_MPI:BOOL=OFF `
+          -DERF_ENABLE_FFT:BOOL=ON `
+          -DERF_ENABLE_OPENFAST:BOOL=ON `
+          -DERF_OPENFAST_USE_STUB:BOOL=ON `
+          -DERF_ENABLE_TESTS:BOOL=ON `
+          -DERF_ENABLE_UNIT_TESTS:BOOL=ON `
+          -DERF_ENABLE_FCOMPARE:BOOL=ON
+        if ($LASTEXITCODE -ne 0) { throw "configure failed" }
+
+    - name: Compile and Link
+      shell: pwsh
+      run: |
+        ccache -z
+        $build_start = [int](Get-Date -UFormat %s)
+        cmake --build build --parallel $env:NUMBER_OF_PROCESSORS 2>&1 | Tee-Object -FilePath build-output.txt
+        if ($LASTEXITCODE -ne 0) { throw "build failed" }
+        # Keep only what this build used (ccache touches an object on every hit), as ERF's CI does
+        $age = [int](Get-Date -UFormat %s) - $build_start + 120
+        ccache --evict-older-than "${age}s"
+        ccache -s
+
+    - name: Save Cache
+      if: ${{ !cancelled() && github.event_name == 'push' }}
+      uses: actions/cache/save@v6
+      with:
+        path: ${{ runner.temp }}\ccache
+        key: ccache-${{ github.workflow }}-${{ github.job }}-git-${{ github.sha }}
+
+    - name: Report
+      if: always()
+      shell: bash
+      run: .github/workflows/scripts/build_report.sh build-output.txt gale
+
+    # vcpkg copies the FFTW DLLs next to the executables; the PATH entry is a fallback. This step
+    # only runs the test executable and grep, so Git's link.exe cannot shadow MSVC's.
+    - name: Moving-Bodies Unit Tests
+      shell: bash
+      run: |
+        vcpkg_root=$(cygpath -u "${VCPKG_INSTALLATION_ROOT}")
+        export PATH="${vcpkg_root}/installed/x64-windows/bin:${PATH}"
+        .github/workflows/scripts/run_unit_tests.sh build/ERF/Tests/Unit/erf_unit_tests.exe
+
+    - name: Shuffle Stress Check
+      shell: pwsh
+      run: |
+        $env:PATH = "$env:VCPKG_INSTALLATION_ROOT\installed\x64-windows\bin;$env:PATH"
+        ctest --test-dir build -L stress --output-on-failure --no-tests=error
+        if ($LASTEXITCODE -ne 0) { throw "stress check failed" }
+
+    # the GALE tests registered without MPI (see the header)
+    - name: GALE Regression Tests
+      shell: pwsh
+      run: |
+        $env:PATH = "$env:VCPKG_INSTALLATION_ROOT\installed\x64-windows\bin;$env:PATH"
+        ctest --test-dir build/Tests --output-on-failure --no-tests=error
+        if ($LASTEXITCODE -ne 0) { throw "GALE regression tests failed" }

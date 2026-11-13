@@ -6,15 +6,18 @@ name: Linux GCC OpenFAST 5
 # (without its C++ API, which ERF does not use) and cached between runs, keyed on the version and
 # on that script, and saved as soon as it is built, so a failing test does not throw it away; a
 # cold build takes about 20-30 minutes, a cached one a few seconds. Only erf_exec and fcompare are
-# built, since the unit tests of the coupling already run against the stub in the "Linux GCC
-# OpenFAST stub" job. Like that job, it runs on every pull request: the cases depend on the dycore,
-# the terrain and the pressure solve as much as on the coupling.
+# built, since the unit tests of the coupling already run against the stub in the "Linux OpenFAST
+# stub" workflow. Like that workflow, it runs on every pull request that changes more than the
+# documentation: the cases depend on the dycore, the terrain and the pressure solve as much as on
+# the coupling.
 
 on:
   push:
     branches: [development]
+    paths-ignore: ['Docs/**', '**.md', '**.rst']
   pull_request:
     types: [opened, synchronize, reopened]
+    paths-ignore: ['Docs/**', '**.md', '**.rst']
 
 concurrency:
   group: ${{ github.event.pull_request.number || github.ref }}-${{ github.head_ref }}-openfast-real
@@ -86,6 +89,7 @@ jobs:
           -DERF_OPENFAST_USE_STUB:BOOL=OFF \
           -DOPENFAST_DIR:PATH=$HOME/opt/openfast-${{ env.OPENFAST_VERSION }} \
           -DERF_ENABLE_TESTS:BOOL=ON \
+          -DERF_ENABLE_UNIT_TESTS:BOOL=OFF \
           -DERF_ENABLE_ALL_WARNINGS:BOOL=ON \
           -DERF_ENABLE_FCOMPARE:BOOL=ON \
           -DERF_TEST_NRANKS:STRING=2 \

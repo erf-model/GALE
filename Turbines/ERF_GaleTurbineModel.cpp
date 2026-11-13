@@ -22,6 +22,26 @@
 
 using namespace amrex;
 
+namespace erf_gale_turbine {
+
+/**
+ * Fills z_nd with the flat heights z_bot + k dz.
+ *
+ * A free function in a named namespace, called by GaleTurbineModel::heights. nvcc refuses an
+ * extended __device__ lambda whose enclosing function is a private class member, and on Windows
+ * also one whose enclosing function has internal linkage (a static function, or any function in
+ * an anonymous namespace). A named namespace keeps the linkage external.
+ */
+void fill_flat_heights (MultiFab& z_nd, Real z_bot, Real dz)
+{
+    for (MFIter mfi(z_nd); mfi.isValid(); ++mfi) {
+        const Array4<Real> z = z_nd.array(mfi);
+        ParallelFor(mfi.fabbox(), [=] AMREX_GPU_DEVICE (int i, int j, int k) { z(i, j, k) = z_bot + k * dz; });
+    }
+}
+
+} // namespace erf_gale_turbine
+
 namespace {
 
 class GaleTurbineModel final : public StructureModel
@@ -139,10 +159,7 @@ private:
             m_flat_z.define(ba_nd, dm, 1, ngrow + IntVect(2));
             const Real dz = static_cast<Real>(geom.CellSize(2));
             const Real z_bot = static_cast<Real>(geom.ProbLo(2));
-            for (MFIter mfi(m_flat_z); mfi.isValid(); ++mfi) {
-                const Array4<Real> z = m_flat_z.array(mfi);
-                ParallelFor(mfi.fabbox(), [=] AMREX_GPU_DEVICE (int i, int j, int k) { z(i, j, k) = z_bot + k * dz; });
-            }
+            erf_gale_turbine::fill_flat_heights(m_flat_z, z_bot, dz);
         }
         return &m_flat_z;
     }

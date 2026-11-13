@@ -94,25 +94,6 @@ struct Sources {
             }
         }
     }
-
-    // spread and return the integrated source per component
-    std::array<Real,3> spread (const std::vector<Real>& pos, const std::vector<Real>& force, Real eps)
-    {
-        erf_actuator::spread_forces(pos, force, eps, znd.get(), detj.get(), geom, sx, sy, sz);
-        return totals();
-    }
-    // the same with a kernel width per point
-    std::array<Real,3> spread (const std::vector<Real>& pos, const std::vector<Real>& force, const std::vector<Real>& eps)
-    {
-        erf_actuator::spread_forces(pos, force, eps, znd.get(), detj.get(), geom, sx, sy, sz);
-        return totals();
-    }
-    std::array<Real,3> totals () const
-    {
-        return {{erf_actuator::integrate_source(0, sx, detj.get(), geom),
-                 erf_actuator::integrate_source(1, sy, detj.get(), geom),
-                 erf_actuator::integrate_source(2, sz, detj.get(), geom)}};
-    }
 };
 
 } // namespace

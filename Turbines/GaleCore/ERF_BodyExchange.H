@@ -118,9 +118,9 @@ public:
     /** How often the envelopes were rebuilt (any body): for the diagnostics and the tests. */
     int num_envelope_updates () const { return m_num_updates; }
     /** The points this rank has received from other ranks, over every exchange so far: for the tests. */
-    long points_received () const { return m_points_received; }
+    amrex::Long points_received () const { return m_points_received; }
     /** The kernels this rank's bodies sent whose normalisation the ranks they reach had to sum (not normalised on the owner): for the tests. */
-    long remote_normalisations () const { return m_remote_norms; }
+    amrex::Long remote_normalisations () const { return m_remote_norms; }
     /** How many exchanges ran the envelope check (the one reduction): for the diagnostics and the tests. */
     int num_envelope_checks () const { return m_num_checks; }
 
@@ -174,8 +174,8 @@ private:
     amrex::DistributionMapping m_dm;
     bool m_fitted{false};
     int m_num_updates{0};
-    long m_points_received{0};
-    long m_remote_norms{0};
+    amrex::Long m_points_received{0};
+    amrex::Long m_remote_norms{0};
     int m_check_interval{1};
     int m_num_checks{0};
     std::array<long,2> m_calls{{0, 0}};             //!< sampling, spreading exchanges so far

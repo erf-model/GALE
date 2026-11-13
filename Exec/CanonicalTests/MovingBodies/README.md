@@ -21,6 +21,11 @@ Askervein cases are the exception: a 6 km x 3 km terrain-fitted domain, and the 
 (`ERF_OPENFAST_USE_STUB=OFF`, label `openfast-real`) on the IEA 15 MW model in
 `IEA15_land_model` (see its README for the source, licence and changes) and the
 terrain file of `Submodules/ERF/Exec/CanonicalTests/Real_Terrain/Askervein`, both copied next to the deck by the test.
+Their golds are per platform, `*.macOS.gold` and `*.Linux.gold` here and `_macOS` and `_Linux` in
+`Tests/ERFGoldFiles`: the two platforms agree exactly for four steps, then the line's and the disk's
+corrections amplify a last-bit difference in a filter to 4e-3 relative in the power by step ten
+(`Turbines/Tests/ERFTurbinesTests.cmake` and `Docs/sphinx_doc/RegressionTests.rst` give the numbers).
+Refresh a gold set on the platform it belongs to.
 
 | case | body | runner | what it checks |
 | --- | --- | --- | --- |

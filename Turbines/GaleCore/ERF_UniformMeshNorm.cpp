@@ -100,14 +100,6 @@ struct KernelFaces
         if (has_znd) { zb.k_range(pz - Real(3.0) * eps, pz + Real(3.0) * eps, dlo[2], dhi[2], kb, kt); }
         return reach_box_k(dir, px, py, pz, eps, kb, kt);
     }
-    // The same for the three face grids, the cells in z found once
-    std::array<Box,3> reach_boxes (Real px, Real py, Real pz, Real eps) const
-    {
-        int kb = dlo[2], kt = dhi[2];
-        if (has_znd) { zb.k_range(pz - Real(3.0) * eps, pz + Real(3.0) * eps, dlo[2], dhi[2], kb, kt); }
-        return {{reach_box_k(0, px, py, pz, eps, kb, kt), reach_box_k(1, px, py, pz, eps, kb, kt),
-                 reach_box_k(2, px, py, pz, eps, kb, kt)}};
-    }
     // reach_box with the cells [kb, kt] a height within reach may lie in (used with z_phys_nd only)
     Box reach_box_k (int dir, Real px, Real py, Real pz, Real eps, int kb, int kt) const
     {
