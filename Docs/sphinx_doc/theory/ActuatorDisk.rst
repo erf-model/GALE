@@ -232,7 +232,9 @@ normal :math:`\mathbf{n}`, covered by a polar grid of points. It runs no OpenFAS
   thrust.
 - The log records the upstream and disk-averaged speeds, the thrust, the power :math:`T U_d` and
   the integrated source along the normal. The ``power`` column is :math:`T U_d`, the rate of work
-  the disk extracts from the flow, not the turbine's electrical power.
+  the disk extracts from the flow, not the turbine's electrical power. It is negative only when
+  the upstream and disk speeds have opposite signs (a turning flow), when the force speeds up the
+  flow at the disk.
 - The upstream sample still feels the disk. In vortex-cylinder theory at :math:`C_T = 0.75` it reads
   0.977 of the free stream one diameter ahead, so the thrust is 4.6 % below nominal; at two
   diameters it is 1.4 % below.

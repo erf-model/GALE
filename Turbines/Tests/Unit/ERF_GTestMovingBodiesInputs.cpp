@@ -353,7 +353,15 @@ TEST(MovingBodiesInputs, TheRestartRecordLeavesOutUnusedInputs)
     r = MovingBodiesInputs::restart_record(b);
     EXPECT_EQ(record_value(r, "nacelle_area"), "60");
     EXPECT_EQ(record_value(r, "correction_time"), "3");
+    // only the area, then only the time, differs from the checkpoint: each change is caught
+    chk = std::map<std::string,std::string>(r.begin(), r.end());
+    chk["nacelle_area"] = "10";
     EXPECT_TRUE(MovingBodiesInputs::changed_record_entry(chk, r, key, was, now));
+    EXPECT_EQ(key, "nacelle_area");
+    chk = std::map<std::string,std::string>(r.begin(), r.end());
+    chk["correction_time"] = "-1";
+    EXPECT_TRUE(MovingBodiesInputs::changed_record_entry(chk, r, key, was, now));
+    EXPECT_EQ(key, "correction_time");
 }
 
 TEST(MovingBodiesInputs, TheEnvelopeCheckIntervalDefaultsToEveryStepAndMustBePositive)
