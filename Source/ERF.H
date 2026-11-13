@@ -89,7 +89,6 @@
 #include "ERF_WindFarm.H"
 #endif
 #ifdef ERF_USE_MOVING_BODIES
-#include "ERF_MovingBodies.H"
 #include "ERF_StructureModel.H"
 #include "ERF_ActuatorSampling.H"
 #endif
@@ -1670,11 +1669,6 @@ private:
     amrex::Vector<amrex::MultiFab> SMark; // A multifab that holds an integer corresponding
                                                    // to the number of the wind turbine to sample
                                                    // velocity upstream of the turbine
-#endif
-
-#ifdef ERF_USE_MOVING_BODIES
-    // OpenFAST turbines and other actuator bodies (erf.moving_bodies.*)
-    std::unique_ptr<MovingBodies> moving_bodies;
 #endif
 
     std::unique_ptr<SurfaceModel> m_SurfaceModel = nullptr;

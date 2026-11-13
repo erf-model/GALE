@@ -37,6 +37,7 @@ erf.plot_file_1  = plt
 erf.plot_int_1   = 10
 erf.plot_vars_1  = density x_velocity y_velocity z_velocity theta
 
+erf.structures.model              = gale
 erf.moving_bodies.bodies          = D1
 erf.moving_bodies.D1.type         = ct_disk
 erf.moving_bodies.D1.base_pos     = 750. 600. 0.

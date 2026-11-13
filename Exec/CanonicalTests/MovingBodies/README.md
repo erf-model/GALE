@@ -4,7 +4,8 @@ Regression cases for the moving-bodies framework (`erf.moving_bodies.*`:
 OpenFAST turbines as actuator disks and lines, prescribed-Ct disks), laid out
 like `../Canonical_RANS`: one directory per case with the input deck, the
 bundled OpenFAST stub's turbine file where a turbine is involved, and the
-gold logs the case is compared with. They are registered in
+gold logs the case is compared with. Each deck with bodies selects them with
+`erf.structures.model = gale`, the bodies' structure model. They are registered in
 `Tests/CTestList.cmake` (`TEST_SOURCE_ROOT` points the registration here) and
 their gold plotfiles stay in `Tests/ERFGoldFiles/<case>`. The theory and the
 inputs are in `Docs/sphinx_doc/theory/MovingBodies.rst` and
@@ -39,7 +40,7 @@ terrain file of `../Real_Terrain/Askervein`, both copied next to the deck by the
 | `OpenFAST_ADM_TwoWidths` | two stub turbines, disks, a kernel width each | `RunOpenFASTADM.cmake` | plotfile, T2's flow log, `fx == -load_x` |
 | `OpenFAST_ADM_DiskAndTurbine` | stub turbine (disk, 2 cells) and a prescribed-Ct disk (1 cell) | `RunOpenFASTADM.cmake` | the disk's log, `fx == -load_x` of both bodies; with the two swapped, ownership parity with the disk on rank 1 (`total_load.csv` gathered from it) |
 | `OpenFAST_ADM_TwoLevel` | stub turbine, disk, on level 1 of two | `RunOpenFASTADM.cmake` | the anchor level: sampled and forced on the fine patch, stepped with its step; level 0 carries the source restricted onto its faces |
-| `OpenFAST_ADM_TwoLevel_Restart` | as above | `RunRestartParity.cmake`, `make_legacy_checkpoint.py` | restart parity with the fine level, every log; `OpenFAST_ADM_TwoLevel_RestartLegacy`: a restart from the step-5 checkpoint rewritten by `make_legacy_checkpoint.py` into an earlier version's layout (face forces in `moving_bodies/force_x`, `_y`, `_z`) matches the straight run to 1e-10 |
+| `OpenFAST_ADM_TwoLevel_Restart` | as above | `RunRestartParity.cmake`, `make_legacy_checkpoint.py` | restart parity with the fine level, every log; `OpenFAST_ADM_TwoLevel_RestartLegacy`: a restart from the step-5 checkpoint rewritten by `make_legacy_checkpoint.py` into an earlier version's layout (face forces in `moving_bodies/force_x`, `_y`, `_z`) matches the straight run to 1e-10; `OpenFAST_ADM_TwoLevel_RestartBodiesDir`: the same with the source in `moving_bodies/StructureCoarseSource`, matched exactly |
 | `Actuator_CtDisk_TwoLevel` | prescribed-Ct disk on one level and on level 1 of two, the fine box tight around it | `RunDiskLevels.cmake` | the coarse level carries the disk's force: the two runs' induction (disk-averaged and upstream velocity deficits) agree within 10 % |
 | `OpenFAST_ALM_Uniform` | stub turbine, line | `RunOpenFASTADM.cmake` | the rotating line; tip-travel limit |
 | `OpenFAST_ALM_Tower` | stub turbine, line, tower, nacelle | `RunOpenFASTADM.cmake` | `fx == -load_x` with the tower and nacelle |

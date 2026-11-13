@@ -200,39 +200,6 @@ ERF::Advance (int lev, double time, double dt_lev, int iteration, int /*ncycle*/
 
 #ifdef ERF_USE_MOVING_BODIES
     // **************************************************************************************
-    // Advance the moving bodies (OpenFAST turbines) by one step on their anchor level
-    // **************************************************************************************
-    if (moving_bodies) {
-        // the bodies' level must exist, and no finer level may cover them: checked at every step of that level
-        // (or of the finest, should a regrid have removed it), so a regrid is caught before the next step
-        if (lev == std::min(moving_bodies->anchor_level(), finest_level)) {
-            moving_bodies->check_levels(finest_level, grids, geom);
-            // the actuator core places its kernels and samples at prob_lo + i dx with the volumes dx dy dz detJ,
-            // with no map factors: checked with the levels, so also after a regrid
-            if (!structure_unit_map_factors(lev)) {
-                Abort("erf.moving_bodies: the bodies' forces are spread and the velocities sampled without map factors, but level "
-                      + std::to_string(lev) + " has a map factor other than 1; run the bodies on a mesh whose map factors are all 1");
-            }
-        }
-        moving_bodies->advance(lev, time, dt_lev, S_old, U_old, V_old, W_old,
-                               z_phys_nd[lev].get(), detJ_cc[lev].get(), Geom(lev));
-        // on a coarser level, the anchor level's latest source restricted onto this level, held over the
-        // step, as for a structure model (make_structure_coarse_sources; two-way coupling only)
-        if (lev < moving_bodies->anchor_level() && moving_bodies->anchor_level() <= finest_level) {
-            const int L = moving_bodies->anchor_level();
-            Vector<const MultiFab*> detJ(L + 1, nullptr);
-            Vector<IntVect> rr(L);
-            for (int l = 0; l <= L; ++l) {
-                if (SolverChoice::mesh_type != MeshType::ConstantDz) { detJ[l] = detJ_cc[l].get(); }
-                if (l < L) { rr[l] = refRatio(l); }
-            }
-            moving_bodies->make_coarse_sources(lev, grids, dmap, geom, rr, detJ);
-        } else if (lev < moving_bodies->anchor_level()) {
-            moving_bodies->drop_coarse_source(lev);
-        }
-    }
-
-    // **************************************************************************************
     // Advance the structure model (erf.structures.model) over this step of its level,
     // from the state at the start of the step; its momentum source then holds over the step
     // **************************************************************************************

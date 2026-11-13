@@ -42,6 +42,7 @@ erf.plot_vars_1  = density x_velocity y_velocity z_velocity theta
 # The default sampling (disk_corrected) recovers the free stream; T1's filter width (epsilon = 2 cells
 # of 50 m) is about 2 rotor radii, past the 1.25 the factor was fitted for (the start-up log warns),
 # T2's (1 cell) about 1 radius, inside it.
+erf.structures.model                         = gale
 erf.moving_bodies.bodies                     = T1 T2
 erf.moving_bodies.T1.type                    = openfast_turbine
 erf.moving_bodies.T1.mode                    = adm

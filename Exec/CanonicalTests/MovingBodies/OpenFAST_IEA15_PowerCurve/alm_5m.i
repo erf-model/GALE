@@ -43,6 +43,7 @@ erf.plot_file_1  = plt
 erf.plot_int_1   = 1800
 
 # the turbine: tower base raised to z = 490 m, so the hub is at mid-height (z = 640 m)
+erf.structures.model                         = gale
 erf.moving_bodies.bodies                     = T1
 erf.moving_bodies.T1.type                    = openfast_turbine
 erf.moving_bodies.T1.base_pos                = 600. 960. 490.

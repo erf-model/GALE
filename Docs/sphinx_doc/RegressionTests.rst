@@ -906,7 +906,11 @@ ranks and requires the plotfiles and the flow log to agree, and
 ``make_legacy_checkpoint.py`` into the layout of an earlier version (the
 anchor level's face forces in ``moving_bodies/force_x``, ``_y``, ``_z``),
 restarts from it and requires step 10 to match the straight run to a relative
-1e-10 (on this uniform-dz mesh, where the face Jacobian is 1). ``MovingBodies_OneWayAboveLevel0`` requires the run to abort when the
+1e-10 (on this uniform-dz mesh, where the face Jacobian is 1).
+``OpenFAST_ADM_TwoLevel_RestartBodiesDir`` moves the step-5 checkpoint's
+``StructureCoarseSource`` into ``moving_bodies/``, where the bodies wrote it before
+they became structure model ``gale``, and requires step 10 of the restart to match
+the straight run exactly. ``MovingBodies_OneWayAboveLevel0`` requires the run to abort when the
 bodies live above level 0 and ``erf.coupling_type`` is not ``TwoWay``.
 
 Test Location: `Exec/CanonicalTests/MovingBodies/OpenFAST_ADM_TwoLevel`_ and `Exec/CanonicalTests/MovingBodies/OpenFAST_ADM_TwoLevel_Restart`_

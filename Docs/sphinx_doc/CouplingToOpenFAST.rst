@@ -113,6 +113,7 @@ solution. Its AeroDyn file sets ``Wake_Mod = 1``, as the default
    erf.fixed_dt       = 0.2          # on the anchor level: a whole multiple of OpenFAST's DT
    amrex.fpe_trap_invalid = 0
 
+   erf.structures.model                         = gale         # the bodies as ERF's structure model
    erf.moving_bodies.bodies                     = T1
    erf.moving_bodies.T1.type                    = openfast_turbine
    erf.moving_bodies.T1.mode                    = adm          # or alm

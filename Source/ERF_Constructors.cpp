@@ -445,10 +445,6 @@ ERF::ERF_shared ()
 #endif
 
 #ifdef ERF_USE_MOVING_BODIES
-    // nullptr unless erf.moving_bodies.bodies is given
-    moving_bodies = MovingBodies::create(solverChoice, max_level, fixed_dt, !restart_chkfile.empty(),
-                                         stop_time - start_time);
-
     // The structure model erf.structures.model selects; it reads its own inputs here
     m_structure_model = make_structure_model_from_inputs(max_level);
     if (m_structure_model) {

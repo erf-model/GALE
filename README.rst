@@ -175,8 +175,8 @@ With either option CTest also checks that the library loads and runs four
 short tests of the power-curve case (label ``rosco``).
 
 ``ERF_ENABLE_MOVING_BODIES=ON`` alone builds the framework with the ``ct_disk``
-body and no OpenFAST. A deck turns the bodies on by listing them in
-``erf.moving_bodies.bodies``; every ``erf.moving_bodies.*`` key is in the inputs
+body and no OpenFAST. A deck turns the bodies on with ``erf.structures.model = gale``
+and lists them in ``erf.moving_bodies.bodies``; every ``erf.moving_bodies.*`` key is in the inputs
 documentation.
 
 Cases and tests
