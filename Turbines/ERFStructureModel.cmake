@@ -1,11 +1,11 @@
 # CMake: GALE's moving bodies (OpenFAST turbines and prescribed-Ct disks), compiled into ERF as
 # structure model "gale". ERF includes this file for each directory listed in
 # ERF_STRUCTURE_MODEL_DIRS and calls erf_structure_model_add with ERF's OBJECT library;
-# ERF_STRUCTURE_MODEL_DIR holds this directory during the call. Tests/Unit includes the file a
-# second time for erf_structure_model_add_unit_tests, so it holds definitions only.
+# ERF_STRUCTURE_MODEL_DIR holds this directory during the call. ERF's Tests/Unit includes the file
+# a second time for erf_structure_model_add_unit_tests, so it holds definitions only.
 #
 # The OpenFAST options, the OpenFAST package search and the stub library (erf_openfast_stub) are
-# set up in the top-level CMakeLists.txt, before ERF's library is made.
+# set up in GALE's top-level CMakeLists.txt, before it adds ERF (Submodules/ERF).
 function(erf_structure_model_add target)
   set(_dir ${ERF_STRUCTURE_MODEL_DIR})
   target_sources(${target} PRIVATE
@@ -43,12 +43,12 @@ function(erf_structure_model_add target)
 endfunction()
 
 # The model's GoogleTest files, built into ERF's unit-test executable (erf_unit_tests).
-# Tests/Unit/CMakeLists.txt, whose erf_parallel_tests has no model hook, also adds
-# ERF_GTestBodyExchange, _GaleCellHeights and _GaleUniformMeshNorm to erf_parallel_tests, and
-# ERF_GTestModelFacts there only.
+# GALE's Tests/CMakeLists.txt adds ERF_GTestBodyExchange, _GaleCellHeights and _GaleUniformMeshNorm
+# to ERF's erf_parallel_tests, which has no model hook, and ERF_GTestModelFacts there only.
 function(erf_structure_model_add_unit_tests target)
   set(_dir ${ERF_STRUCTURE_MODEL_DIR}/Tests/Unit)
-  # ERF's test helper ERF_GTestThrowOnAbort.H, which several of these tests include
+  # ERF's test helper ERF_GTestThrowOnAbort.H, which several of these tests include (called from ERF's
+  # Tests/Unit, so PROJECT_SOURCE_DIR is ERF's)
   target_include_directories(${target} PRIVATE ${PROJECT_SOURCE_DIR}/Tests/Unit/MovingBodies)
   # Motivation: a turbine's owner must be a rank whose boxes overlap it, and its points, sampled and
   # spread through messages to the ranks whose boxes they touch only, must give what the global
@@ -111,8 +111,9 @@ function(erf_structure_model_add_unit_tests target)
       ${_dir}/ERF_GTestOpenFASTAudit.cpp
       ${_dir}/ERF_GTestMovingBodiesInputs.cpp
     )
-    # the moving-bodies cases, whose model files (the IEA 15 MW models, the stub's decks) the readers are tested on
-    target_compile_definitions(${target} PRIVATE
-      ERF_GTEST_MOVING_BODIES_CASES="${PROJECT_SOURCE_DIR}/Exec/CanonicalTests/MovingBodies")
+    # the moving-bodies cases, whose model files (the IEA 15 MW models, the stub's decks) the readers are
+    # tested on: GALE's Exec/CanonicalTests/MovingBodies, beside this folder
+    get_filename_component(_cases "${ERF_STRUCTURE_MODEL_DIR}/../Exec/CanonicalTests/MovingBodies" ABSOLUTE)
+    target_compile_definitions(${target} PRIVATE ERF_GTEST_MOVING_BODIES_CASES="${_cases}")
   endif()
 endfunction()

@@ -6,12 +6,12 @@ Moving Bodies: OpenFAST Turbines
 The moving-bodies framework (``Turbines/``) represents wind turbines
 whose aerodynamics and structural response are computed by
 `OpenFAST <https://openfast.readthedocs.io>`_ while ERF supplies the wind. It
-is separate from the wind farm parameterizations of :ref:`sec:WindFarmModels`,
+is separate from the wind farm parameterizations of `ERF's wind farm models <https://erf.readthedocs.io/en/latest/theory/WindFarmModels.html>`__,
 which model turbines with thrust curves; here the loads come from OpenFAST's
 blade-element solution on the turbine's own blade and tower nodes.
 
 It builds on the actuator core (``Source/MovingBodies/Core``,
-:ref:`sec:ActuatorCore`), which it uses unchanged. What the framework adds
+`ERF's actuator core <https://erf.readthedocs.io/en/latest/theory/ActuatorCore.html>`__), which it uses unchanged. What the framework adds
 to the core lives in ``Turbines/GaleCore``: the exchange of a
 body's points with the ranks it touches (``BodyExchange``), the conversion
 of an earlier checkpoint's face forces into a source (``ActuatorRestriction``), the cell heights that limit a blade tip,
@@ -21,7 +21,7 @@ core's ``WakeLines`` and ``RunningStats`` that a body's owner writes and
 restores (``OwnedWakeLines``, ``OwnedRunningStats``).
 
 The bodies reach ERF as the structure model ``gale``
-(``Turbines/ERF_GaleTurbineModel.cpp``, :ref:`sec:StructureCoupling`), compiled in from
+(``Turbines/ERF_GaleTurbineModel.cpp``, `ERF's structure coupling <https://erf.readthedocs.io/en/latest/theory/StructureCoupling.html>`__), compiled in from
 their own directory as any structure model is (``Turbines/ERFStructureModel.cmake``,
 ``Turbines/Make.package``), and selected with
 ``erf.structures.model = gale``. ERF calls it at the times it calls every structure
@@ -590,7 +590,7 @@ Wake diagnostics
 ----------------
 
 The lines are ``OwnedWakeLines``, the copy of the actuator core's ``WakeLines``
-(:ref:`sec:ActuatorCore`) that the rotor's owner writes and restores.
+(`ERF's actuator core <https://erf.readthedocs.io/en/latest/theory/ActuatorCore.html>`__) that the rotor's owner writes and restores.
 ``erf.moving_bodies.wake.lines_xD`` puts sampling lines behind every rotor:
 at each listed distance in rotor diameters along the horizontal projection
 of the rotor axis through the hub (the shaft axis of an OpenFAST turbine,
@@ -658,7 +658,7 @@ Every coarser level carries the bodies' force too, with
 and ``OneWay`` stops, naming the input). At the start of each of its steps, the
 anchor level's source of its latest step is restricted onto the coarser level's
 faces by the same routine that serves a structure model
-(``erf_structure::restrict_face_sources``, see :ref:`sec:StructureCoarseSource`). It goes
+(``erf_structure::restrict_face_sources``, see `ERF's coarse-level source <https://erf.readthedocs.io/en/latest/theory/StructureCoupling.html#sec-structurecoarsesource>`__). It goes
 down one level at a time; with :math:`F_f = s_f J_f \Delta x \Delta y \Delta z`
 the force on a face,
 

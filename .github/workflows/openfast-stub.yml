@@ -1,10 +1,10 @@
 name: Linux GCC OpenFAST stub
 
-# The moving-bodies actuator framework and its OpenFAST turbine coupling, built
-# against the bundled OpenFAST stub library (no OpenFAST installation needed):
-# the moving-bodies regression and abort cases, their restart-parity, restart-abort
-# and box-parity twins, and the actuator unit tests (serial, and the sampling and spreading ones
-# also on two ranks). The anelastic FFT Poisson solve the decks use needs
+# GALE's moving bodies and their OpenFAST turbine coupling, compiled into ERF (the
+# Submodules/ERF submodule) and built against the bundled OpenFAST stub library (no OpenFAST
+# installation needed): all of GALE's regression and abort cases with their restart-parity,
+# restart-abort and box-parity twins, and the actuator unit tests (serial, and the sampling and
+# spreading ones also on two ranks). The anelastic FFT Poisson solve the decks use needs
 # ERF_ENABLE_FFT, which the AMReX dependency script provides through libfftw3.
 
 on:
@@ -29,11 +29,15 @@ jobs:
       with:
         submodules: true
 
+    # ERF's own submodules that this build uses (not RRTMGP, WW3, ekat, Noah-MP)
+    - name: ERF Submodules
+      run: git -C Submodules/ERF submodule update --init --depth 1 Submodules/AMReX Submodules/googletest
+
     - name: Install Dependencies
-      run: Submodules/AMReX/.github/workflows/dependencies/dependencies.sh
+      run: Submodules/ERF/Submodules/AMReX/.github/workflows/dependencies/dependencies.sh
 
     - name: Install CCache
-      run: Submodules/AMReX/.github/workflows/dependencies/dependencies_ccache.sh
+      run: Submodules/ERF/Submodules/AMReX/.github/workflows/dependencies/dependencies_ccache.sh
 
     - name: Set Up Cache
       uses: actions/cache@v6
@@ -46,8 +50,8 @@ jobs:
     - name: Configure Project and Generate Build System
       run: |
         cmake \
-          -B${{runner.workspace}}/ERF/build \
-          -DCMAKE_INSTALL_PREFIX:PATH=${{runner.workspace}}/ERF/install \
+          -B${{runner.workspace}}/GALE/build \
+          -DCMAKE_INSTALL_PREFIX:PATH=${{runner.workspace}}/GALE/install \
           -DCMAKE_BUILD_TYPE:STRING=RelWithDebInfo \
           -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
           -DERF_DIM:STRING=3 \
@@ -71,7 +75,7 @@ jobs:
         export CCACHE_MAXSIZE=400M
         ccache -z
 
-        cmake --build ${{runner.workspace}}/ERF/build --parallel 2 --verbose \
+        cmake --build ${{runner.workspace}}/GALE/build --parallel 2 --verbose \
           2>&1 | tee -a ${{runner.workspace}}/build-output.txt;
 
         ccache -s
@@ -80,7 +84,7 @@ jobs:
     - name: Report
       run: |
         egrep "Warning:|Error:|warning:|error:" ${{runner.workspace}}/build-output.txt \
-          | egrep -v "Submodules/AMReX" | sort | uniq \
+          | egrep -v "Submodules/ERF/Submodules/AMReX" | sort | uniq \
           | awk 'BEGIN{i=0}{print $0}{i++}END{print "Warnings: "i}' > ${{runner.workspace}}/build-output-warnings.txt
         cat ${{runner.workspace}}/build-output-warnings.txt
         return=$(tail -n 1 ${{runner.workspace}}/build-output-warnings.txt | awk '{print $2}')
@@ -88,40 +92,31 @@ jobs:
 
     - name: Actuator and OpenFAST Unit Tests
       run: |
-        Tests/Unit/erf_unit_tests --gtest_filter='ActuatorSampling.*:ActuatorSpreading.*:BodyExchange.*:WakeLines.*:RunningStats.*:OwnedWakeLines.*:OwnedRunningStats.*:LogStreams.*:TrimLog.*:PrescribedCtDisk.*:OpenFAST*:FLLC.*:MovingBodiesInputs.*'
-      working-directory: ${{runner.workspace}}/ERF/build
+        ERF/Tests/Unit/erf_unit_tests --gtest_filter='ActuatorSampling.*:ActuatorSpreading.*:BodyExchange.*:WakeLines.*:RunningStats.*:OwnedWakeLines.*:OwnedRunningStats.*:LogStreams.*:TrimLog.*:PrescribedCtDisk.*:OpenFAST*:FLLC.*:MovingBodiesInputs.*'
+      working-directory: ${{runner.workspace}}/GALE/build
 
     # every unit test three times in shuffled orders, in one process; the ERF CI job runs this
     # only in builds without the moving bodies, so this is where their unit tests get it
     - name: Shuffle Stress Check
       run: |
         ctest -L stress --output-on-failure --no-tests=error
-      working-directory: ${{runner.workspace}}/ERF/build
+      working-directory: ${{runner.workspace}}/GALE/build
 
-    - name: Moving-Bodies Regression Tests
+    # every test registered in GALE's Tests/ (ERF's own regression suite is not registered)
+    - name: GALE Regression Tests
       run: |
-        ctest -L moving-bodies --output-on-failure --no-tests=error
-      working-directory: ${{runner.workspace}}/ERF/build
-
-    - name: Moving-Bodies Restart-Parity and Restart-Abort Tests
-      run: |
-        ctest -L restart-parity -R "OpenFAST|MovingBodies" --output-on-failure --no-tests=error
-      working-directory: ${{runner.workspace}}/ERF/build
-
-    - name: Moving-Bodies Box-Parity Tests
-      run: |
-        ctest -L box-parity -R "OpenFAST|Actuator" --output-on-failure --no-tests=error
-      working-directory: ${{runner.workspace}}/ERF/build
+        ctest --test-dir Tests --output-on-failure --no-tests=error
+      working-directory: ${{runner.workspace}}/GALE/build
 
     - name: Actuator Parallel Unit Tests
       run: |
         ctest -R "erf_parallel_tests[.](ActuatorSampling|ActuatorSpreading|BodyExchange)" --output-on-failure --no-tests=error
-      working-directory: ${{runner.workspace}}/ERF/build
+      working-directory: ${{runner.workspace}}/GALE/build
 
     - name: Upload backtraces from failed tests
       if: failure()
       uses: actions/upload-artifact@v7
       with:
         name: backtraces-openfast-stub
-        path: ${{runner.workspace}}/ERF/build/Tests/**/Backtrace.*
+        path: ${{runner.workspace}}/GALE/build/Tests/**/Backtrace.*
         if-no-files-found: ignore

@@ -1,8 +1,8 @@
-# The CTests of GALE's turbine model (structure model "gale", Turbines/). Tests/CTestList.cmake
-# includes this file at its end when the model is compiled in (ERF_GALE_TURBINES_DIR, set in the
-# top-level CMakeLists.txt), so ERF's test helpers (Tests/ERFTestHelpers.cmake and the add_test_*
-# functions of CTestList.cmake) are defined, and CMAKE_CURRENT_SOURCE_DIR and
-# CMAKE_CURRENT_BINARY_DIR are those of Tests/.
+# The CTests of GALE's turbine model (structure model "gale", Turbines/). GALE's Tests/CMakeLists.txt
+# includes this file after ERF's general test helpers (Submodules/ERF/Tests/ERFTestHelpers.cmake) and
+# GALE's copies of the helpers that take more arguments (Tests/GaleTestHelpers.cmake, the gale_*
+# functions), so CMAKE_CURRENT_SOURCE_DIR and CMAKE_CURRENT_BINARY_DIR are those of GALE's Tests/.
+# PROJECT_SOURCE_DIR is GALE's root; ERF_SOURCE_DIR is ERF's (the submodule).
 
 # The moving-bodies cases live in Exec/CanonicalTests/MovingBodies, one directory per case
 # (deck, stub turbine file and gold logs); their gold plotfiles stay in Tests/ERFGoldFiles.
@@ -13,7 +13,7 @@ if(ERF_ENABLE_OPENFAST AND ERF_OPENFAST_USE_STUB AND ERF_ENABLE_FFT)
   # moving bodies, so the flow must come out unchanged. With MPI the turbine's own log is
   # checked as well, below, since the plotfile alone passes even if the driver never ran.
   if(NOT (ERF_ENABLE_MPI AND NOT WIN32))
-    add_test_r(OpenFAST_DriverOnly "" "erf_exec" "plt00005")
+    gale_add_test_r(OpenFAST_DriverOnly "" "erf_exec" "plt00005")
   endif()
 endif()
 
@@ -54,7 +54,7 @@ endfunction()
 function(add_test_trim_on_restart TEST_NAME TEST_FILES_DIR STEP_CHK CHK_LEG_END CHK_NRANKS RESTART_NRANKS)
     set(oneValueArgs "COMMON_OPTIONS" "FILES" "TRIMMED_BY")
     cmake_parse_arguments(ADD_TEST_TF "" "${oneValueArgs}" "" ${ARGN})
-    setup_test()
+    gale_setup_test()
     resolve_test_exe("" "erf_exec" TEST_EXE)
     add_test(NAME ${TEST_NAME} COMMAND ${CMAKE_COMMAND}
         "-DMPIEXEC=${MPIEXEC_EXECUTABLE}"
@@ -72,6 +72,7 @@ function(add_test_trim_on_restart TEST_NAME TEST_FILES_DIR STEP_CHK CHK_LEG_END 
         "-DCOMMON_OPTIONS=${ADD_TEST_TF_COMMON_OPTIONS}"
         "-DFILES=${ADD_TEST_TF_FILES}"
         "-DTRIMMED_BY=${ADD_TEST_TF_TRIMMED_BY}"
+        "-DERF_TESTS_DIR=${ERF_SOURCE_DIR}/Tests"
         -P ${PROJECT_SOURCE_DIR}/Tests/RunTrimOnRestart.cmake)
     set_tests_properties(${TEST_NAME} PROPERTIES
         LABELS "regression;moving-bodies;restart-parity" TIMEOUT 1800 PROCESSORS ${CHK_NRANKS} WORKING_DIRECTORY "${CURRENT_TEST_BINARY_DIR}/"
@@ -83,7 +84,7 @@ endfunction()
 function(add_test_same_logs TEST_NAME TEST_FILES_DIR NRANKS)
     set(oneValueArgs "COMMON_OPTIONS" "OPTIONS_A" "OPTIONS_B" "FILES" "EXPECT_B")
     cmake_parse_arguments(ADD_TEST_SL "" "${oneValueArgs}" "" ${ARGN})
-    setup_test()
+    gale_setup_test()
     resolve_test_exe("" "erf_exec" TEST_EXE)
     add_test(NAME ${TEST_NAME} COMMAND ${CMAKE_COMMAND}
         "-DMPIEXEC=${MPIEXEC_EXECUTABLE}"
@@ -100,6 +101,7 @@ function(add_test_same_logs TEST_NAME TEST_FILES_DIR NRANKS)
         "-DOPTIONS_B=${ADD_TEST_SL_OPTIONS_B}"
         "-DFILES=${ADD_TEST_SL_FILES}"
         "-DEXPECT_B=${ADD_TEST_SL_EXPECT_B}"
+        "-DERF_TESTS_DIR=${ERF_SOURCE_DIR}/Tests"
         -P ${PROJECT_SOURCE_DIR}/Tests/RunSameLogs.cmake)
     set_tests_properties(${TEST_NAME} PROPERTIES
         LABELS "regression;moving-bodies" TIMEOUT 1800 PROCESSORS ${NRANKS} WORKING_DIRECTORY "${CURRENT_TEST_BINARY_DIR}/"
@@ -109,7 +111,7 @@ endfunction()
 function(add_test_diagnostics_format TEST_NAME TEST_FILES_DIR FORMAT)
     set(oneValueArgs "COMMON_OPTIONS" "LOGS" "EXTRA_LOGS")
     cmake_parse_arguments(ADD_TEST_DF "" "${oneValueArgs}" "" ${ARGN})
-    setup_test()
+    gale_setup_test()
     resolve_test_exe("" "erf_exec" TEST_EXE)
     add_test(NAME ${TEST_NAME} COMMAND ${CMAKE_COMMAND}
         "-DMPIEXEC=${MPIEXEC_EXECUTABLE}"
@@ -126,6 +128,7 @@ function(add_test_diagnostics_format TEST_NAME TEST_FILES_DIR FORMAT)
         "-DCOMMON_OPTIONS=${ADD_TEST_DF_COMMON_OPTIONS}"
         "-DLOGS=${ADD_TEST_DF_LOGS}"
         "-DEXTRA_LOGS=${ADD_TEST_DF_EXTRA_LOGS}"
+        "-DERF_TESTS_DIR=${ERF_SOURCE_DIR}/Tests"
         -P ${PROJECT_SOURCE_DIR}/Tests/RunDiagnosticsFormat.cmake)
     set_tests_properties(${TEST_NAME} PROPERTIES
         LABELS "regression;moving-bodies" TIMEOUT 1800 PROCESSORS ${NP} WORKING_DIRECTORY "${CURRENT_TEST_BINARY_DIR}/"
@@ -137,7 +140,7 @@ if(ERF_ENABLE_OPENFAST AND ERF_OPENFAST_USE_STUB AND ERF_ENABLE_FFT AND ERF_ENAB
   # the sampler reproduces exactly: the diagnostics log must match its gold and the analytic
   # hub and blade-mean velocities in every row.
   function(add_test_actuator_sampling TEST_NAME TEST_FILES_DIR HUB_U HUB_V)
-      setup_test()
+      gale_setup_test()
       resolve_test_exe("" "erf_exec" TEST_EXE)
       add_test(NAME ${TEST_NAME} COMMAND ${CMAKE_COMMAND}
           "-DMPIEXEC=${MPIEXEC_EXECUTABLE}"
@@ -153,6 +156,7 @@ if(ERF_ENABLE_OPENFAST AND ERF_OPENFAST_USE_STUB AND ERF_ENABLE_FFT AND ERF_ENAB
           "-DSIGDIGITS=10"
           "-DHUB_U=${HUB_U}"
           "-DHUB_V=${HUB_V}"
+          "-DERF_TESTS_DIR=${ERF_SOURCE_DIR}/Tests"
           -P ${PROJECT_SOURCE_DIR}/Tests/RunActuatorSampling.cmake)
       set_tests_properties(${TEST_NAME}
           PROPERTIES
@@ -167,7 +171,7 @@ if(ERF_ENABLE_OPENFAST AND ERF_OPENFAST_USE_STUB AND ERF_ENABLE_FFT AND ERF_ENAB
   # The same sampling with the domain in one box and split unevenly in x and y (never in z):
   # the sampled velocities must agree to 8 significant digits (the FFT solution itself differs
   # at roundoff between decompositions), so a node on a box face is read through the ghost cells.
-  add_test_box_parity(ActuatorSampling_BoxParity Actuator_Sampling "plt00005"
+  gale_add_test_box_parity(ActuatorSampling_BoxParity Actuator_Sampling "plt00005"
       REFERENCE_OPTIONS "amr.max_grid_size=1024"
       SPLIT_OPTIONS "amr.max_grid_size_x=8 amr.max_grid_size_y=5 amr.max_grid_size_z=64"
       DATALOG "T1_flow.csv"
@@ -207,7 +211,7 @@ if(ERF_ENABLE_OPENFAST AND ERF_OPENFAST_USE_STUB AND ERF_ENABLE_FFT AND ERF_ENAB
       if(ARGC GREATER 7)
           set(_sigdigits "${ARGV7}")
       endif()
-      setup_test()
+      gale_setup_test()
       resolve_test_exe("" "erf_exec" TEST_EXE)
       add_test(NAME ${TEST_NAME} COMMAND ${CMAKE_COMMAND}
           "-DMPIEXEC=${MPIEXEC_EXECUTABLE}"
@@ -230,6 +234,7 @@ if(ERF_ENABLE_OPENFAST AND ERF_OPENFAST_USE_STUB AND ERF_ENABLE_FFT AND ERF_ENAB
           "-DFORCE_COLUMN=${_force}"
           "-DLOG_COLUMNS=${_log_columns}"
           "-DSOURCE_CSV=moving_bodies/momentum_source.csv"
+          "-DERF_TESTS_DIR=${ERF_SOURCE_DIR}/Tests"
           -P ${PROJECT_SOURCE_DIR}/Tests/RunOpenFASTADM.cmake)
       set_tests_properties(${TEST_NAME}
           PROPERTIES
@@ -252,7 +257,7 @@ if(ERF_ENABLE_OPENFAST AND ERF_OPENFAST_USE_STUB AND ERF_ENABLE_FFT AND ERF_ENAB
   # The same turbine with the domain in one box and split unevenly in x and y: plotfile and
   # sampled flow log must agree, so the rings and their spreading are independent of the
   # decomposition.
-  add_test_box_parity(OpenFASTADM_BoxParity OpenFAST_ADM_Uniform "plt00010"
+  gale_add_test_box_parity(OpenFASTADM_BoxParity OpenFAST_ADM_Uniform "plt00010"
       REFERENCE_OPTIONS "amr.max_grid_size=1024"
       SPLIT_OPTIONS "amr.max_grid_size_x=16 amr.max_grid_size_y=10 amr.max_grid_size_z=64"
       DATALOG "T1_flow.csv"
@@ -262,7 +267,7 @@ if(ERF_ENABLE_OPENFAST AND ERF_OPENFAST_USE_STUB AND ERF_ENABLE_FFT AND ERF_ENAB
   # of one per blade node. The stub rotor is rigid, so the blades' rings coincide and the merged ring carries
   # their summed force: the plotfile must match the per-blade rings' to rounding (the sum is taken in another
   # order), and the start-up line must count the 20 rings it built, against 60 for the per-blade rings.
-  add_test_option_parity(OpenFAST_ADM_MergedRings OpenFAST_ADM_Uniform "plt00010"
+  gale_add_test_option_parity(OpenFAST_ADM_MergedRings OpenFAST_ADM_Uniform "plt00010"
       COMMON_OPTIONS "erf.moving_bodies.T1.fst_file=../stub_turbine.fst"
       ON_OPTIONS "erf.moving_bodies.T1.adm_spreading=merged_rings"
       ON_LOG_REGEX "T1: hub axis .*, 20 rings of 16 points, one per radial station for all the blades"
@@ -281,7 +286,7 @@ if(ERF_ENABLE_OPENFAST AND ERF_OPENFAST_USE_STUB AND ERF_ENABLE_FFT AND ERF_ENAB
   # source must equal minus the load with the nacelle's drag.
   add_test_openfast_adm(OpenFAST_ADM_UpstreamNacelle OpenFAST_ADM_UpstreamNacelle "plt00010"
       "T1_erf.csv" "load_x" "T1_erf.csv" "time;nacelle_x;load_x" 8)
-  add_test_box_parity(OpenFASTADM_Upstream_BoxParity OpenFAST_ADM_Upstream "plt00010"
+  gale_add_test_box_parity(OpenFASTADM_Upstream_BoxParity OpenFAST_ADM_Upstream "plt00010"
       REFERENCE_OPTIONS "amr.max_grid_size=1024"
       SPLIT_OPTIONS "amr.max_grid_size_x=16 amr.max_grid_size_y=10 amr.max_grid_size_z=64"
       DATALOG "T1_flow.csv"
@@ -293,7 +298,7 @@ if(ERF_ENABLE_OPENFAST AND ERF_OPENFAST_USE_STUB AND ERF_ENABLE_FFT AND ERF_ENAB
   # restart parity: the recovered free stream is checkpointed, so the correction log of a run
   # restarted from step 5 must equal the straight run's.
   add_test_openfast_adm(OpenFAST_ADM_DiskCorrected OpenFAST_ADM_DiskCorrected "plt00010")
-  add_test_box_parity(OpenFASTADM_DiskCorrected_BoxParity OpenFAST_ADM_DiskCorrected "plt00010"
+  gale_add_test_box_parity(OpenFASTADM_DiskCorrected_BoxParity OpenFAST_ADM_DiskCorrected "plt00010"
       REFERENCE_OPTIONS "amr.max_grid_size=1024"
       SPLIT_OPTIONS "amr.max_grid_size_x=16 amr.max_grid_size_y=10 amr.max_grid_size_z=64"
       DATALOG "T1_correction.csv"
@@ -304,7 +309,7 @@ if(ERF_ENABLE_OPENFAST AND ERF_OPENFAST_USE_STUB AND ERF_ENABLE_FFT AND ERF_ENAB
   function(add_test_disk_corrected_old_update)
       set(TEST_NAME OpenFAST_ADM_DiskCorrected_OldUpdate)
       set(TEST_FILES_DIR OpenFAST_ADM_DiskCorrected)
-      setup_test()
+      gale_setup_test()
       resolve_test_exe("" "erf_exec" TEST_EXE)
       add_test(NAME ${TEST_NAME} COMMAND sh -c "${MPI_COMMANDS} ${TEST_EXE} ${CURRENT_TEST_BINARY_DIR}/OpenFAST_ADM_DiskCorrected.i erf.moving_bodies.T1.correction_relax=1 > ${TEST_NAME}.log && ${MPI_FCOMP_COMMANDS} ${FCOMPARE_EXE} --abort_if_not_all_found -a -r 1.0e-8 --abs_tol 1.0e-8 ${PLOT_GOLD} ${CURRENT_TEST_BINARY_DIR}/plt00010")
       set_tests_properties(${TEST_NAME} PROPERTIES TIMEOUT 600 PROCESSORS ${NP}
@@ -314,7 +319,7 @@ if(ERF_ENABLE_OPENFAST AND ERF_OPENFAST_USE_STUB AND ERF_ENABLE_FFT AND ERF_ENAB
   add_test_disk_corrected_old_update()
   # With the domain cut into three 20-cell boxes in x (amr.max_grid_size_x = 24) the turbine is owned by rank 1, so the corrected free stream
   # in the checkpoint's state file comes from a rank other than the I/O rank that writes the file.
-  add_test_restart_parity(OpenFAST_ADM_DiskCorrected_Restart OpenFAST_ADM_DiskCorrected 5 10
+  gale_add_test_restart_parity(OpenFAST_ADM_DiskCorrected_Restart OpenFAST_ADM_DiskCorrected 5 10
       COMMON_OPTIONS "amr.max_grid_size_x=24"
       FCOMPARE_RTOL "0.0" FCOMPARE_ATOL "0.0"
       CHK_NRANKS 2 RESTART_NRANKS 2
@@ -334,7 +339,7 @@ if(ERF_ENABLE_OPENFAST AND ERF_OPENFAST_USE_STUB AND ERF_ENABLE_FFT AND ERF_ENAB
   add_test_moving_bodies_owners(MovingBodies_Terrain_ColumnsSplitInZ OpenFAST_ADM_Terrain 2
       "amr.no_box_split_dir=-1 amr.max_grid_size_x=16 amr.max_grid_size_y=10 amr.max_grid_size_z=4 erf.implicit_thermal_diffusion=0 erf.implicit_momentum_diffusion=0 max_step=4"
       "STEP 4 ends")
-  add_test_box_parity(OpenFASTADM_Terrain_BoxParity OpenFAST_ADM_Terrain "plt00010"
+  gale_add_test_box_parity(OpenFASTADM_Terrain_BoxParity OpenFAST_ADM_Terrain "plt00010"
       REFERENCE_OPTIONS "amr.max_grid_size=1024"
       SPLIT_OPTIONS "amr.max_grid_size_x=16 amr.max_grid_size_y=10 amr.max_grid_size_z=64"
       DATALOG "T1_flow.csv"
@@ -342,7 +347,7 @@ if(ERF_ENABLE_OPENFAST AND ERF_OPENFAST_USE_STUB AND ERF_ENABLE_FFT AND ERF_ENAB
   # The ridge case as an actuator line (the limit raised over its 1.11 physical cells per step), with
   # and without erf.moving_bodies.verify_tip_cells: every step checks the cached tip cell heights
   # against the per-region search, and the check changes nothing in the flow (identical plotfiles)
-  add_test_option_parity(OpenFAST_ALM_Terrain_VerifyTipCells OpenFAST_ADM_Terrain "plt00010"
+  gale_add_test_option_parity(OpenFAST_ALM_Terrain_VerifyTipCells OpenFAST_ADM_Terrain "plt00010"
       COMMON_OPTIONS "erf.moving_bodies.T1.fst_file=../stub_turbine.fst erf.moving_bodies.T1.mode=alm erf.moving_bodies.T1.fllc=false erf.moving_bodies.alm_max_tip_cells=2"
       ON_OPTIONS "erf.moving_bodies.verify_tip_cells=1")
   set_property(TEST OpenFAST_ALM_Terrain_VerifyTipCells APPEND PROPERTY LABELS "moving-bodies")
@@ -354,7 +359,7 @@ if(ERF_ENABLE_OPENFAST AND ERF_OPENFAST_USE_STUB AND ERF_ENABLE_FFT AND ERF_ENAB
 
   # The actuator line in one box and split unevenly in x and y: the blade points fall on
   # different box faces every step, so the plotfile and the flow log must agree.
-  add_test_box_parity(OpenFASTALM_BoxParity OpenFAST_ALM_Uniform "plt00010"
+  gale_add_test_box_parity(OpenFASTALM_BoxParity OpenFAST_ALM_Uniform "plt00010"
       REFERENCE_OPTIONS "amr.max_grid_size=1024"
       SPLIT_OPTIONS "amr.max_grid_size_x=16 amr.max_grid_size_y=10 amr.max_grid_size_z=64"
       DATALOG "T1_flow.csv"
@@ -368,7 +373,7 @@ if(ERF_ENABLE_OPENFAST AND ERF_OPENFAST_USE_STUB AND ERF_ENABLE_FFT AND ERF_ENAB
 
   # The tower and nacelle points sit on the tower axis, which the uneven split puts on a box
   # face: the plotfiles and flow logs must agree with the one-box run.
-  add_test_box_parity(OpenFASTALM_Tower_BoxParity OpenFAST_ALM_Tower "plt00010"
+  gale_add_test_box_parity(OpenFASTALM_Tower_BoxParity OpenFAST_ALM_Tower "plt00010"
       REFERENCE_OPTIONS "amr.max_grid_size=1024"
       SPLIT_OPTIONS "amr.max_grid_size_x=15 amr.max_grid_size_y=12 amr.max_grid_size_z=64"
       DATALOG "T1_flow.csv"
@@ -382,24 +387,24 @@ if(ERF_ENABLE_OPENFAST AND ERF_OPENFAST_USE_STUB AND ERF_ENABLE_FFT AND ERF_ENAB
   # plotfiles, both legs on this machine at zero tolerance (a width not given is epsilon), while that
   # case's own gold holds the shared width to the answers it gave.
   # (each leg runs in its own subdirectory, so the model file is named from there)
-  add_test_option_parity(OpenFAST_ALM_Tower_ExplicitWidths OpenFAST_ALM_Tower "plt00010"
+  gale_add_test_option_parity(OpenFAST_ALM_Tower_ExplicitWidths OpenFAST_ALM_Tower "plt00010"
       COMMON_OPTIONS "erf.moving_bodies.T1.fst_file=../stub_turbine.fst"
       ON_OPTIONS "erf.moving_bodies.T1.epsilon_tower=2.0 erf.moving_bodies.T1.epsilon_nacelle=2.0")
   set_property(TEST OpenFAST_ALM_Tower_ExplicitWidths APPEND PROPERTY LABELS "moving-bodies")
   # The tower axis on a box face, as for OpenFAST_ALM_Tower: the per-point reach of each kernel must not
   # depend on the decomposition.
-  add_test_box_parity(OpenFASTALM_ComponentWidths_BoxParity OpenFAST_ALM_ComponentWidths "plt00010"
+  gale_add_test_box_parity(OpenFASTALM_ComponentWidths_BoxParity OpenFAST_ALM_ComponentWidths "plt00010"
       REFERENCE_OPTIONS "amr.max_grid_size=1024"
       SPLIT_OPTIONS "amr.max_grid_size_x=15 amr.max_grid_size_y=12 amr.max_grid_size_z=64"
       DATALOG "T1_flow.csv"
       DATALOG_SIGDIGITS 8)
   # Checkpointed at step 5 and restarted to step 10: the widths come back with the body record, so the
   # restarted run must equal the straight one exactly; a changed tower width must stop the restart.
-  add_test_restart_parity(OpenFAST_ALM_ComponentWidths_Restart OpenFAST_ALM_ComponentWidths 5 10
+  gale_add_test_restart_parity(OpenFAST_ALM_ComponentWidths_Restart OpenFAST_ALM_ComponentWidths 5 10
       FCOMPARE_RTOL "0.0" FCOMPARE_ATOL "0.0"
       DATALOG "T1_fllc.csv T1_erf.csv T1_flow.csv T1_stats.csv moving_bodies/momentum_source.csv moving_bodies/total_load.csv"
       DATALOG_SIGDIGITS 10 OVERRUN)
-  add_test_restart_abort(MovingBodies_Restart_ChangedTowerWidth OpenFAST_ALM_ComponentWidths 5
+  gale_add_test_restart_abort(MovingBodies_Restart_ChangedTowerWidth OpenFAST_ALM_ComponentWidths 5
       "T1[.]epsilon_tower changed on restart"
       RESTART_OPTIONS "erf.moving_bodies.T1.epsilon_tower=3.0")
 
@@ -411,7 +416,7 @@ if(ERF_ENABLE_OPENFAST AND ERF_OPENFAST_USE_STUB AND ERF_ENABLE_FFT AND ERF_ENAB
   # back from the checkpoint, so the plotfile and the correction log must equal the straight
   # run's exactly. With three 20-cell boxes in x (amr.max_grid_size_x = 24) the turbine is owned by rank 1, which writes the correction's
   # and the node loads' checkpoint files and reads them back.
-  add_test_restart_parity(OpenFAST_ALM_FLLC_Restart OpenFAST_ALM_FLLC_Restart 5 10
+  gale_add_test_restart_parity(OpenFAST_ALM_FLLC_Restart OpenFAST_ALM_FLLC_Restart 5 10
       COMMON_OPTIONS "amr.max_grid_size_x=24"
       FCOMPARE_RTOL "0.0" FCOMPARE_ATOL "0.0"
       CHK_NRANKS 2 RESTART_NRANKS 2
@@ -424,7 +429,7 @@ if(ERF_ENABLE_OPENFAST AND ERF_OPENFAST_USE_STUB AND ERF_ENABLE_FFT AND ERF_ENAB
   # plotfiles at zero tolerance. A wrong diameter, radius or level would change epsilon and the plotfile.
   # The correction acts from t = 5 s on.
   # (each leg runs in its own subdirectory, so the model file is named from there)
-  add_test_option_parity(OpenFAST_ALM_FLLC_Automatic OpenFAST_ALM_FLLC_Automatic "plt00060"
+  gale_add_test_option_parity(OpenFAST_ALM_FLLC_Automatic OpenFAST_ALM_FLLC_Automatic "plt00060"
       COMMON_OPTIONS "erf.moving_bodies.T1.fst_file=../stub_turbine.fst"
       ON_OPTIONS "erf.moving_bodies.T1.fllc=true erf.moving_bodies.T1.epsilon=0.84000000000000008 erf.moving_bodies.T1.fllc_eps_chord=0.15 erf.moving_bodies.T1.fllc_eps_dr=3 erf.moving_bodies.T1.fllc_start_time=5 erf.moving_bodies.T1.num_force_points_blade=300"
       OFF_LOG_REGEX "fllc = automatic: epsilon = 0[.]035 D = 8[.]4 m = 0[.]8400000000000000[0-9]* cells.*D = 2 x 120 m"
@@ -433,14 +438,14 @@ if(ERF_ENABLE_OPENFAST AND ERF_OPENFAST_USE_STUB AND ERF_ENABLE_FFT AND ERF_ENAB
   # Checkpointed at step 55 (after the correction starts) and restarted to step 60 on two ranks, the base in
   # the second of four 32-cell boxes in x: the restart sets the same epsilon from the model and must equal the
   # straight run.
-  add_test_restart_parity(OpenFAST_ALM_FLLC_Automatic_Restart OpenFAST_ALM_FLLC_Automatic 55 60
+  gale_add_test_restart_parity(OpenFAST_ALM_FLLC_Automatic_Restart OpenFAST_ALM_FLLC_Automatic 55 60
       COMMON_OPTIONS "amr.max_grid_size_x=32"
       FCOMPARE_RTOL "0.0" FCOMPARE_ATOL "0.0"
       CHK_NRANKS 2 RESTART_NRANKS 2
       DATALOG "T1_fllc.csv T1_erf.csv T1_flow.csv moving_bodies/momentum_source.csv"
       DATALOG_SIGDIGITS 10 OVERRUN)
   # a restart may not switch automatic for the same numbers given by hand
-  add_test_restart_abort(MovingBodies_Restart_FllcAutomaticToTrue OpenFAST_ALM_FLLC_Automatic 55
+  gale_add_test_restart_abort(MovingBodies_Restart_FllcAutomaticToTrue OpenFAST_ALM_FLLC_Automatic 55
       "T1[.]epsilon changed on restart"
       RESTART_OPTIONS "erf.moving_bodies.T1.fllc=true erf.moving_bodies.T1.epsilon=0.84000000000000008 erf.moving_bodies.T1.fllc_eps_chord=0.15 erf.moving_bodies.T1.fllc_eps_dr=3 erf.moving_bodies.T1.fllc_start_time=5 erf.moving_bodies.T1.num_force_points_blade=300")
 
@@ -450,7 +455,7 @@ if(ERF_ENABLE_OPENFAST AND ERF_OPENFAST_USE_STUB AND ERF_ENABLE_FFT AND ERF_ENAB
   add_test_openfast_adm(OpenFAST_ADM_TwoLevel OpenFAST_ADM_TwoLevel "plt00010")
 
   # The two-level case in one box per level against the fine level split unevenly on two ranks.
-  add_test_box_parity(OpenFASTADM_TwoLevel_BoxParity OpenFAST_ADM_TwoLevel "plt00010"
+  gale_add_test_box_parity(OpenFASTADM_TwoLevel_BoxParity OpenFAST_ADM_TwoLevel "plt00010"
       REFERENCE_OPTIONS "amr.max_grid_size=1024"
       SPLIT_OPTIONS "amr.max_grid_size_x=16 amr.max_grid_size_y=10 amr.max_grid_size_z=64"
       DATALOG "T1_flow.csv"
@@ -458,7 +463,7 @@ if(ERF_ENABLE_OPENFAST AND ERF_OPENFAST_USE_STUB AND ERF_ENABLE_FFT AND ERF_ENAB
 
   # The two-level case checkpointed at step 5 and restarted to step 10: the fine level and the
   # turbine on it come back exactly.
-  add_test_restart_parity(OpenFAST_ADM_TwoLevel_Restart OpenFAST_ADM_TwoLevel_Restart 5 10
+  gale_add_test_restart_parity(OpenFAST_ADM_TwoLevel_Restart OpenFAST_ADM_TwoLevel_Restart 5 10
       FCOMPARE_RTOL "0.0" FCOMPARE_ATOL "0.0"
       DATALOG "T1_flow.csv T1_correction.csv T1_erf.csv T1_stats.csv moving_bodies/momentum_source.csv moving_bodies/total_load.csv"
       DATALOG_SIGDIGITS 10 OVERRUN)
@@ -472,7 +477,7 @@ if(ERF_ENABLE_OPENFAST AND ERF_OPENFAST_USE_STUB AND ERF_ENABLE_FFT AND ERF_ENAB
   if(NOT "${ERF_TEST_PYTHON}" STREQUAL "" AND ERF_ENABLE_FCOMPARE)
       set(TEST_NAME OpenFAST_ADM_TwoLevel_RestartLegacy)
       set(TEST_FILES_DIR OpenFAST_ADM_TwoLevel_Restart)
-      setup_test()
+      gale_setup_test()
       unset(TEST_FILES_DIR)
       resolve_test_exe("" "erf_exec" _legacy_exe)
       add_test(NAME ${TEST_NAME}
@@ -490,7 +495,7 @@ if(ERF_ENABLE_OPENFAST AND ERF_OPENFAST_USE_STUB AND ERF_ENABLE_FFT AND ERF_ENAB
   if(NOT "${ERF_TEST_PYTHON}" STREQUAL "" AND ERF_ENABLE_FCOMPARE)
       set(TEST_NAME OpenFAST_ADM_TwoLevel_RestartBodiesDir)
       set(TEST_FILES_DIR OpenFAST_ADM_TwoLevel_Restart)
-      setup_test()
+      gale_setup_test()
       unset(TEST_FILES_DIR)
       resolve_test_exe("" "erf_exec" _legacy_exe)
       add_test(NAME ${TEST_NAME}
@@ -511,7 +516,7 @@ if(ERF_ENABLE_OPENFAST AND ERF_OPENFAST_USE_STUB AND ERF_ENABLE_FFT AND ERF_ENAB
   # turbine T1 is owned (and its logs and checkpoint files written) by rank 1, not the I/O rank that
   # trims the logs, and T2 by rank 0: after a first run that went on past the checkpoint, every
   # turbine's logs must still drop the rows written after it.
-  add_test_restart_parity(OpenFAST_ADM_TwoTurbines_Restart OpenFAST_ADM_TwoTurbines 5 10
+  gale_add_test_restart_parity(OpenFAST_ADM_TwoTurbines_Restart OpenFAST_ADM_TwoTurbines 5 10
       COMMON_OPTIONS "amr.max_grid_size_x=24"
       FCOMPARE_RTOL "0.0" FCOMPARE_ATOL "0.0"
       CHK_NRANKS 2 RESTART_NRANKS 2
@@ -521,7 +526,7 @@ if(ERF_ENABLE_OPENFAST AND ERF_OPENFAST_USE_STUB AND ERF_ENABLE_FFT AND ERF_ENAB
   # The same farm checkpointed on two ranks (T1 owned by rank 1, T2 by rank 0) and restarted on one,
   # which owns both and reads the files rank 1 wrote: the owners are chosen again from the restart's
   # boxes. The FFT solution differs at roundoff between the rank counts, hence the tolerances.
-  add_test_restart_parity(OpenFAST_ADM_TwoTurbines_RestartOnOneRank OpenFAST_ADM_TwoTurbines 5 10
+  gale_add_test_restart_parity(OpenFAST_ADM_TwoTurbines_RestartOnOneRank OpenFAST_ADM_TwoTurbines 5 10
       COMMON_OPTIONS "amr.max_grid_size_x=24"
       CHK_NRANKS 2 RESTART_NRANKS 1
       DATALOG "T1_erf.csv T1_stats.csv T1_correction.csv T2_erf.csv T2_flow.csv T2_correction.csv moving_bodies/total_load.csv"
@@ -580,7 +585,7 @@ if(ERF_ENABLE_OPENFAST AND ERF_OPENFAST_USE_STUB AND ERF_ENABLE_FFT AND ERF_ENAB
   # domain cut into three 20-cell boxes in x (amr.max_grid_size_x = 24) (T1 owned by rank 0, T2 by rank 1): the ownership must not change
   # the answer, nor the logs, statistics and correction T2's owner writes, nor the farm's totals,
   # which the I/O rank gathers from both owners.
-  add_test_box_parity(OpenFASTADM_TwoTurbines_BoxParity OpenFAST_ADM_TwoTurbines "plt00010"
+  gale_add_test_box_parity(OpenFASTADM_TwoTurbines_BoxParity OpenFAST_ADM_TwoTurbines "plt00010"
       REFERENCE_OPTIONS "amr.max_grid_size=1024"
       SPLIT_OPTIONS "amr.max_grid_size_x=24 amr.max_grid_size_y=12 amr.max_grid_size_z=64"
       DATALOG "T2_flow.csv T2_erf.csv T2_stats.csv T2_correction.csv moving_bodies/total_load.csv"
@@ -600,13 +605,13 @@ if(ERF_ENABLE_OPENFAST AND ERF_OPENFAST_USE_STUB AND ERF_ENABLE_FFT AND ERF_ENAB
   set(_disk_upstream "\"erf.moving_bodies.T1.base_pos=1230. 600. 0.\" \"erf.moving_bodies.D2.base_pos=750. 600. 0.\"")
   add_test_moving_bodies_owners(MovingBodies_Owners_DiskAndTurbine OpenFAST_ADM_DiskAndTurbine 2 "amr.max_grid_size_x=24 ${_disk_upstream}"
       "T1: owned by rank 0 .*D2: owned by rank 1 .*STEP 1 ends")
-  add_test_box_parity(OpenFASTADM_DiskAndTurbine_OwnerParity OpenFAST_ADM_DiskAndTurbine "plt00010"
+  gale_add_test_box_parity(OpenFASTADM_DiskAndTurbine_OwnerParity OpenFAST_ADM_DiskAndTurbine "plt00010"
       COMMON_OPTIONS "${_disk_upstream}"
       REFERENCE_OPTIONS "amr.max_grid_size=1024"
       SPLIT_OPTIONS "amr.max_grid_size_x=24"
       DATALOG "D2_disk.csv D2_stats.csv T1_erf.csv moving_bodies/total_load.csv moving_bodies/momentum_source.csv"
       DATALOG_SIGDIGITS 8 DATALOG_ZERO_EXPONENT "-5")
-  add_test_box_parity(OpenFASTADM_TwoWidths_BoxParity OpenFAST_ADM_TwoWidths "plt00010"
+  gale_add_test_box_parity(OpenFASTADM_TwoWidths_BoxParity OpenFAST_ADM_TwoWidths "plt00010"
       REFERENCE_OPTIONS "amr.max_grid_size=1024"
       SPLIT_OPTIONS "amr.max_grid_size_x=24 amr.max_grid_size_y=12 amr.max_grid_size_z=64"
       DATALOG "T2_flow.csv"
@@ -630,14 +635,14 @@ if(ERF_ENABLE_OPENFAST AND ERF_OPENFAST_USE_STUB AND ERF_ENABLE_FFT AND ERF_ENAB
   # The persistent farm and rank files across a restart: the first run goes on past the checkpoint at
   # step 5, so the restart must trim the rows after it and append to the files (not start them afresh),
   # and every row must equal the straight run's.
-  add_test_restart_parity(MovingBodies_DiagnosticsFormat_Farm_Restart OpenFAST_ADM_TwoTurbines 5 10
+  gale_add_test_restart_parity(MovingBodies_DiagnosticsFormat_Farm_Restart OpenFAST_ADM_TwoTurbines 5 10
       COMMON_OPTIONS "amr.max_grid_size_x=24 erf.moving_bodies.diagnostics_format=farm"
       FCOMPARE_RTOL "0.0" FCOMPARE_ATOL "0.0"
       CHK_NRANKS 2 RESTART_NRANKS 2
       DATALOG "moving_bodies/farm_erf.csv moving_bodies/farm_flow.csv moving_bodies/farm_correction.csv moving_bodies/total_load.csv moving_bodies/momentum_source.csv"
       DATALOG_SIGDIGITS 10 OVERRUN)
   # the same with one file per rank: each rank trims and appends to its own files
-  add_test_restart_parity(MovingBodies_DiagnosticsFormat_PerRank_Restart OpenFAST_ADM_TwoTurbines 5 10
+  gale_add_test_restart_parity(MovingBodies_DiagnosticsFormat_PerRank_Restart OpenFAST_ADM_TwoTurbines 5 10
       COMMON_OPTIONS "amr.max_grid_size_x=24 erf.moving_bodies.diagnostics_format=per_rank"
       FCOMPARE_RTOL "0.0" FCOMPARE_ATOL "0.0"
       CHK_NRANKS 2 RESTART_NRANKS 2
@@ -689,7 +694,7 @@ if(ERF_ENABLE_OPENFAST AND ERF_OPENFAST_USE_STUB AND ERF_ENABLE_FFT AND ERF_ENAB
   # the summary files across a restart: rewritten at the checkpoint at step 5 (the first leg goes on past
   # it), every 3 steps and at the end, with one log open at a time; the restarted run must leave the
   # straight run's statistics and logs
-  add_test_restart_parity(MovingBodies_StatsInt_OneOpenFile_Restart OpenFAST_ADM_TwoTurbines 5 10
+  gale_add_test_restart_parity(MovingBodies_StatsInt_OneOpenFile_Restart OpenFAST_ADM_TwoTurbines 5 10
       COMMON_OPTIONS "amr.max_grid_size_x=24 erf.moving_bodies.stats_int=3 erf.moving_bodies.max_open_logs=1"
       FCOMPARE_RTOL "0.0" FCOMPARE_ATOL "0.0"
       CHK_NRANKS 2 RESTART_NRANKS 2
@@ -697,7 +702,7 @@ if(ERF_ENABLE_OPENFAST AND ERF_OPENFAST_USE_STUB AND ERF_ENABLE_FFT AND ERF_ENAB
       DATALOG_SIGDIGITS 10 OVERRUN)
   # a restart with no step left, after a first run that went on to step 10: the statistics files must
   # be rewritten from the checkpoint's state, not left as the first run wrote them at step 10
-  add_test_restart_parity(MovingBodies_StatsInt_RestartAtTheEnd OpenFAST_ADM_TwoTurbines 5 5
+  gale_add_test_restart_parity(MovingBodies_StatsInt_RestartAtTheEnd OpenFAST_ADM_TwoTurbines 5 5
       COMMON_OPTIONS "amr.max_grid_size_x=24 erf.moving_bodies.stats_int=3"
       FCOMPARE_RTOL "0.0" FCOMPARE_ATOL "0.0"
       CHK_NRANKS 2 RESTART_NRANKS 2 CHK_LEG_END 10
@@ -718,7 +723,7 @@ if(ERF_ENABLE_OPENFAST AND ERF_OPENFAST_USE_STUB AND ERF_ENABLE_FFT AND ERF_ENAB
   # wake file must agree, so a line point on a box face reads the same through the ghost cells.
   # The lateral velocity on the centreline of this symmetric flow is roundoff, so values
   # below 1e-5 m/s count as zero.
-  add_test_box_parity(OpenFASTADM_Wake_BoxParity OpenFAST_ADM_Wake "plt00010"
+  gale_add_test_box_parity(OpenFASTADM_Wake_BoxParity OpenFAST_ADM_Wake "plt00010"
       REFERENCE_OPTIONS "amr.max_grid_size=1024"
       SPLIT_OPTIONS "amr.max_grid_size_x=16 amr.max_grid_size_y=10 amr.max_grid_size_z=64"
       DATALOG "T1_wake.csv"
@@ -730,7 +735,7 @@ if(ERF_ENABLE_OPENFAST AND ERF_OPENFAST_USE_STUB AND ERF_ENABLE_FFT AND ERF_ENAB
   # anelastic FFT solve handling the non-periodic direction. The plotfile, the turbine's
   # running statistics and the integrated-source identity are the regression.
   function(add_test_precursor_inflow TEST_NAME TEST_FILES_DIR PLTFILE)
-      setup_test()
+      gale_setup_test()
       resolve_test_exe("" "erf_exec" TEST_EXE)
       add_test(NAME ${TEST_NAME} COMMAND ${CMAKE_COMMAND}
           "-DMPIEXEC=${MPIEXEC_EXECUTABLE}"
@@ -753,6 +758,7 @@ if(ERF_ENABLE_OPENFAST AND ERF_OPENFAST_USE_STUB AND ERF_ENABLE_FFT AND ERF_ENAB
           "-DTURBINE_CSV=T1_erf.csv"
           "-DSOURCE_CSV=moving_bodies/momentum_source.csv"
           "-DBNDRY_DIR=BndryFiles"
+          "-DERF_TESTS_DIR=${ERF_SOURCE_DIR}/Tests"
           -P ${PROJECT_SOURCE_DIR}/Tests/RunPrecursorInflow.cmake)
       set_tests_properties(${TEST_NAME}
           PROPERTIES
@@ -772,14 +778,14 @@ if(ERF_ENABLE_OPENFAST AND ERF_OPENFAST_USE_STUB AND ERF_ENABLE_FFT AND ERF_ENAB
   # from its OpenFAST checkpoint, the momentum source is rebuilt from the restored loads and
   # the wake running average continues from its checkpointed sums, so the plotfile and the
   # wake average must equal the straight run's exactly.
-  add_test_restart_parity(OpenFAST_ADM_Restart OpenFAST_ADM_Restart 5 10
+  gale_add_test_restart_parity(OpenFAST_ADM_Restart OpenFAST_ADM_Restart 5 10
       FCOMPARE_RTOL "0.0" FCOMPARE_ATOL "0.0"
       DATALOG "T1_wake_avg.csv T1_wake.csv T1_correction.csv T1_erf.csv T1_flow.csv T1_stats.csv moving_bodies/momentum_source.csv moving_bodies/total_load.csv"
       DATALOG_SIGDIGITS 10 OVERRUN)
   # The same restart on two ranks with three 20-cell boxes in x, so that the turbine and its wake lines are owned by
   # rank 1 (MovingBodies_Owners_Wake): rank 1 alone samples the lines, so it must write their files and the running
   # sums into the checkpoint, which the restart takes over.
-  add_test_restart_parity(OpenFAST_ADM_Restart_WakeOwnerRank1 OpenFAST_ADM_Restart 5 10
+  gale_add_test_restart_parity(OpenFAST_ADM_Restart_WakeOwnerRank1 OpenFAST_ADM_Restart 5 10
       COMMON_OPTIONS "amr.max_grid_size_x=24"
       FCOMPARE_RTOL "0.0" FCOMPARE_ATOL "0.0"
       CHK_NRANKS 2 RESTART_NRANKS 2
@@ -795,30 +801,30 @@ if(ERF_ENABLE_OPENFAST AND ERF_OPENFAST_USE_STUB AND ERF_ENABLE_FFT AND ERF_ENAB
   # A malformed statistics or wake-average file of a turbine owned by rank 1 (three 20-cell boxes in x): its
   # owner alone reads it, and every rank must stop with the owner's message (a rank that skipped the
   # reduction would hang until the timeout). The message must follow the owner line, so the layout is the one meant.
-  add_test_restart_abort(MovingBodies_Restart_MalformedStatsOnRank1 OpenFAST_ADM_Restart 5
+  gale_add_test_restart_abort(MovingBodies_Restart_MalformedStatsOnRank1 OpenFAST_ADM_Restart 5
       "T1: owned by rank 1 .*malformed statistics checkpoint '[^']*T1_stats.dat': the count must be >= 0"
       COMMON_OPTIONS "amr.max_grid_size_x=24" CHK_NRANKS 2 RESTART_NRANKS 2 RUN_TIMEOUT 180
       CORRUPT_FILE "moving_bodies/T1_stats.dat" CORRUPT_TEXT "count = -3|size = 9|t_first = 0|t_last = 1")
-  add_test_restart_abort(MovingBodies_Restart_MalformedWakeOnRank1 OpenFAST_ADM_Restart 5
+  gale_add_test_restart_abort(MovingBodies_Restart_MalformedWakeOnRank1 OpenFAST_ADM_Restart 5
       "T1: owned by rank 1 .*the wake-average checkpoint '[^']*T1_wake_avg.dat' holds 7 values but the lines of T1"
       COMMON_OPTIONS "amr.max_grid_size_x=24" CHK_NRANKS 2 RESTART_NRANKS 2 RUN_TIMEOUT 180
       CORRUPT_FILE "moving_bodies/T1_wake_avg.dat" CORRUPT_TEXT "count = 1|size = 7|hub = 0 0 100|axis = 1 0 0|diameter = 100")
 
   # A restart continues the same bodies with the same inputs, step and OpenFAST stop time: each
   # change below must stop the restart with a message naming it, before OpenFAST is restarted.
-  add_test_restart_abort(MovingBodies_Restart_ChangedBodyKey OpenFAST_ADM_Restart 5
+  gale_add_test_restart_abort(MovingBodies_Restart_ChangedBodyKey OpenFAST_ADM_Restart 5
       "T1[.]num_points_t changed on restart"
       RESTART_OPTIONS "erf.moving_bodies.T1.num_points_t=24")
-  add_test_restart_abort(MovingBodies_Restart_ChangedAdmSpreading OpenFAST_ADM_Restart 5
+  gale_add_test_restart_abort(MovingBodies_Restart_ChangedAdmSpreading OpenFAST_ADM_Restart 5
       "T1[.]adm_spreading changed on restart [(]rings in the "
       RESTART_OPTIONS "erf.moving_bodies.T1.adm_spreading=merged_rings")
-  add_test_restart_abort(MovingBodies_Restart_ChangedStep OpenFAST_ADM_Restart 5
+  gale_add_test_restart_abort(MovingBodies_Restart_ChangedStep OpenFAST_ADM_Restart 5
       "the checkpoint's bodies stepped 0[.]5"
       RESTART_OPTIONS "erf.fixed_dt=0.25 max_step=20")
-  add_test_restart_abort(MovingBodies_Restart_LaterStopTime OpenFAST_ADM_Restart 5
+  gale_add_test_restart_abort(MovingBodies_Restart_LaterStopTime OpenFAST_ADM_Restart 5
       "were started for OpenFAST to stop at t = 5[.]0"
       RESTART_OPTIONS "stop_time=10.0 max_step=20")
-  add_test_restart_abort(MovingBodies_Restart_AddedBody OpenFAST_ADM_Restart 5
+  gale_add_test_restart_abort(MovingBodies_Restart_AddedBody OpenFAST_ADM_Restart 5
       "D1 is not in the checkpoint"
       RESTART_OPTIONS "\"erf.moving_bodies.bodies=T1 D1\" erf.moving_bodies.D1.type=ct_disk \"erf.moving_bodies.D1.base_pos=1500. 600. 0.\" erf.moving_bodies.D1.rotor_radius=120. erf.moving_bodies.D1.hub_height=150. erf.moving_bodies.D1.ct=0.75 erf.moving_bodies.D1.epsilon=2.0 erf.moving_bodies.D1.air_density=1.0 erf.moving_bodies.D1.output_root=D1")
 endif()
@@ -829,7 +835,7 @@ if(ERF_ENABLE_MOVING_BODIES AND ERF_ENABLE_FFT AND ERF_ENABLE_MPI AND NOT WIN32)
   # regression; in every row the integrated source must equal the disk's thrust, the exact
   # normalisation of the spreading.
   function(add_test_ct_disk TEST_NAME TEST_FILES_DIR PLTFILE)
-      setup_test()
+      gale_setup_test()
       resolve_test_exe("" "erf_exec" TEST_EXE)
       add_test(NAME ${TEST_NAME} COMMAND ${CMAKE_COMMAND}
           "-DMPIEXEC=${MPIEXEC_EXECUTABLE}"
@@ -850,6 +856,7 @@ if(ERF_ENABLE_MOVING_BODIES AND ERF_ENABLE_FFT AND ERF_ENABLE_MPI AND NOT WIN32)
           "-DSIGDIGITS=10"
           "-DCOL_A=thrust"
           "-DCOL_B=spread_thrust"
+          "-DERF_TESTS_DIR=${ERF_SOURCE_DIR}/Tests"
           -P ${PROJECT_SOURCE_DIR}/Tests/RunCtDisk.cmake)
       set_tests_properties(${TEST_NAME}
           PROPERTIES
@@ -867,7 +874,7 @@ if(ERF_ENABLE_MOVING_BODIES AND ERF_ENABLE_FFT AND ERF_ENABLE_MPI AND NOT WIN32)
   # reaches beyond the fine box. Without that the two-level disk saw 9.15 instead of 8.48 m/s.
   if(ERF_TEST_PYTHON)
       function(add_test_disk_levels TEST_NAME TEST_FILES_DIR)
-          setup_test()
+          gale_setup_test()
           resolve_test_exe("" "erf_exec" TEST_EXE)
           add_test(NAME ${TEST_NAME} COMMAND ${CMAKE_COMMAND}
               "-DMPIEXEC=${MPIEXEC_EXECUTABLE}"
@@ -883,6 +890,7 @@ if(ERF_ENABLE_MOVING_BODIES AND ERF_ENABLE_FFT AND ERF_ENABLE_MPI AND NOT WIN32)
               "-DCHECKER=${CURRENT_TEST_BINARY_DIR}/check_levels.py"
               "-DU_FREE=10.0"
               "-DTOL=0.1"
+              "-DERF_TESTS_DIR=${ERF_SOURCE_DIR}/Tests"
               -P ${PROJECT_SOURCE_DIR}/Tests/RunDiskLevels.cmake)
           set_tests_properties(${TEST_NAME} PROPERTIES
               TIMEOUT 900 PROCESSORS 2 WORKING_DIRECTORY "${CURRENT_TEST_BINARY_DIR}/"
@@ -894,7 +902,7 @@ if(ERF_ENABLE_MOVING_BODIES AND ERF_ENABLE_FFT AND ERF_ENABLE_MPI AND NOT WIN32)
 
   # The same disk with the domain in one box and split unevenly in x and y: plotfile and disk
   # log must agree, so the spreading is independent of the decomposition.
-  add_test_box_parity(ActuatorCtDisk_BoxParity Actuator_UniformCtDisk "plt00010"
+  gale_add_test_box_parity(ActuatorCtDisk_BoxParity Actuator_UniformCtDisk "plt00010"
       REFERENCE_OPTIONS "amr.max_grid_size=1024"
       SPLIT_OPTIONS "amr.max_grid_size_x=16 amr.max_grid_size_y=10 amr.max_grid_size_z=64"
       DATALOG "D1_disk.csv"
@@ -903,14 +911,14 @@ if(ERF_ENABLE_MOVING_BODIES AND ERF_ENABLE_FFT AND ERF_ENABLE_MPI AND NOT WIN32)
   # The disk checkpointed at step 5 and restarted to step 10, after a first run that went on past the
   # checkpoint: the disk and source logs must drop the rows written after it. The restart also asks
   # for a later stop time, which a run without turbines may do (only OpenFAST keeps its stop time).
-  add_test_restart_parity(MovingBodies_CtDisk_Restart Actuator_UniformCtDisk 5 10
+  gale_add_test_restart_parity(MovingBodies_CtDisk_Restart Actuator_UniformCtDisk 5 10
       FCOMPARE_RTOL "0.0" FCOMPARE_ATOL "0.0"
       RESTART_OPTIONS "stop_time=10.0"
       DATALOG "D1_disk.csv D1_stats.csv moving_bodies/momentum_source.csv"
       DATALOG_SIGDIGITS 10 OVERRUN)
   # a disk input that changes the thrust (here by 2 %, inside the density check's tolerance) must
   # stop the restart
-  add_test_restart_abort(MovingBodies_Restart_ChangedDiskDensity Actuator_UniformCtDisk 5
+  gale_add_test_restart_abort(MovingBodies_Restart_ChangedDiskDensity Actuator_UniformCtDisk 5
       "D1[.]air_density changed on restart"
       RESTART_OPTIONS "erf.moving_bodies.D1.air_density=1.02")
 
@@ -979,7 +987,7 @@ if(ERF_ENABLE_MOVING_BODIES AND ERF_ENABLE_FFT AND ERF_ENABLE_MPI AND NOT WIN32)
   # The disk with wake lines in one box (owned by rank 0, the I/O rank) and in three 20-cell boxes in x (owned
   # by rank 1): the answer and every file the owner writes must agree (the logs to 8 digits, as the FFT solution
   # differs at roundoff between the two layouts).
-  add_test_box_parity(ActuatorCtDisk_OwnerParity Actuator_UniformCtDisk "plt00010"
+  gale_add_test_box_parity(ActuatorCtDisk_OwnerParity Actuator_UniformCtDisk "plt00010"
       COMMON_OPTIONS "${_ct_disk_wake}"
       REFERENCE_OPTIONS "amr.max_grid_size=1024"
       SPLIT_OPTIONS "amr.max_grid_size_x=24"
@@ -990,7 +998,7 @@ if(ERF_ENABLE_MOVING_BODIES AND ERF_ENABLE_FFT AND ERF_ENABLE_MPI AND NOT WIN32)
   # and wake sums rank 1 wrote into the checkpoint. The lines are sampled every step and averaged from 1 s, so the
   # checkpoint holds three wake samples (and two of the statistics).
   set(_ct_disk_wake_restart "amr.max_grid_size_x=24 \"erf.moving_bodies.wake.lines_xD=2 4\" erf.moving_bodies.wake.num_points=21 erf.moving_bodies.wake.int=1 erf.moving_bodies.avg_start=1.0")
-  add_test_restart_parity(MovingBodies_CtDisk_Restart_OwnerRank1 Actuator_UniformCtDisk 5 10
+  gale_add_test_restart_parity(MovingBodies_CtDisk_Restart_OwnerRank1 Actuator_UniformCtDisk 5 10
       COMMON_OPTIONS "${_ct_disk_wake_restart}"
       FCOMPARE_RTOL "0.0" FCOMPARE_ATOL "0.0"
       CHK_NRANKS 2 RESTART_NRANKS 2
@@ -998,7 +1006,7 @@ if(ERF_ENABLE_MOVING_BODIES AND ERF_ENABLE_FFT AND ERF_ENABLE_MPI AND NOT WIN32)
       DATALOG_SIGDIGITS 10 OVERRUN)
   # The same checkpoint restarted on one rank, which then owns the disk and reads the sums rank 1 wrote. The FFT
   # solution differs at roundoff between the rank counts, hence the default plotfile tolerances and 8 digits.
-  add_test_restart_parity(MovingBodies_CtDisk_RestartOnOneRank Actuator_UniformCtDisk 5 10
+  gale_add_test_restart_parity(MovingBodies_CtDisk_RestartOnOneRank Actuator_UniformCtDisk 5 10
       COMMON_OPTIONS "${_ct_disk_wake_restart}"
       CHK_NRANKS 2 RESTART_NRANKS 1
       DATALOG "D1_disk.csv D1_stats.csv D1_wake.csv D1_wake_avg.csv moving_bodies/momentum_source.csv"
@@ -1018,9 +1026,9 @@ if(ERF_ENABLE_OPENFAST AND NOT ERF_OPENFAST_USE_STUB AND ERF_ENABLE_FFT AND ERF_
   # Tests/check_openfast_shaft_source.py).
   function(add_test_openfast_real TEST_NAME LOG FORCE_COLUMN)
       set(TEST_FILES_DIR ${TEST_NAME})
-      setup_test()
+      gale_setup_test()
       file(COPY ${TEST_SOURCE_ROOT}/IEA15_land_model DESTINATION ${CURRENT_TEST_BINARY_DIR})
-      file(COPY ${PROJECT_SOURCE_DIR}/Exec/CanonicalTests/Real_Terrain/Askervein/askervein.txt DESTINATION ${CURRENT_TEST_BINARY_DIR})
+      file(COPY ${ERF_SOURCE_DIR}/Exec/CanonicalTests/Real_Terrain/Askervein/askervein.txt DESTINATION ${CURRENT_TEST_BINARY_DIR})
       resolve_test_exe("" "erf_exec" TEST_EXE)
       add_test(NAME ${TEST_NAME} COMMAND ${CMAKE_COMMAND}
           "-DMPIEXEC=${MPIEXEC_EXECUTABLE}"
@@ -1046,6 +1054,7 @@ if(ERF_ENABLE_OPENFAST AND NOT ERF_OPENFAST_USE_STUB AND ERF_ENABLE_FFT AND ERF_
           "-DFORCE_COLUMN=${FORCE_COLUMN}"
           "-DSOURCE_CSV=moving_bodies/momentum_source.csv"
           "-DPYTHON_EXE=${ERF_TEST_PYTHON}"
+          "-DERF_TESTS_DIR=${ERF_SOURCE_DIR}/Tests"
           -P ${PROJECT_SOURCE_DIR}/Tests/RunOpenFASTADM.cmake)
       set_tests_properties(${TEST_NAME}
           PROPERTIES
@@ -1089,6 +1098,7 @@ if(ERF_ENABLE_OPENFAST AND NOT ERF_OPENFAST_USE_STUB AND ERF_ENABLE_FFT AND ERF_
               "-DPYTHON_EXE=${ERF_TEST_PYTHON}"
               "-DWORKING_DIRECTORY=${_bin_dir}"
               "-DTURBINE_GOLD=${_case_dir}/gold/${DECK}_T1_erf.csv.gold"
+              "-DERF_TESTS_DIR=${ERF_SOURCE_DIR}/Tests"
               -P ${PROJECT_SOURCE_DIR}/Tests/RunIEA15PowerCurve.cmake)
           set_tests_properties(${TEST_NAME}
               PROPERTIES
@@ -1263,15 +1273,16 @@ endif()
 
 if(ERF_ENABLE_MPI AND NOT WIN32)
   # gale selected in a deck that lists no bodies (the structure-model example's deck)
-  add_test_abort(Structures_Abort_GaleNoBodies ${CMAKE_CURRENT_SOURCE_DIR}/StructureModelExample inputs_structure_example
+  add_test_abort(Structures_Abort_GaleNoBodies ${ERF_SOURCE_DIR}/Tests/StructureModelExample inputs_structure_example
                  "erf.structures.model = gale: no bodies are given; list them in erf.moving_bodies.bodies"
                  "erf.structures.model=gale")
-  # ERF's own Structures_Abort_NoModelBuiltIn (Tests/CTestList.cmake) needs no model directory, which a
-  # build with the moving bodies never has here, since Turbines/ is always listed; with Turbines/ the
-  # only model, an unknown name must still abort and list what is compiled in, "gale"
+  # ERF's own Structures_Abort_NoModelBuiltIn (Submodules/ERF/Tests/CTestList.cmake, not registered
+  # in a GALE build) needs no model directory, which a GALE build never has, since Turbines/ is always
+  # listed; with Turbines/ the only model, an unknown name must still abort and list what is compiled
+  # in, "gale"
   list(LENGTH ERF_STRUCTURE_MODEL_DIRS _gale_n_model_dirs)
   if(_gale_n_model_dirs EQUAL 1)
-    add_test_abort(Structures_Abort_NoModelBuiltIn ${CMAKE_CURRENT_SOURCE_DIR}/StructureModelExample inputs_structure_example
+    add_test_abort(Structures_Abort_NoModelBuiltIn ${ERF_SOURCE_DIR}/Tests/StructureModelExample inputs_structure_example
                    "erf.structures.model = .example. is not one of the structure models compiled in ..gale.."
                    "")
   endif()

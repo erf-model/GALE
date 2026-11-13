@@ -5,8 +5,11 @@
 # directory) to hold the straight run's bytes, which only the cut brings back. TRIMMED_BY, when given,
 # lists file:rank pairs: the restart's log must report exactly one cut of each file, by that rank.
 # -DX= defines X as empty, so test for a value, not for DEFINED
-include("${CMAKE_CURRENT_LIST_DIR}/MPILauncher.cmake")
-include("${CMAKE_CURRENT_LIST_DIR}/ResolveExecutable.cmake")
+if(NOT ERF_TESTS_DIR OR NOT EXISTS "${ERF_TESTS_DIR}/MPILauncher.cmake")
+    message(FATAL_ERROR "ERF_TESTS_DIR must name ERF's Tests folder (Submodules/ERF/Tests), not '${ERF_TESTS_DIR}'")
+endif()
+include("${ERF_TESTS_DIR}/MPILauncher.cmake")
+include("${ERF_TESTS_DIR}/ResolveExecutable.cmake")
 
 foreach(arg TEST_EXE INPUT WORKING_DIRECTORY RUN_TIMEOUT STEP_CHK CHK_LEG_END CHK_NRANKS RESTART_NRANKS FILES)
     if("${${arg}}" STREQUAL "")

@@ -35,13 +35,17 @@ jobs:
       with:
         submodules: true
 
+    # ERF's own submodules that this build uses (not RRTMGP, WW3, ekat, Noah-MP, googletest)
+    - name: ERF Submodules
+      run: git -C Submodules/ERF submodule update --init --depth 1 Submodules/AMReX
+
     - name: Install Dependencies
       run: |
-        Submodules/AMReX/.github/workflows/dependencies/dependencies.sh
+        Submodules/ERF/Submodules/AMReX/.github/workflows/dependencies/dependencies.sh
         sudo apt-get install -y --no-install-recommends libblas-dev liblapack-dev
 
     - name: Install CCache
-      run: Submodules/AMReX/.github/workflows/dependencies/dependencies_ccache.sh
+      run: Submodules/ERF/Submodules/AMReX/.github/workflows/dependencies/dependencies_ccache.sh
 
     - name: Restore OpenFAST
       id: cache-openfast
@@ -72,7 +76,7 @@ jobs:
     - name: Configure Project and Generate Build System
       run: |
         cmake \
-          -B${{runner.workspace}}/ERF/build \
+          -B${{runner.workspace}}/GALE/build \
           -DCMAKE_BUILD_TYPE:STRING=RelWithDebInfo \
           -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
           -DERF_DIM:STRING=3 \
@@ -82,7 +86,6 @@ jobs:
           -DERF_OPENFAST_USE_STUB:BOOL=OFF \
           -DOPENFAST_DIR:PATH=$HOME/opt/openfast-${{ env.OPENFAST_VERSION }} \
           -DERF_ENABLE_TESTS:BOOL=ON \
-          -DERF_ENABLE_REGRESSION_TESTS_ONLY:BOOL=ON \
           -DERF_ENABLE_ALL_WARNINGS:BOOL=ON \
           -DERF_ENABLE_FCOMPARE:BOOL=ON \
           -DERF_TEST_NRANKS:STRING=2 \
@@ -95,7 +98,7 @@ jobs:
         export CCACHE_MAXSIZE=400M
         ccache -z
 
-        cmake --build ${{runner.workspace}}/ERF/build --target erf_exec fcompare --parallel 2 --verbose \
+        cmake --build ${{runner.workspace}}/GALE/build --target erf_exec fcompare --parallel 2 --verbose \
           2>&1 | tee -a ${{runner.workspace}}/build-output.txt;
 
         ccache -s
@@ -103,7 +106,7 @@ jobs:
     - name: Report
       run: |
         egrep "Warning:|Error:|warning:|error:" ${{runner.workspace}}/build-output.txt \
-          | egrep -v "Submodules/AMReX" | sort | uniq \
+          | egrep -v "Submodules/ERF/Submodules/AMReX" | sort | uniq \
           | awk 'BEGIN{i=0}{print $0}{i++}END{print "Warnings: "i}' > ${{runner.workspace}}/build-output-warnings.txt
         cat ${{runner.workspace}}/build-output-warnings.txt
         return=$(tail -n 1 ${{runner.workspace}}/build-output-warnings.txt | awk '{print $2}')
@@ -112,7 +115,7 @@ jobs:
     - name: Real-OpenFAST Regression Tests
       run: |
         ctest -L openfast-real --output-on-failure --no-tests=error
-      working-directory: ${{runner.workspace}}/ERF/build
+      working-directory: ${{runner.workspace}}/GALE/build
 
     # the plotfiles too: the golds are taken from this job's runs (Linux, GCC), the reference platform
     - name: Upload logs, backtraces and plotfiles from failed tests
@@ -121,8 +124,8 @@ jobs:
       with:
         name: openfast-real-failures
         path: |
-          ${{runner.workspace}}/ERF/build/Tests/**/Backtrace.*
-          ${{runner.workspace}}/ERF/build/Tests/**/simulation.log
-          ${{runner.workspace}}/ERF/build/Tests/**/T1_*.csv
-          ${{runner.workspace}}/ERF/build/Tests/**/plt00010/**
+          ${{runner.workspace}}/GALE/build/Tests/**/Backtrace.*
+          ${{runner.workspace}}/GALE/build/Tests/**/simulation.log
+          ${{runner.workspace}}/GALE/build/Tests/**/T1_*.csv
+          ${{runner.workspace}}/GALE/build/Tests/**/plt00010/**
         if-no-files-found: ignore
