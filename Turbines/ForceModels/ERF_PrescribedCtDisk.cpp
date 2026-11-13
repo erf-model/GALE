@@ -15,7 +15,7 @@ constexpr Real pi = 3.14159265358979323846;
 
 PrescribedCtDisk::PrescribedCtDisk (const MovingBodyInputs& in)
     : m_name(in.name), m_output_root(in.output_root),
-      m_radius(in.rotor_radius), m_ct(in.ct), m_rho(in.air_density)
+      m_radius(in.rotor_radius), m_ct(in.ct), m_curve(in.curve), m_rho(in.air_density)
 {
     m_center = {{in.base_pos[0], in.base_pos[1], in.base_pos[2] + in.hub_height}};
     const Real yaw = in.yaw_deg * pi / 180.0;
@@ -79,6 +79,8 @@ PrescribedCtDisk::update (const std::vector<Real>& sample_vel, const std::vector
     }
     m_u_inf = u_inf / m_area_total;
     m_u_disk = u_disk / m_area_total;
+    // a turbine table's Ct at the sampled free-stream speed (zero below cut-in and above cut-out)
+    if (has_curve()) { m_ct = m_curve.ct(m_u_inf); }
     // thrust along the normal, opposing the flow through the disk; the fluid gets -T n
     m_thrust = 0.5 * m_rho * m_ct * m_u_inf * m_u_inf * m_area_total;
     for (int p = 0; p < n; ++p) {
@@ -88,20 +90,25 @@ PrescribedCtDisk::update (const std::vector<Real>& sample_vel, const std::vector
 }
 
 const std::string&
-PrescribedCtDisk::log_columns ()
+PrescribedCtDisk::log_columns (bool curve)
 {
     static const std::string c = "u_inf,u_disk,thrust,power,spread_thrust";
-    return c;
+    static const std::string cc = c + ",ct,power_curve";
+    return curve ? cc : c;
 }
 
 void
-PrescribedCtDisk::log_row (Real spread_total, Real* row) const
+PrescribedCtDisk::log_row (Real spread_total, bool curve, Real* row) const
 {
     row[0] = m_u_inf;
     row[1] = m_u_disk;
     row[2] = m_thrust;
     row[3] = power();
     row[4] = spread_total;
+    if (curve) {
+        row[5] = m_ct;
+        row[6] = power_curve();
+    }
 }
 
 } // namespace erf_actuator

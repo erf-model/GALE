@@ -900,6 +900,37 @@ if(ERF_ENABLE_MOVING_BODIES AND ERF_ENABLE_FFT AND ERF_ENABLE_MPI AND NOT WIN32)
       add_test_disk_levels(Actuator_CtDisk_TwoLevel Actuator_CtDisk_TwoLevel)
   endif()
 
+  # A disk naming the turbine table NREL_5MW_126 beside a constant-Ct disk: in every row the first must
+  # take Ct and the power from the table at its free-stream speed and both must give T = 1/2 rho Ct U^2 A
+  # (check_turbine_disk.py reads the table itself); both logs carry the ct and power_curve columns.
+  if(ERF_TEST_PYTHON)
+      function(add_test_turbine_ct_disk TEST_NAME TEST_FILES_DIR)
+          gale_setup_test()
+          resolve_test_exe("" "erf_exec" TEST_EXE)
+          add_test(NAME ${TEST_NAME} COMMAND ${CMAKE_COMMAND}
+              "-DMPIEXEC=${MPIEXEC_EXECUTABLE}"
+              "-DMPIEXEC_NUMPROC_FLAG=${MPIEXEC_NUMPROC_FLAG}"
+              "-DMPIEXEC_PREFLAGS=${MPIEXEC_PREFLAGS}"
+              "-DNRANKS=${NP}"
+              "-DTEST_EXE=${TEST_EXE}"
+              "-DCONFIG=$<CONFIG>"
+              "-DPYTHON=${ERF_TEST_PYTHON}"
+              "-DINPUT=${CURRENT_TEST_BINARY_DIR}/${TEST_FILES_DIR}.i"
+              "-DWORKING_DIRECTORY=${CURRENT_TEST_BINARY_DIR}"
+              "-DCHECKER=${CURRENT_TEST_BINARY_DIR}/check_turbine_disk.py"
+              "-DTABLE=${PROJECT_SOURCE_DIR}/Turbines/Data/PowerCurves/NREL_5MW_126.txt"
+              "-DSOURCE_DIR=${CURRENT_TEST_SOURCE_DIR}"
+              "-DSIGDIGITS=10"
+              "-DERF_TESTS_DIR=${ERF_SOURCE_DIR}/Tests"
+              -P ${PROJECT_SOURCE_DIR}/Tests/RunTurbineCtDisk.cmake)
+          set_tests_properties(${TEST_NAME} PROPERTIES
+              TIMEOUT 600 PROCESSORS ${NP} WORKING_DIRECTORY "${CURRENT_TEST_BINARY_DIR}/"
+              LABELS "regression;moving-bodies"
+              ATTACHED_FILES_ON_FAIL "${CURRENT_TEST_BINARY_DIR}/simulation.log")
+      endfunction()
+      add_test_turbine_ct_disk(Actuator_TurbineCtDisk Actuator_TurbineCtDisk)
+  endif()
+
   # The same disk with the domain in one box and split unevenly in x and y: plotfile and disk
   # log must agree, so the spreading is independent of the decomposition.
   gale_add_test_box_parity(ActuatorCtDisk_BoxParity Actuator_UniformCtDisk "plt00010"

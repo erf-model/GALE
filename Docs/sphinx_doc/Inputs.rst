@@ -222,18 +222,26 @@ apply.
      - Description
      - Values
      - Default
+   * - ``<name>.turbine``
+     - Name of a turbine table, ``<turbine_data_dir>/<name>.txt`` (``NREL_5MW_126``, say; the
+       list is in ``Turbines/Data/PowerCurves/README.md``). The radius is half the table's rotor
+       diameter, and Ct is the table's Ct(U) at the upstream speed, zero outside the table. Not
+       with ``ct`` or ``rotor_radius``.
+     - table name
+     - unset
    * - ``<name>.rotor_radius``
-     - Disk radius (m).
+     - Disk radius (m). Not with ``turbine``.
      - > 0
-     - required
+     - required without ``turbine``
    * - ``<name>.hub_height``
-     - Disk centre above the base (m).
+     - Disk centre above the base (m). With ``turbine``, overrides the table's; required when the
+       table gives no single hub height.
      - > ``rotor_radius``
-     - required
+     - required (table's with ``turbine``)
    * - ``<name>.ct``
-     - Thrust coefficient on the upstream speed.
+     - Thrust coefficient on the upstream speed. Not with ``turbine``.
      - (0, 1)
-     - required
+     - required without ``turbine``
    * - ``<name>.yaw``
      - Disk normal, degrees from +x in the horizontal plane.
      - real
@@ -263,6 +271,12 @@ Run-wide
      - Allowed relative difference between ERF's density at a hub (or disk centre) and the model's.
      - ≥ 0
      - 0.05
+   * - ``turbine_data_dir``
+     - Folder of the turbine tables a ``ct_disk``'s ``turbine`` names. A relative path is relative
+       to the run directory. An executable moved away from its source tree needs this key. Warned
+       about when no ``ct_disk`` names a turbine.
+     - path
+     - ``Turbines/Data/PowerCurves`` of the GALE source tree
    * - ``prescribed_velocity``
      - Testing aid: a uniform velocity given to every node in place of the flow.
      - 3 reals

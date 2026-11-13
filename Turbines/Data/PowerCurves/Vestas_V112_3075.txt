@@ -1,0 +1,53 @@
+# Vestas_V112_3075
+# source: OpenEnergy database wind turbine library (supply.wind_turbine_library), https://openenergyplatform.org, turbine_type V112/3075 (id 51); the database's own source: https://www.wind-turbine-models.com/turbines/7-vestas-v112-onshore
+# licence: ODbL-1.0 (https://opendatacommons.org/licenses/odbl/1.0/), (c) Reiner Lemoine Institut
+# Contains information from the OEDB wind turbine library, made available under the ODbL.
+# hub heights offered: 84, 94, 119 (give erf.moving_bodies.<name>.hub_height)
+# Written by make_power_curves.py; columns: wind speed (m/s), Ct (-), electrical power (kW)
+rotor_diameter 112
+rated_power 3075
+3 0.9 26
+3.5 0.85 73
+4 0.82 133
+4.5 0.81 207
+5 0.81 302
+5.5 0.81 416
+6 0.81 554
+6.5 0.8 717
+7 0.8 907
+7.5 0.79 1126
+8 0.79 1375
+8.5 0.78 1652
+9 0.77 1958
+9.5 0.75 2282
+10 0.71 2585
+10.5 0.64 2821
+11 0.56 2997
+11.5 0.48 3050
+12 0.41 3067
+12.5 0.35 3074
+13 0.31 3075
+13.5 0.27 3075
+14 0.24 3075
+14.5 0.22 3075
+15 0.19 3075
+15.5 0.18 3075
+16 0.16 3075
+16.5 0.15 3075
+17 0.13 3075
+17.5 0.12 3075
+18 0.11 3075
+18.5 0.1 3075
+19 0.1 3075
+19.5 0.09 3075
+20 0.08 3075
+20.5 0.08 3075
+21 0.07 3075
+21.5 0.07 3075
+22 0.06 3075
+22.5 0.06 3075
+23 0.06 3075
+23.5 0.05 3075
+24 0.05 3075
+24.5 0.05 3075
+25 0.05 3075

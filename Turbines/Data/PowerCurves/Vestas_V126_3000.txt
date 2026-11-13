@@ -1,0 +1,48 @@
+# Vestas_V126_3000
+# source: OpenEnergy database wind turbine library (supply.wind_turbine_library), https://openenergyplatform.org, turbine_type V126/3000 (id 44); the database's own source: https://www.wind-turbine-models.com/turbines/1345-vestas-v126-3.0
+# licence: ODbL-1.0 (https://opendatacommons.org/licenses/odbl/1.0/), (c) Reiner Lemoine Institut
+# Contains information from the OEDB wind turbine library, made available under the ODbL.
+# Written by make_power_curves.py; columns: wind speed (m/s), Ct (-), electrical power (kW)
+rotor_diameter 126
+hub_height 119
+rated_power 3000
+3 0.93 20
+3.5 0.874 88
+4 0.852 173
+4.5 0.831 276
+5 0.811 397
+5.5 0.803 540
+6 0.794 712
+6.5 0.785 914
+7 0.776 1151
+7.5 0.765 1420
+8 0.754 1723
+8.5 0.748 2063
+9 0.741 2433
+9.5 0.688 2738
+10 0.596 2920
+10.5 0.497 2985
+11 0.415 2999
+11.5 0.353 3000
+12 0.305 3000
+12.5 0.267 3000
+13 0.235 3000
+13.5 0.21 3000
+14 0.188 3000
+14.5 0.169 3000
+15 0.152 3000
+15.5 0.138 3000
+16 0.126 3000
+16.5 0.115 3000
+17 0.105 3000
+17.5 0.097 3000
+18 0.09 3000
+18.5 0.083 3000
+19 0.077 3000
+19.5 0.072 3000
+20 0.067 3000
+20.5 0.063 3000
+21 0.059 3000
+21.5 0.056 3000
+22 0.052 3000
+22.5 0.049 3000

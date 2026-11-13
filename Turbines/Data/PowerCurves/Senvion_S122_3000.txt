@@ -1,0 +1,28 @@
+# Senvion_S122_3000
+# source: OpenEnergy database wind turbine library (supply.wind_turbine_library), https://openenergyplatform.org, turbine_type S122/3000 (id 95); the database's own source: http://www.windenergie-im-binnenland.de/powercurve.php
+# licence: ODbL-1.0 (https://opendatacommons.org/licenses/odbl/1.0/), (c) Reiner Lemoine Institut
+# Contains information from the OEDB wind turbine library, made available under the ODbL.
+# hub heights offered: 136, 139 (give erf.moving_bodies.<name>.hub_height)
+# Written by make_power_curves.py; columns: wind speed (m/s), Ct (-), electrical power (kW)
+rotor_diameter 122
+rated_power 3000
+3 0.85 36
+4 0.81 164
+5 0.79 371
+6 0.79 683
+7 0.79 1130
+8 0.75 1662
+9 0.69 2247
+10 0.58 2769
+11 0.44 2970
+12 0.32 3000
+13 0.25 3000
+14 0.2 3000
+15 0.16 3000
+16 0.13 3000
+17 0.11 3000
+18 0.09 3000
+19 0.08 3000
+20 0.07 3000
+21 0.06 3000
+22 0.05 3000

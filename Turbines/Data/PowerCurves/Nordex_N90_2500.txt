@@ -1,0 +1,54 @@
+# Nordex_N90_2500
+# source: OpenEnergy database wind turbine library (supply.wind_turbine_library), https://openenergyplatform.org, turbine_type N90/2500 (id 23); the database's own source: http://www.windenergie-im-binnenland.de/powercurve.php
+# licence: ODbL-1.0 (https://opendatacommons.org/licenses/odbl/1.0/), (c) Reiner Lemoine Institut
+# Contains information from the OEDB wind turbine library, made available under the ODbL.
+# hub heights offered: 65, 70, 80 (give erf.moving_bodies.<name>.hub_height)
+# Written by make_power_curves.py; columns: wind speed (m/s), Ct (-), electrical power (kW)
+rotor_diameter 90
+rated_power 2500
+3 1.26 1
+3.5 1.15 37
+4 1.06 84
+4.5 0.996 142
+5 0.941 212
+5.5 0.894 294
+6 0.872 391
+6.5 0.87 504
+7 0.867 635
+7.5 0.864 785
+8 0.822 951
+8.5 0.783 1131
+9 0.746 1321
+9.5 0.709 1520
+10 0.674 1722
+10.5 0.638 1924
+11 0.602 2122
+11.5 0.567 2280
+12 0.514 2389
+12.5 0.433 2459
+13 0.375 2495
+13.5 0.329 2500
+14 0.291 2500
+14.5 0.26 2500
+15 0.234 2500
+15.5 0.211 2500
+16 0.191 2500
+16.5 0.175 2500
+17 0.16 2500
+17.5 0.147 2500
+18 0.135 2500
+18.5 0.124 2500
+19 0.115 2500
+19.5 0.107 2500
+20 0.1 2500
+20.5 0.093 2500
+21 0.087 2500
+21.5 0.082 2500
+22 0.077 2500
+22.5 0.072 2500
+23 0.068 2500
+23.5 0.064 2500
+24 0.061 2500
+24.5 0.058 2500
+25 0.055 2500
+26 0.055 2500

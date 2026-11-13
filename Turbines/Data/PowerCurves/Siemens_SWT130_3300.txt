@@ -1,0 +1,31 @@
+# Siemens_SWT130_3300
+# source: OpenEnergy database wind turbine library (supply.wind_turbine_library), https://openenergyplatform.org, turbine_type SWT130/3300 (id 63); the database's own source: http://www.windenergie-im-binnenland.de/powercurve.php
+# licence: ODbL-1.0 (https://opendatacommons.org/licenses/odbl/1.0/), (c) Reiner Lemoine Institut
+# Contains information from the OEDB wind turbine library, made available under the ODbL.
+# hub heights offered: 85, 110, 120, 135 (give erf.moving_bodies.<name>.hub_height)
+# Written by make_power_curves.py; columns: wind speed (m/s), Ct (-), electrical power (kW)
+rotor_diameter 130
+rated_power 3300
+3 0.775 42
+4 0.787 180
+5 0.819 412
+6 0.823 760
+7 0.829 1241
+8 0.837 1864
+9 0.806 2588
+10 0.717 3122
+11 0.537 3278
+12 0.382 3298
+13 0.29 3300
+14 0.227 3300
+15 0.183 3300
+16 0.15 3300
+17 0.125 3300
+18 0.105 3300
+19 0.09 3300
+20 0.077 3300
+21 0.067 3300
+22 0.059 3300
+23 0.052 3300
+24 0.046 3300
+25 0.042 3300

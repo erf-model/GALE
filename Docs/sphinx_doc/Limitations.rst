@@ -89,6 +89,11 @@ See :doc:`theory/ActuatorDisk`.
   anchor level.
 - **Plain disk sampling** over-predicts loads on grids that do not resolve the disk: +33 % power
   on 20 m cells for the IEA 15 MW.
+- **Turbine tables: cut-in and cut-out.** A ``ct_disk`` with ``turbine`` takes Ct at the
+  instantaneous upstream speed, with no averaging or hysteresis. Near the first or last table
+  speed the thrust can switch on and off from one update to the next.
+- **Turbine tables: published Ct only.** Turbines with only a power curve are not in the library.
+  A table edited in place under the same name is not detected on restart.
 
 Actuator line
 -------------

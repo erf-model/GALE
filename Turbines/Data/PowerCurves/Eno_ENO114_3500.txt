@@ -1,0 +1,28 @@
+# Eno_ENO114_3500
+# source: OpenEnergy database wind turbine library (supply.wind_turbine_library), https://openenergyplatform.org, turbine_type ENO114/3500 (id 127); the database's own source: https://www.wind-turbine-models.com/turbines/283-eno-energy-eno-114-3.5
+# licence: ODbL-1.0 (https://opendatacommons.org/licenses/odbl/1.0/), (c) Reiner Lemoine Institut
+# Contains information from the OEDB wind turbine library, made available under the ODbL.
+# hub heights offered: 92, 127.5, 142 (give erf.moving_bodies.<name>.hub_height)
+# Written by make_power_curves.py; columns: wind speed (m/s), Ct (-), electrical power (kW)
+rotor_diameter 114
+rated_power 3500
+3 0.752 23.6
+4.2 0.752 180.8
+5.2 0.752 380.3
+6.2 0.752 648.5
+7 0.752 917.5
+8.1 0.752 1440.5
+8.8 0.74 1818.5
+10.2 0.667 2722.1
+11.1 0.58 3287.2
+12 0.52 3457.7
+13 0.32 3500
+14 0.245 3500
+15 0.191 3500
+16 0.161 3500
+17 0.136 3500
+18 0.117 3500
+19 0.1 3500
+21 0.08 3500
+23 0.064 3500
+25 0.052 3500

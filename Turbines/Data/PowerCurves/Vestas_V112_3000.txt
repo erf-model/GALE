@@ -1,0 +1,52 @@
+# Vestas_V112_3000
+# source: OpenEnergy database wind turbine library (supply.wind_turbine_library), https://openenergyplatform.org, turbine_type V112/3000 (id 52); the database's own source: http://www.windenergie-im-binnenland.de/powercurve.php
+# licence: ODbL-1.0 (https://opendatacommons.org/licenses/odbl/1.0/), (c) Reiner Lemoine Institut
+# Contains information from the OEDB wind turbine library, made available under the ODbL.
+# Written by make_power_curves.py; columns: wind speed (m/s), Ct (-), electrical power (kW)
+rotor_diameter 112
+rated_power 3000
+3 0.913 23
+3.5 0.865 68
+4 0.833 130
+4.5 0.821 206
+5 0.817 301
+5.5 0.815 418
+6 0.812 557
+6.5 0.808 720
+7 0.804 912
+7.5 0.8 1130
+8 0.798 1377
+8.5 0.794 1654
+9 0.781 1954
+9.5 0.755 2272
+10 0.711 2572
+10.5 0.643 2808
+11 0.567 2988
+11.5 0.48 3046
+12 0.409 3065
+12.5 0.353 3073
+13 0.308 3075
+13.5 0.272 3075
+14 0.241 3075
+14.5 0.216 3075
+15 0.194 3075
+15.5 0.175 3075
+16 0.159 3075
+16.5 0.145 3075
+17 0.133 3075
+17.5 0.122 3075
+18 0.112 3075
+18.5 0.103 3075
+19 0.096 3075
+19.5 0.089 3075
+20 0.083 3075
+20.5 0.077 3075
+21 0.072 3075
+21.5 0.068 3075
+22 0.064 3075
+22.5 0.06 3075
+23 0.056 3075
+23.5 0.053 3075
+24 0.05 3075
+24.5 0.048 3075
+25 0.045 3075

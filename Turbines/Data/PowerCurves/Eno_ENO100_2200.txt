@@ -1,0 +1,31 @@
+# Eno_ENO100_2200
+# source: OpenEnergy database wind turbine library (supply.wind_turbine_library), https://openenergyplatform.org, turbine_type ENO100/2200 (id 128); the database's own source: https://www.wind-turbine-models.com/turbines/651-eno-energy-eno-100
+# licence: ODbL-1.0 (https://opendatacommons.org/licenses/odbl/1.0/), (c) Reiner Lemoine Institut
+# Contains information from the OEDB wind turbine library, made available under the ODbL.
+# Written by make_power_curves.py; columns: wind speed (m/s), Ct (-), electrical power (kW)
+rotor_diameter 100
+hub_height 99
+rated_power 2200
+3 0.792 38
+4 0.792 127
+5 0.792 262
+6 0.792 465
+7 0.792 741
+8 0.792 1100
+9 0.76 1515
+10 0.677 1883
+11 0.493 2100
+12 0.359 2200
+13 0.275 2200
+14 0.217 2200
+15 0.176 2200
+16 0.145 2200
+17 0.122 2200
+18 0.103 2200
+19 0.089 2200
+20 0.077 2200
+21 0.067 2200
+22 0.06 2200
+23 0.053 2200
+24 0.048 2200
+25 0.043 2200

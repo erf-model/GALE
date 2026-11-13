@@ -1,0 +1,25 @@
+# Vestas_V82_1.65MW
+# source: NREL turbine-models archive, https://github.com/NatLabRockies/turbine-models, Onshore/VestasV82_1.65MW_82.csv
+# licence: BSD-3-Clause, (c) 2020 Alliance for Sustainable Energy, LLC
+# hub heights offered: 59, 68.5, 70, 78, 80 (give erf.moving_bodies.<name>.hub_height)
+# Written by make_power_curves.py; columns: wind speed (m/s), Ct (-), electrical power (kW)
+rotor_diameter 82
+rated_power 1650
+3 0.979 0
+4 1.111 28
+5 1.014 144
+6 0.925 309
+7 0.843 511
+8 0.768 758
+9 0.701 1017
+10 0.642 1285
+11 0.578 1504
+12 0.509 1637
+13 0.438 1650
+14 0.379 1650
+15 0.334 1650
+16 0.299 1650
+17 0.272 1650
+18 0.249 1650
+19 0.232 1650
+20 0.218 1650

@@ -1,0 +1,52 @@
+# Vestas_V117_3600
+# source: OpenEnergy database wind turbine library (supply.wind_turbine_library), https://openenergyplatform.org, turbine_type V117/3600 (id 136); the database's own source: http://www.windenergie-im-binnenland.de/powercurve.php
+# licence: ODbL-1.0 (https://opendatacommons.org/licenses/odbl/1.0/), (c) Reiner Lemoine Institut
+# Contains information from the OEDB wind turbine library, made available under the ODbL.
+# Written by make_power_curves.py; columns: wind speed (m/s), Ct (-), electrical power (kW)
+rotor_diameter 117
+rated_power 3600
+3 0.873 22
+3.5 0.849 78
+4 0.835 150
+4.5 0.828 237
+5 0.827 340
+5.5 0.825 466
+6 0.82 617
+6.5 0.816 796
+7 0.815 1006
+7.5 0.804 1247
+8 0.794 1522
+8.5 0.786 1830
+9 0.787 2176
+9.5 0.769 2541
+10 0.73 2903
+10.5 0.667 3209
+11 0.589 3418
+11.5 0.513 3543
+12 0.442 3589
+12.5 0.381 3599
+13 0.332 3600
+13.5 0.294 3600
+14 0.261 3600
+14.5 0.233 3600
+15 0.209 3600
+15.5 0.188 3600
+16 0.171 3600
+16.5 0.156 3600
+17 0.142 3600
+17.5 0.131 3600
+18 0.12 3600
+18.5 0.111 3600
+19 0.102 3600
+19.5 0.095 3600
+20 0.089 3600
+20.5 0.083 3600
+21 0.077 3600
+21.5 0.073 3600
+22 0.069 3600
+22.5 0.064 3600
+23 0.06 3600
+23.5 0.057 3600
+24 0.054 3600
+24.5 0.051 3600
+25 0.048 3600

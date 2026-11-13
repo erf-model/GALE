@@ -1,0 +1,48 @@
+# Vestas_V126_3300
+# source: OpenEnergy database wind turbine library (supply.wind_turbine_library), https://openenergyplatform.org, turbine_type V126/3300 (id 43); the database's own source: https://www.wind-turbine-models.com/turbines/695-vestas-v126-3.3; https://www.vestas.com/en/products/turbines; https://www.wind-turbine-models.com/turbines/695-vestas-v126-3.3
+# licence: ODbL-1.0 (https://opendatacommons.org/licenses/odbl/1.0/), (c) Reiner Lemoine Institut
+# Contains information from the OEDB wind turbine library, made available under the ODbL.
+# hub heights offered: 117, 137 (give erf.moving_bodies.<name>.hub_height)
+# Written by make_power_curves.py; columns: wind speed (m/s), Ct (-), electrical power (kW)
+rotor_diameter 126
+rated_power 3300
+3 0.92 30
+3.5 0.89 97
+4 0.84 179
+4.5 0.81 278
+5 0.8 397
+5.5 0.8 539
+6 0.79 711
+6.5 0.78 913
+7 0.77 1150
+7.5 0.76 1420
+8 0.75 1723
+8.5 0.74 2060
+9 0.73 2434
+9.5 0.71 2804
+10 0.65 3090
+10.5 0.56 3238
+11 0.47 3290
+11.5 0.4 3299
+12 0.34 3300
+12.5 0.3 3300
+13 0.26 3300
+13.5 0.23 3300
+14 0.21 3300
+14.5 0.19 3300
+15 0.17 3300
+15.5 0.15 3300
+16 0.14 3300
+16.5 0.13 3300
+17 0.12 3300
+17.5 0.11 3300
+18 0.1 3300
+18.5 0.09 3300
+19 0.08 3300
+19.5 0.08 3300
+20 0.07 3300
+20.5 0.07 3300
+21 0.06 3300
+21.5 0.06 3300
+22 0.06 3300
+22.5 0.05 3300

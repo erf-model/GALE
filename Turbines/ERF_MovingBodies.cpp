@@ -179,8 +179,14 @@ MovingBodies::MovingBodies (MovingBodiesInputs in, int anchor, double dt, double
         if (b.type == "ct_disk") {
             m_disks.push_back(std::make_unique<erf_actuator::PrescribedCtDisk>(b));
             m_disk_epsilon.push_back(b.epsilon);
-            Print() << "  " << b.name << ": uniform-Ct disk, R " << b.rotor_radius << " m, hub "
-                    << b.hub_height << " m, Ct " << b.ct << ", " << m_disks.back()->num_points()
+            Print() << "  " << b.name << ": uniform-Ct disk, R " << b.rotor_radius << " m, hub " << b.hub_height << " m, ";
+            if (b.turbine.empty()) {
+                Print() << "Ct " << b.ct;
+            } else {
+                Print() << "Ct(U) and P(U) of " << b.turbine_file << " (" << b.curve.speeds().front() << " to "
+                        << b.curve.speeds().back() << " m/s, rated " << b.curve.rated_power() << " W)";
+            }
+            Print() << ", " << m_disks.back()->num_points()
                     << " points, spreading " << b.epsilon << " dx\n";
         } else {
             turbines.push_back(b);
@@ -1645,11 +1651,14 @@ MovingBodies::write_source_diagnostics (double time, const MultiFab* detJ_cc, co
     std::vector<int> bodies;
     for (int k = 0; k < static_cast<int>(m_disks.size()); ++k) { bodies.push_back(nturb + k); }
     if (!bodies.empty()) {
-        write_series("disk", erf_actuator::PrescribedCtDisk::log_columns(), time, first, bodies, erf_actuator::PrescribedCtDisk::log_size,
-                     [this, nturb, fx, fy, fz] (int b, Real* row) {
+        // ct and power_curve columns only when some disk uses a turbine table: the files of constant-Ct runs keep their columns
+        bool curve = false;
+        for (const auto& b : m_in.bodies) { curve = curve || (b.type == "ct_disk" && !b.turbine.empty()); }
+        write_series("disk", erf_actuator::PrescribedCtDisk::log_columns(curve), time, first, bodies, erf_actuator::PrescribedCtDisk::log_size(curve),
+                     [this, nturb, fx, fy, fz, curve] (int b, Real* row) {
                          const auto& d = m_disks[b - nturb];
                          const auto n = d->normal();
-                         d->log_row(-(n[0]*fx + n[1]*fy + n[2]*fz), row);
+                         d->log_row(-(n[0]*fx + n[1]*fy + n[2]*fz), curve, row);
                          return true;
                      });
     }

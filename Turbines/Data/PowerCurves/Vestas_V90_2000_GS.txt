@@ -1,0 +1,50 @@
+# Vestas_V90_2000_GS
+# source: OpenEnergy database wind turbine library (supply.wind_turbine_library), https://openenergyplatform.org, turbine_type V90/2000/GS (id 133); the database's own source: http://www.windenergie-im-binnenland.de/powercurve.php
+# licence: ODbL-1.0 (https://opendatacommons.org/licenses/odbl/1.0/), (c) Reiner Lemoine Institut
+# Contains information from the OEDB wind turbine library, made available under the ODbL.
+# Written by make_power_curves.py; columns: wind speed (m/s), Ct (-), electrical power (kW)
+rotor_diameter 90
+rated_power 2000
+4 0.838 75
+4.5 0.819 128
+5 0.81 190
+5.5 0.806 265
+6 0.806 354
+6.5 0.807 459
+7 0.808 582
+7.5 0.804 723
+8 0.791 883
+8.5 0.766 1058
+9 0.73 1240
+9.5 0.689 1427
+10 0.643 1604
+10.5 0.592 1762
+11 0.537 1893
+11.5 0.473 1968
+12 0.412 2005
+12.5 0.359 2021
+13 0.314 2027
+13.5 0.277 2029
+14 0.246 2030
+14.5 0.219 2030
+15 0.197 2030
+15.5 0.178 2030
+16 0.161 2030
+16.5 0.147 2030
+17 0.134 2030
+17.5 0.122 2030
+18 0.112 2030
+18.5 0.104 2030
+19 0.096 2030
+19.5 0.089 2030
+20 0.083 2030
+20.5 0.077 2030
+21 0.072 2030
+21.5 0.067 2030
+22 0.063 2030
+22.5 0.059 2030
+23 0.055 2030
+23.5 0.052 2030
+24 0.049 2030
+24.5 0.046 2030
+25 0.044 2030
