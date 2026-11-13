@@ -1,0 +1,28 @@
+# GNU make: GALE's moving bodies, compiled into ERF as structure model "gale" when this
+# directory is listed in STRUCTURE_HOME (with USE_MOVING_BODIES = TRUE). Exec/Make.ERF sets
+# STRUCTURE_MODEL_DIR to this directory and puts it alone on VPATH and the include path, so the
+# subfolders are added here. With USE_OPENFAST = TRUE the OpenFAST coupling is built as well;
+# OPENFAST_HOME is the OpenFAST install prefix (FAST_Library.h under include).
+GALE_TURBINES_DIR := $(STRUCTURE_MODEL_DIR)
+
+CEXE_headers += ERF_MovingBodies.H
+CEXE_headers += ERF_MovingBodiesInputs.H
+CEXE_sources += ERF_MovingBodies.cpp
+CEXE_sources += ERF_GaleTurbineModel.cpp
+CEXE_sources += ERF_MovingBodiesInputs.cpp
+
+include $(GALE_TURBINES_DIR)/GaleCore/Make.package
+include $(GALE_TURBINES_DIR)/Motion/Make.package
+include $(GALE_TURBINES_DIR)/ForceModels/Make.package
+VPATH_LOCATIONS   += $(GALE_TURBINES_DIR)/GaleCore $(GALE_TURBINES_DIR)/Motion $(GALE_TURBINES_DIR)/ForceModels
+INCLUDE_LOCATIONS += $(GALE_TURBINES_DIR)/GaleCore $(GALE_TURBINES_DIR)/Motion $(GALE_TURBINES_DIR)/ForceModels
+
+ifeq ($(USE_OPENFAST), TRUE)
+    DEFINES += -DERF_USE_OPENFAST
+    include $(GALE_TURBINES_DIR)/OpenFAST/Make.package
+    VPATH_LOCATIONS   += $(GALE_TURBINES_DIR)/OpenFAST
+    INCLUDE_LOCATIONS += $(GALE_TURBINES_DIR)/OpenFAST
+    INCLUDE_LOCATIONS += $(OPENFAST_HOME)/include
+    LIBRARY_LOCATIONS += $(OPENFAST_HOME)/lib
+    LIBRARIES += -lopenfastlib
+endif

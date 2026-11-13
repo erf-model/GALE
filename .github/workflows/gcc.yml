@@ -272,13 +272,17 @@ jobs:
       run: |
         mkdir -p ${{runner.temp}}/structure_build
         cd ${{runner.temp}}/structure_build
-        printf 'ERF_HOME = %s\nSTRUCTURE_HOME = %s/Tests/StructureModelExample\nUSE_MOVING_BODIES = TRUE\nUSE_MPI = TRUE\nUSE_NETCDF = FALSE\nCOMP = gnu\nDIM = 3\ninclude $(ERF_HOME)/Exec/Make.ERF\n' \
-          "${{github.workspace}}" "${{github.workspace}}" > GNUmakefile
+        # GALE's own model (Turbines/) is listed too, so that GNU make compiles it as well
+        printf 'ERF_HOME = %s\nSTRUCTURE_HOME = %s/Tests/StructureModelExample %s/Turbines\nUSE_MOVING_BODIES = TRUE\nUSE_MPI = TRUE\nUSE_NETCDF = FALSE\nCOMP = gnu\nDIM = 3\ninclude $(ERF_HOME)/Exec/Make.ERF\n' \
+          "${{github.workspace}}" "${{github.workspace}}" "${{github.workspace}}" > GNUmakefile
         cp ${{github.workspace}}/Exec/ERF_Prob.cpp ${{github.workspace}}/Exec/ERF_Prob.H ${{github.workspace}}/Exec/Make.package .
         make -j2
         cp ${{github.workspace}}/Tests/StructureModelExample/inputs_structure_example .
         mpiexec -n 2 ./ERF3d.gnu*.ex inputs_structure_example max_step=8 erf.check_int=-1 | tee run.log
         grep -q "structure_example_fx" plt00008/Header
+        # gale is compiled in: a deck that selects it without bodies stops with GALE's own message
+        ! mpiexec -n 1 ./ERF3d.gnu*.ex inputs_structure_example max_step=1 erf.structures.model=gale > gale.log 2>&1
+        grep -q "no bodies are given; list them in erf.moving_bodies.bodies" gale.log
 
   # Single stable required status check. Branch protection previously pinned the
   # individual matrix job names ("GNU@9.3 C++17 Release - Particles OFF"), which silently

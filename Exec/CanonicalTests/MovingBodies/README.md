@@ -6,7 +6,7 @@ like `../Canonical_RANS`: one directory per case with the input deck, the
 bundled OpenFAST stub's turbine file where a turbine is involved, and the
 gold logs the case is compared with. Each deck with bodies selects them with
 `erf.structures.model = gale`, the bodies' structure model. They are registered in
-`Tests/CTestList.cmake` (`TEST_SOURCE_ROOT` points the registration here) and
+`Turbines/Tests/ERFTurbinesTests.cmake` (`TEST_SOURCE_ROOT` points the registration here) and
 their gold plotfiles stay in `Tests/ERFGoldFiles/<case>`. The theory and the
 inputs are in `Docs/sphinx_doc/theory/MovingBodies.rst` and
 `Docs/sphinx_doc/Inputs.rst`; what each test checks is in

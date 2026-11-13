@@ -482,30 +482,13 @@ if(ERF_ENABLE_MOVING_BODIES)
   )
   # Motivation: a point force spread onto the momentum sources must integrate back to the
   # force exactly on every component, with the terrain cell volumes, under the ground
-  # cut-off, for several points, and however the domain is split; each point must be spread
-  # with its own kernel width.
+  # cut-off, for several points, and however the domain is split.
   target_sources(${erf_exe_name} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/MovingBodies/ERF_GTestActuatorSpreading.cpp
   )
-  # Motivation: the levels coarser than the bodies' anchor level must carry the bodies' whole force,
-  # summed face by face from the anchor level, for even and odd ratios, any box layout, and terrain.
-  target_sources(${erf_exe_name} PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/MovingBodies/ERF_GTestActuatorRestriction.cpp
-  )
-  # Motivation: a turbine's owner must be a rank whose boxes overlap it, and its points, sampled and
-  # spread through messages to the ranks whose boxes they touch only, must give what the global
-  # sampler and spreader give over all the points; a rank no kernel reaches must receive nothing.
-  target_sources(${erf_exe_name} PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/MovingBodies/ERF_GTestBodyExchange.cpp
-  )
-  # Motivation: the prescribed-Ct disk's point areas must sum to the disk area, its forces
-  # to -T n with T from the upstream speed, and its inputs must be parsed with their ranges.
-  target_sources(${erf_exe_name} PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/MovingBodies/ERF_GTestPrescribedCtDisk.cpp
-  )
-  # Motivation: the wake sampling lines must sit at the requested x/D behind the hub along the
-  # rotor axis, their running average must be the mean of the samples (an analytic wake comes
-  # back exactly), and that average must survive a checkpoint round trip.
+  # Motivation: the wake sampling lines must sit at the requested distances behind a body
+  # along its axis, their running average must be the mean of the samples (an analytic wake
+  # comes back exactly), and that average must survive a checkpoint round trip.
   target_sources(${erf_exe_name} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/MovingBodies/ERF_GTestWakeLines.cpp
   )
@@ -513,25 +496,6 @@ if(ERF_ENABLE_MOVING_BODIES)
   # of the samples since the averaging start and must survive a checkpoint round trip.
   target_sources(${erf_exe_name} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/MovingBodies/ERF_GTestRunningStats.cpp
-  )
-  # Motivation (GALE): GALE's copies of the wake lines and the running statistics (GaleCore), written and
-  # restored by a body's owner, and its log helpers must pass the same checks as the originals, and the
-  # log helpers must keep many files open within the open-file limit and trim a log at a checkpoint.
-  target_sources(${erf_exe_name} PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/MovingBodies/ERF_GTestOwnedWakeLines.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/MovingBodies/ERF_GTestOwnedRunningStats.cpp
-  )
-  # Motivation (GALE): the cell height that limits a blade tip must be the physical one, weighed by the tip
-  # speed that crosses it, the same from the batched and the per-region search; a kernel's normalisation on
-  # a uniform mesh, found on one rank, must be the sum of the ranks' partial norms.
-  target_sources(${erf_exe_name} PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/MovingBodies/ERF_GTestGaleCellHeights.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/MovingBodies/ERF_GTestGaleUniformMeshNorm.cpp
-  )
-  # Motivation: the timing summary (erf.moving_bodies.timing_int) must charge a phase's time to that
-  # phase alone and only when it is on, and give each phase's minimum, mean and maximum over the ranks.
-  target_sources(${erf_exe_name} PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/MovingBodies/ERF_GTestPhaseTimers.cpp
   )
   # Motivation: a structure model that registers itself from its own file must be listed and
   # created by the name erf.structures.model gives; an unknown name must stop the run with
@@ -563,54 +527,6 @@ if(ERF_ENABLE_MOVING_BODIES)
     include("${_structure_dir}/ERFStructureModel.cmake")
     erf_structure_model_add_unit_tests(${erf_exe_name})
   endforeach()
-endif()
-if(ERF_ENABLE_OPENFAST AND ERF_OPENFAST_USE_STUB)
-  # Motivation: the OpenFAST driver must keep the ERF step a whole multiple of the
-  # OpenFAST step, accept only the anelastic solver with a fixed step, refuse a model
-  # without external inflow, and report the stub's node layout on the owner rank; with tower
-  # force points the tower nodes must carry the model's drag for the velocity supplied,
-  # and the tower-shadow check must read TwrShadow; the turbines' owner ranks are given before
-  # OpenFAST starts, and a farm runs its turbines as separate instances. The bundled stub library stands in
-  # for OpenFAST.
-  target_sources(${erf_exe_name} PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/MovingBodies/ERF_GTestOpenFASTDriver.cpp
-  )
-  # Motivation: the actuator-disk rings built from a rotor's force nodes must lie in the
-  # rotor plane at the nodes' radii and carry minus the rotor's force and torque exactly,
-  # on a yawed and tilted axis as well as on x; a wrong hub axis must be detectable. The
-  # actuator-line points must be the force nodes with the forces on the fluid, tower nodes
-  # left out, and the tip travel per step must follow the rotor speed and the tip radius;
-  # the tower points must be the tower nodes, and the nacelle drag must follow the drag law
-  # with the kernel's self-induction correction; every point a turbine spreads must carry the
-  # kernel width of its kind (rotor, tower, nacelle).
-  target_sources(${erf_exe_name} PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/MovingBodies/ERF_GTestOpenFASTRotor.cpp
-  )
-  # Motivation: the filtered lifting-line correction must reproduce the classical uniform
-  # downwash of an elliptic lift distribution in the narrow-kernel limit, vanish when the run's
-  # kernel is the optimal one, act against the lift for a wider kernel, relax as specified and
-  # survive a checkpoint.
-  target_sources(${erf_exe_name} PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/MovingBodies/ERF_GTestFLLC.cpp
-  )
-  # Motivation: the start-up audit must read the model's density, gravity and module files,
-  # flag a density that differs from the body's or from ERF's at the hub, aerodynamics that
-  # are off, a rotor outside the domain or overlapping another, a coarse mesh, a broken line
-  # and a rotor facing away from the wind, as fatal or as warnings, and pass the stub by.
-  target_sources(${erf_exe_name} PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/MovingBodies/ERF_GTestOpenFASTAudit.cpp
-  )
-  # the moving-bodies cases, whose model files (the IEA 15 MW models, the stub's decks) the readers are tested on
-  target_compile_definitions(${erf_exe_name} PRIVATE
-    ERF_GTEST_MOVING_BODIES_CASES="${PROJECT_SOURCE_DIR}/Exec/CanonicalTests/MovingBodies")
-  # Motivation: the actuator-disk sampling mode must default to the corrected disk for
-  # mode = adm and to plain disk sampling for an actuator line, keep an explicit choice, the
-  # turbine's upstream sampling distance must default to two diameters, and the lifting-line
-  # correction must be on by default for an actuator line only; the tower and nacelle widths must
-  # default to epsilon, need their part forced, and enter the restart record.
-  target_sources(${erf_exe_name} PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/MovingBodies/ERF_GTestMovingBodiesInputs.cpp
-  )
 endif()
 build_erf_exe(${erf_exe_name} NO_ERF_MAIN)
 target_link_libraries(${erf_exe_name} PRIVATE GTest::gtest)
@@ -1304,24 +1220,34 @@ if(ERF_ENABLE_MPI)
   if(ERF_ENABLE_MOVING_BODIES)
     # Motivation: with the domain distributed over ranks, each actuator point is sampled by
     # the one rank owning its cell and summed across ranks; the result must not depend on
-    # the rank count or on which rank holds the point. A turbine's points, sent only to the
-    # ranks whose boxes they touch (BodyExchange), must give the same answers.
+    # the rank count or on which rank holds the point.
     target_sources(${erf_parallel_exe_name} PRIVATE
       ${CMAKE_CURRENT_SOURCE_DIR}/MovingBodies/ERF_GTestActuatorSampling.cpp
       ${CMAKE_CURRENT_SOURCE_DIR}/MovingBodies/ERF_GTestActuatorSpreading.cpp
-      ${CMAKE_CURRENT_SOURCE_DIR}/MovingBodies/ERF_GTestBodyExchange.cpp
-      ${CMAKE_CURRENT_SOURCE_DIR}/MovingBodies/ERF_GTestGaleCellHeights.cpp
-      ${CMAKE_CURRENT_SOURCE_DIR}/MovingBodies/ERF_GTestGaleUniformMeshNorm.cpp
     )
   endif()
-  if(ERF_ENABLE_OPENFAST AND ERF_OPENFAST_USE_STUB)
-    # Motivation: each turbine model is read on one rank at start-up and its checks and sizes handed to
-    # every rank; every rank must hold what reading the model itself gives, whichever rank read it.
+  if(ERF_GALE_TURBINES_DIR)
+    # GALE's turbine model (Turbines/, set up in the top-level CMakeLists.txt). This executable
+    # has no structure-model hook, so its parallel tests are added here.
+    # Motivation: a turbine's points, sent only to the ranks whose boxes they touch (BodyExchange),
+    # must give what the global sampler and spreader give; the cell heights and a uniform mesh's
+    # kernel normalisation must not depend on the rank count.
     target_sources(${erf_parallel_exe_name} PRIVATE
-      ${CMAKE_CURRENT_SOURCE_DIR}/MovingBodies/ERF_GTestModelFacts.cpp
+      ${ERF_GALE_TURBINES_DIR}/Tests/Unit/ERF_GTestBodyExchange.cpp
+      ${ERF_GALE_TURBINES_DIR}/Tests/Unit/ERF_GTestGaleCellHeights.cpp
+      ${ERF_GALE_TURBINES_DIR}/Tests/Unit/ERF_GTestGaleUniformMeshNorm.cpp
     )
-    target_compile_definitions(${erf_parallel_exe_name} PRIVATE
-      ERF_GTEST_MOVING_BODIES_CASES="${PROJECT_SOURCE_DIR}/Exec/CanonicalTests/MovingBodies")
+    # ERF's test helper ERF_GTestThrowOnAbort.H, which these tests include
+    target_include_directories(${erf_parallel_exe_name} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/MovingBodies)
+    if(ERF_ENABLE_OPENFAST AND ERF_OPENFAST_USE_STUB)
+      # Motivation: each turbine model is read on one rank at start-up and its checks and sizes handed to
+      # every rank; every rank must hold what reading the model itself gives, whichever rank read it.
+      target_sources(${erf_parallel_exe_name} PRIVATE
+        ${ERF_GALE_TURBINES_DIR}/Tests/Unit/ERF_GTestModelFacts.cpp
+      )
+      target_compile_definitions(${erf_parallel_exe_name} PRIVATE
+        ERF_GTEST_MOVING_BODIES_CASES="${PROJECT_SOURCE_DIR}/Exec/CanonicalTests/MovingBodies")
+    endif()
   endif()
   if(ERF_DIM STREQUAL "3")
     # The coefficient check and the rate maximum reduce over the ranks: check them across ranks
