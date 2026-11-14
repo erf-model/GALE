@@ -49,6 +49,19 @@ inline void make_directory_once (const std::string& dir)
 }
 
 /**
+ * Position of the last directory separator of a path, or npos when it has none: '/', and on
+ * Windows '\\' as well (a path built with std::filesystem has the native separator there).
+ */
+inline std::string::size_type last_path_separator (const std::string& path)
+{
+#ifdef _WIN32
+    return path.find_last_of("/\\");
+#else
+    return path.rfind('/');
+#endif
+}
+
+/**
  * Open a diagnostics text file for writing (the caller writes CSV or space-separated rows),
  * creating its directory (once per process, make_directory_once()). With truncate (a fresh run)
  * the file starts empty; without it (a restarted run) the rows are appended to what the run it
@@ -57,7 +70,7 @@ inline void make_directory_once (const std::string& dir)
  */
 inline bool open_log_once (std::ofstream& out, const std::string& fname, bool truncate)
 {
-    const auto slash = fname.rfind('/');
+    const auto slash = last_path_separator(fname);
     if (slash != std::string::npos) { make_directory_once(fname.substr(0, slash)); }
     bool need_header = truncate;
     if (!truncate) {
