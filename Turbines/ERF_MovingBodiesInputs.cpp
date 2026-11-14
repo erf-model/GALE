@@ -195,7 +195,7 @@ MovingBodiesInputs::read ()
 
         ppb.query("num_points_t", b.num_points_t);
         if (b.num_points_t < 2) {
-            Abort(pre + ".num_points_t must be >= 2 (points per ring: one point cannot average the in-plane force away)");
+            Abort(pre + ".num_points_t must be >= 2 (points per ring or sector: one point cannot spread a node over the azimuth)");
         }
 
         if (b.type == "openfast_turbine") {
@@ -215,12 +215,13 @@ MovingBodiesInputs::read ()
             if (b.sampling != "disk" && b.mode != "adm") {
                 Abort(pre + ".sampling = " + b.sampling + " needs mode = adm: an actuator line resolves its own induction");
             }
-            if (b.mode != "adm") { warn_inactive(ppb, pre, "num_points_t", "the rings are for mode = adm"); }
+            if (b.mode != "adm") { warn_inactive(ppb, pre, "num_points_t", "the rings and sectors are for mode = adm"); }
             ppb.query("adm_spreading", b.adm_spreading);
-            if (b.adm_spreading != "rings" && b.adm_spreading != "merged_rings") {
-                Abort(pre + ".adm_spreading must be rings or merged_rings, not '" + b.adm_spreading + "'");
+            // the names erf_actuator::adm_spreading_from_name knows (ERF_OpenFASTRotor.H, built with OpenFAST only)
+            if (b.adm_spreading != "rings" && b.adm_spreading != "merged_rings" && b.adm_spreading != "line_to_disk") {
+                Abort(pre + ".adm_spreading must be rings, merged_rings or line_to_disk, not '" + b.adm_spreading + "'");
             }
-            if (b.mode != "adm") { warn_inactive(ppb, pre, "adm_spreading", "the rings are for mode = adm"); }
+            if (b.mode != "adm") { warn_inactive(ppb, pre, "adm_spreading", "the rings and sectors are for mode = adm"); }
             b.sample_diameters_upstream = 2.0;   // turbines: two diameters, where the rotor's upstream induction is below 1 %
             ppb.query("sample_diameters_upstream", b.sample_diameters_upstream);
             if (!(b.sample_diameters_upstream > 0.0) || !std::isfinite(b.sample_diameters_upstream)) {

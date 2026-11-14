@@ -240,7 +240,7 @@ tip_cells_per_step (const erf_openfast::TurbineState& t, Real dt, Real dx)
 int
 turbine_points (const erf_openfast::TurbineState& t, const std::string& mode, int num_points_t, bool nacelle,
                 const KernelWidths& w, std::vector<Real>& pos, std::vector<Real>& force, std::vector<Real>& eps,
-                bool merged_rings)
+                AdmSpreading spreading)
 {
     AMREX_ALWAYS_ASSERT_WITH_MESSAGE(mode == "adm" || mode == "alm", "turbine_points: mode must be adm or alm");
     AMREX_ALWAYS_ASSERT_WITH_MESSAGE(3 * eps.size() == pos.size(), "turbine_points: one width per point already listed");
@@ -248,7 +248,7 @@ turbine_points (const erf_openfast::TurbineState& t, const std::string& mode, in
     auto widen = [&pos, &eps] (Real e) { eps.resize(pos.size() / 3, e); };
     const std::size_t before = pos.size() / 3;
     if (mode == "adm") {
-        adm_rings(t, num_points_t, pos, force, merged_rings);
+        adm_rings(t, num_points_t, pos, force, spreading);
     } else {
         alm_points(t, pos, force);
     }
@@ -266,9 +266,18 @@ turbine_points (const erf_openfast::TurbineState& t, const std::string& mode, in
     return n_rotor;
 }
 
+bool
+adm_spreading_from_name (const std::string& name, AdmSpreading& spreading)
+{
+    if (name == "rings") { spreading = AdmSpreading::rings; return true; }
+    if (name == "merged_rings") { spreading = AdmSpreading::merged_rings; return true; }
+    if (name == "line_to_disk") { spreading = AdmSpreading::line_to_disk; return true; }
+    return false;
+}
+
 void
 adm_rings (const erf_openfast::TurbineState& t, int num_points_t,
-           std::vector<Real>& pos, std::vector<Real>& force, bool merged)
+           std::vector<Real>& pos, std::vector<Real>& force, AdmSpreading spreading)
 {
     AMREX_ALWAYS_ASSERT_WITH_MESSAGE(num_points_t >= 1, "adm_rings: num_points_t must be >= 1");
     const std::array<Real,3>& n = t.hub_axis;
@@ -279,9 +288,9 @@ adm_rings (const erf_openfast::TurbineState& t, int num_points_t,
     if (t.num_force_nodes > 0) {
         for (int d = 0; d < 3; ++d) { pos.push_back(t.force_pos[d]); force.push_back(-t.force[d]); }
     }
-    // a blade node's place and force: its distance along the shaft and radius in the rotor plane, and its
-    // force on the fluid in (axial, radial, tangential)
-    struct NodeRing { Real rn{0.0}, r{0.0}, f_ax{0.0}, f_rad{0.0}, f_tan{0.0}; };
+    // a blade node's place and force: its distance along the shaft, its radius and azimuth (from e1
+    // towards e2) in the rotor plane, and its force on the fluid in (axial, radial, tangential)
+    struct NodeRing { Real rn{0.0}, r{0.0}, az{0.0}, f_ax{0.0}, f_rad{0.0}, f_tan{0.0}; };
     auto node_ring = [&] (int nd) {
         std::array<Real,3> rv{{0.0, 0.0, 0.0}}, f{{0.0, 0.0, 0.0}};
         for (int d = 0; d < 3; ++d) {
@@ -299,6 +308,7 @@ adm_rings (const erf_openfast::TurbineState& t, int num_points_t,
             that = {{n[1]*rhat[2] - n[2]*rhat[1], n[2]*rhat[0] - n[0]*rhat[2], n[0]*rhat[1] - n[1]*rhat[0]}};
             g.f_rad = f[0]*rhat[0] + f[1]*rhat[1] + f[2]*rhat[2];
             g.f_tan = f[0]*that[0] + f[1]*that[1] + f[2]*that[2];
+            g.az = std::atan2(rhat[0]*e2[0] + rhat[1]*e2[1] + rhat[2]*e2[2], rhat[0]*e1[0] + rhat[1]*e1[1] + rhat[2]*e1[2]);
         }
         return g;
     };
@@ -318,8 +328,49 @@ adm_rings (const erf_openfast::TurbineState& t, int num_points_t,
     };
     const int nfbp = t.num_force_pts_blade;
     const int nfb = t.num_blades * nfbp;
-    if (!merged) {
+    if (spreading == AdmSpreading::rings) {
         for (int nd = 1; nd <= nfb && nd < t.num_force_nodes; ++nd) { ring(node_ring(nd)); }
+        return;
+    }
+    if (spreading == AdmSpreading::line_to_disk) {
+        // one sector per blade node, from the previous blade's azimuth to the next blade's
+        // (one blade has no neighbour: its sector would wrap the circle twice)
+        if (t.num_blades < 2) {
+            amrex::Abort("erf.moving_bodies." + t.name + ".adm_spreading = line_to_disk: the sectors need at least two blades ("
+                         + std::to_string(t.num_blades) + " given)");
+        }
+        // a missing blade would leave its neighbours' weights without their complement
+        if (nfb >= t.num_force_nodes) {
+            amrex::Abort("erf.moving_bodies." + t.name + ".adm_spreading = line_to_disk: the sectors need every blade's force nodes ("
+                         + std::to_string(t.num_blades) + " blades of " + std::to_string(nfbp) + " nodes after the hub node, "
+                         + std::to_string(t.num_force_nodes) + " force nodes given)");
+        }
+        // the offsets from the node's azimuth and their weights, the same for every node: the midpoints
+        // of num_points_t equal intervals over +- 2 pi / N_b, weighted with cos^2(N_b dtheta / 4) over
+        // the sum of the weights, added in point order
+        const Real half = Real(2.0) * static_cast<Real>(pi) / static_cast<Real>(t.num_blades);
+        std::vector<Real> dth(num_points_t), wgt(num_points_t);
+        Real sum = 0.0;
+        for (int j = 0; j < num_points_t; ++j) {
+            dth[j] = half * (Real(2.0) * (static_cast<Real>(j) + Real(0.5)) / static_cast<Real>(num_points_t) - Real(1.0));
+            const Real c = std::cos(Real(0.25) * static_cast<Real>(t.num_blades) * dth[j]);
+            wgt[j] = c * c;
+            sum += wgt[j];
+        }
+        for (int nd = 1; nd <= nfb && nd < t.num_force_nodes; ++nd) {
+            const NodeRing g = node_ring(nd);
+            for (int j = 0; j < num_points_t; ++j) {
+                const Real th = g.az + dth[j];
+                const Real c = std::cos(th), s = std::sin(th);
+                std::array<Real,3> rj;
+                for (int d = 0; d < 3; ++d) { rj[d] = c * e1[d] + s * e2[d]; }   // radial unit vector at th
+                const std::array<Real,3> tj{{n[1]*rj[2] - n[2]*rj[1], n[2]*rj[0] - n[0]*rj[2], n[0]*rj[1] - n[1]*rj[0]}};
+                for (int d = 0; d < 3; ++d) {
+                    pos.push_back(t.hub_pos[d] + g.rn * n[d] + g.r * rj[d]);
+                    force.push_back((g.f_ax * n[d] + g.f_rad * rj[d] + g.f_tan * tj[d]) * (wgt[j] / sum));
+                }
+            }
+        }
         return;
     }
     // one ring per radial station: blade b's node at station k is 1 + b nfbp + k

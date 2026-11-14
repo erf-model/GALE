@@ -1760,18 +1760,26 @@ MovingBodies::spread_sources (const MultiFab& U, const MultiFab* z_phys_nd,
             // the rotor's points, the tower's loads (OpenFAST's tower force nodes, if the model has
             // them and the user asked for them) and the nacelle drag point at the hub, in either
             // mode, each with its own kernel
+            erf_actuator::AdmSpreading spreading = erf_actuator::AdmSpreading::rings;
+            if (!erf_actuator::adm_spreading_from_name(m_turbine_in[i].adm_spreading, spreading)) {
+                Abort("erf.moving_bodies." + turbs[i].name + ".adm_spreading = " + m_turbine_in[i].adm_spreading + " has no point layout");
+            }
             const int n_rotor = erf_actuator::turbine_points(turbs[i], m_turbine_mode[i], m_turbine_points_t[i],
                                                              m_turbine_in[i].nacelle_cd > 0.0, m_turbine_in[i].kernel_widths(dx0),
-                                                             pos[i], force[i], widths[i], m_turbine_in[i].adm_spreading == "merged_rings");
+                                                             pos[i], force[i], widths[i], spreading);
             if (!m_axis_checked) {
-                // the rings counted from the points built, so the line shows the layout in use
+                // the rings or sectors counted from the points built, so the line shows the layout in use
                 const auto& n = turbs[i].hub_axis;
                 std::ostringstream line;
                 line << "erf.moving_bodies." << turbs[i].name << ": hub axis (" << n[0] << ", " << n[1] << ", " << n[2]
                      << "), blade force nodes within " << axis_deg << " degrees of the rotor plane, ";
                 if (m_turbine_mode[i] == "adm") {
-                    line << std::max(n_rotor - 1, 0) / m_turbine_points_t[i] << " rings of " << m_turbine_points_t[i] << " points"
-                         << ((m_turbine_in[i].adm_spreading == "merged_rings") ? ", one per radial station for all the blades\n" : "\n");
+                    // rings and sectors alike: num_points_t points each, after the hub point
+                    line << std::max(n_rotor - 1, 0) / m_turbine_points_t[i]
+                         << ((spreading == erf_actuator::AdmSpreading::line_to_disk) ? " blade-node sectors of " : " rings of ")
+                         << m_turbine_points_t[i] << " points"
+                         << ((spreading == erf_actuator::AdmSpreading::merged_rings) ? ", one per radial station for all the blades\n"
+                             : (spreading == erf_actuator::AdmSpreading::line_to_disk) ? ", from the previous blade to the next (line_to_disk)\n" : "\n");
                 } else {
                     line << "actuator line of " << turbs[i].num_blades * turbs[i].num_force_pts_blade
                          << " blade points, tip radius " << erf_actuator::tip_radius(turbs[i]) << " m\n";

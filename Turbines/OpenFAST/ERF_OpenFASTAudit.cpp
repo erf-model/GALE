@@ -202,12 +202,17 @@ audit_geometry (const TurbineState& t, const MovingBodyInputs& b, const KernelWi
                                 " m cells); the rotor is under-resolved below about 8"});
         }
         // the actuator-disk rings: their points at the tip must overlap, or the disk becomes a ring of blobs
+        // (with adm_spreading = line_to_disk the points of a blade node span the two blade spacings around it, 4 pi / N_b)
         if (b.mode == "adm" && b.num_points_t > 0) {
-            const Real ring_spacing = Real(2.0) * Real(3.14159265358979323846) * R / static_cast<Real>(b.num_points_t);
+            const bool sectors = (b.adm_spreading == "line_to_disk" && t.num_blades > 0);
+            const Real span = sectors ? Real(4.0) * Real(3.14159265358979323846) / static_cast<Real>(t.num_blades)
+                                      : Real(2.0) * Real(3.14159265358979323846);
+            const Real ring_spacing = span * R / static_cast<Real>(b.num_points_t);
             if (ring_spacing > Real(2.0) * epsilon) {
-                f.push_back({false, "actuator-disk ring points " + fmt(ring_spacing) + " m apart at the tip are more than two kernel "
+                f.push_back({false, std::string("actuator-disk ") + (sectors ? "sector" : "ring") + " points " + fmt(ring_spacing) +
+                                    " m apart at the tip are more than two kernel "
                                     "widths (" + fmt(epsilon) + " m) apart, so the disk's force is lumpy there; raise " + key + "num_points_t to "
-                                    "about " + std::to_string(static_cast<int>(std::ceil(Real(3.14159265358979323846) * R / epsilon))) +
+                                    "about " + std::to_string(static_cast<int>(std::ceil(Real(0.5) * span * R / epsilon))) +
                                     " so the disk is smooth"});
             }
         }

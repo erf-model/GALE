@@ -48,6 +48,74 @@ carries the sums:
   tip changes by about :math:`(\Delta a / \epsilon)^2` of itself. This is small when
   :math:`\epsilon` is several times the spread in deflection.
 
+Line to disk
+~~~~~~~~~~~~
+
+With ``adm_spreading = line_to_disk`` each blade node is spread over a sector of its circle instead
+of the whole circle: from the previous blade's azimuth to the next blade's. A node at azimuth
+:math:`\theta_0`, radius :math:`r` and distance :math:`a` along the shaft becomes
+:math:`N_t` = ``num_points_t`` points at the same :math:`r` and :math:`a`, at the azimuths
+:math:`\theta_0 + \Delta\theta_j`:
+
+.. math::
+
+   \Delta\theta_j = \frac{2\pi}{N_b} \left( \frac{2 (j + \tfrac12)}{N_t} - 1 \right), \qquad
+   w_j = \frac{\cos^2 (N_b \Delta\theta_j / 4)}{\sum_{m=0}^{N_t - 1} \cos^2 (N_b \Delta\theta_m / 4)}, \qquad
+   j = 0, \dots, N_t - 1.
+
+Here :math:`N_b` is the number of blades. Point :math:`j` carries the fraction :math:`w_j` of the
+node's force. The :math:`\cos^2` factor is 1 at the blade and falls to 0 at its two neighbours. The sectors need
+at least two blades. The axial component
+is kept; the radial and tangential components turn with each point's azimuth, as for the rings.
+
+- **Kept exactly:** the force along the shaft and the torque about it, since :math:`\sum_j w_j = 1`
+  for every :math:`N_t` and every point of a node has the node's radius.
+- **Between two blades:** the weight of one blade is :math:`\cos^2` and that of its neighbour
+  :math:`\sin^2` of the same angle, so they add to a constant. Equally spaced blades with equal loads give
+  an even disk, the one the rings give. With an even :math:`N_t` the neighbours' points fall on the
+  same azimuths, and the disk is an even ring of :math:`N_b N_t / 2` azimuths. With an odd
+  :math:`N_t` the :math:`N_b N_t` points carry unequal weights, and the disk is even after the
+  kernel spreads them (ripple 0.175 of the mean against 0.169 at a spacing of :math:`2 \epsilon`).
+  The sector is centred on the node's own azimuth, so blades whose azimuths differ from the even
+  spacing by :math:`\delta` leave a ripple of :math:`N_b \delta / 4` in the summed weight; the
+  totals stay exact.
+- **Blades with different loads** (shear, veer, yaw, a tower passage, a partial wake): the disk's
+  load varies smoothly with the azimuth, follows the blades and turns with the rotor. The rings
+  average this variation away.
+- **In-plane force:** kept in part. A node's radial or tangential force, turned over its sector,
+  sums to :math:`\kappa` times itself, with
+  :math:`\kappa = \frac{N_b}{2\pi} \int_{-2\pi/N_b}^{2\pi/N_b} \cos^2 (N_b \Delta\theta / 4)
+  \cos \Delta\theta \, d\Delta\theta`: :math:`27 \sqrt{3} / (20 \pi) = 0.744` for three blades and 0.5 for
+  two. This is the value for many points; 16 points give it within :math:`2 \times 10^{-5}`, and
+  2 points give 0.5 for three blades and 0 for two. The rings give 0.
+- **Points:** a sector spans :math:`4\pi / N_b`, so its points are :math:`4 \pi r / (N_b N_t)`
+  apart, against :math:`2 \pi r / N_t` on a ring. The start-up audit asks for about
+  :math:`2 \pi R / (N_b \epsilon)` points for a tip radius :math:`R`. The point count is that of
+  ``rings`` at the same ``num_points_t``, and the spacing is :math:`2 / N_b` of the ring's. At a
+  spacing of :math:`2 \epsilon`, the audit's threshold, the summed kernel has a ripple of 17 % of
+  its mean at the tip, for sectors and rings alike; :math:`1.5 \epsilon` gives 2.5 % and
+  :math:`\epsilon` gives 0.01 %.
+- **Limit:** the load pattern is that of the blade positions OpenFAST returned for the step and is
+  held over the ERF step, as for an actuator line. The pattern is smooth over a blade spacing, so
+  the step is not tied to the tip crossing one cell; it is tied to the rotor's turn per step,
+  :math:`\Omega \Delta t`. Held at the end of the step, the part of the load that differs between
+  the blades has an error of about :math:`N_b \Omega \Delta t / (4 \sqrt{3})` (L2 over the azimuth,
+  against the step mean): 11 % at 15 degrees per step and 22 % at 30 degrees for three blades. Keep
+  :math:`\Omega \Delta t` below about :math:`\pi / (2 N_b)`. Equal loads have no such error. The
+  code does not check this.
+- **Sampling:** all three sampling modes work with the sectors. The corrected disk
+  (``sampling = disk_corrected``) scales the node velocities by one factor for the rotor, from the
+  rotor's thrust; it was calibrated with the rings. For blades with equal loads the sectors give
+  the same disk, so the calibration holds; it was not repeated for blades with different loads.
+
+The azimuthal weight is that of the ``lineToDiskGaussian3D`` projection of SOWFA-6
+(`horizontalAxisWindTurbinesALMOpenFAST.C, line 3388, commit 4069483
+<https://github.com/SOWFA/SOWFA-6/blob/406948345692c4a83039c49754d57951b68969d0/src/turbineModels/turbineModelsOpenFAST/horizontalAxisWindTurbinesALMOpenFAST/horizontalAxisWindTurbinesALMOpenFAST.C#L3388>`_),
+by Matt Churchfield and the SOWFA developers at NREL. SOWFA evaluates it with an analytic
+kernel in cylindrical coordinates with separate axial and radial widths, and applies each node's
+Cartesian force without turning it. GALE places points and spreads them with its own isotropic
+Gaussian kernel (:doc:`CouplingLoop`), and turns the in-plane components so the torque is kept.
+
 Sampling modes
 --------------
 

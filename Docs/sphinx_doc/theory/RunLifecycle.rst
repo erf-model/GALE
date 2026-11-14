@@ -46,7 +46,8 @@ known, every OpenFAST turbine is audited. Findings are printed together under
        than 30°
 
 For a disk the audit also notes rings whose points lie more than two kernel widths apart, where the
-ring's force breaks into separate blobs. The stub's deck is not an OpenFAST primary file, so its
+ring's force breaks into separate blobs. With ``adm_spreading = line_to_disk`` it checks the spacing
+of a sector's points instead (:doc:`ActuatorDisk`). The stub's deck is not an OpenFAST primary file, so its
 model-file checks are skipped with a note. The tip-travel limit and the hub-axis check follow at
 later steps.
 

@@ -170,6 +170,18 @@ TEST(OpenFASTAudit, GeometryChecksTheRotorAgainstTheDomainAndTheMesh)
     b.num_points_t = 48;
     EXPECT_TRUE(erf_openfast::audit_geometry(t, b, same(20.0), plo, phi, {{10.0, 10.0, 10.0}}, per, 0.0).empty());
     b.num_points_t = 16;
+    // adm_spreading = line_to_disk: a node's 16 points span two blade spacings (4 pi / 3 for three blades), so they
+    // sit 31 m apart at the tip, within two kernel widths; 12 points sit 42 m apart: a note naming the sectors and
+    // the 13 points (2 pi R / (3 epsilon), rounded up) that close the gaps
+    b.adm_spreading = "line_to_disk";
+    EXPECT_EQ(t.num_blades, 3);
+    EXPECT_TRUE(erf_openfast::audit_geometry(t, b, same(20.0), plo, phi, {{10.0, 10.0, 10.0}}, per, 0.0).empty());
+    b.num_points_t = 12;
+    f = erf_openfast::audit_geometry(t, b, same(20.0), plo, phi, {{10.0, 10.0, 10.0}}, per, 0.0);
+    EXPECT_EQ(fatal_count(f), 0); EXPECT_TRUE(mentions(f, "sector points")); EXPECT_TRUE(mentions(f, "num_points_t to about 13 "));
+    EXPECT_FALSE(mentions(f, "ring points"));
+    b.adm_spreading = "rings";
+    b.num_points_t = 16;
     // the rotor cuts the ground / the top: fatal
     f = erf_openfast::audit_geometry(rotor("T1", {{750.0, 600.0, 100.0}}, 120.0, 10), b, same(20.0), plo, phi, {{10.0, 10.0, 10.0}}, per, 0.0);
     EXPECT_EQ(fatal_count(f), 1); EXPECT_TRUE(mentions(f, "below the ground"));

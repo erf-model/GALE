@@ -210,7 +210,7 @@ private:
     std::vector<std::unique_ptr<erf_actuator::PrescribedCtDisk>> m_disks;
     std::vector<std::string> m_turbine_mode;                           //!< per OpenFAST turbine: adm | alm | none
     std::vector<MovingBodyInputs> m_turbine_in;                        //!< per OpenFAST turbine: its inputs (nacelle, density)
-    std::vector<int> m_turbine_points_t;                               //!< ring points per turbine (adm)
+    std::vector<int> m_turbine_points_t;                               //!< points per ring or sector, per turbine (adm)
     std::vector<amrex::Real> m_disk_epsilon;                           //!< per prescribed-Ct disk: its spreading width (dx units)
     bool m_src_defined{false};
     amrex::MultiFab m_src_x, m_src_y, m_src_z;                         //!< anchor-level momentum sources
