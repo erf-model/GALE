@@ -116,6 +116,24 @@ TEST(OpenFASTAudit, ReadsDensityGravityAndModuleFilesFromTheModel)
     EXPECT_TRUE(erf_openfast::openfast_module_path(stub, "AeroFile").empty());
 }
 
+TEST(OpenFASTAudit, AQuotedValueMayHoldSpaces)
+{
+    const auto dir = scratch_dir("quoted");
+    const std::string fst = write(dir, "q.fst",
+        "\"my models/ad 15.dat\"  AeroFile  - x\n  \"ed.dat\"   EDFile  - x\n\"\"  SubFile  - x\n"
+        "\"no closing quote  InflowFile  - x\nunquoted.dat  ServoFile  - x\n\"a\"b  HydroFile  - x\n");
+    EXPECT_EQ(erf_openfast::openfast_value(fst, "AeroFile"), "my models/ad 15.dat");
+    EXPECT_EQ(erf_openfast::openfast_value(fst, "EDFile"), "ed.dat");            // leading blanks before the quote
+    EXPECT_TRUE(erf_openfast::openfast_value(fst, "SubFile").empty());
+    EXPECT_TRUE(erf_openfast::openfast_value(fst, "InflowFile").empty());        // the line is skipped
+    EXPECT_EQ(erf_openfast::openfast_value(fst, "ServoFile"), "unquoted.dat");
+    EXPECT_TRUE(erf_openfast::openfast_value(fst, "HydroFile").empty());         // the name is "b", not HydroFile
+    const std::string beside = erf_openfast::openfast_module_path(fst, "AeroFile");
+    ASSERT_GE(beside.size(), std::string("my models/ad 15.dat").size());
+    EXPECT_EQ(beside.substr(beside.size() - 19), "my models/ad 15.dat");
+    EXPECT_EQ(beside.substr(0, beside.size() - 19), fst.substr(0, fst.size() - 5));   // the directory of q.fst
+}
+
 TEST(OpenFASTAudit, ModelChecksFlagDensityAerodynamicsGravityAndTowerAero)
 {
     const auto dir = scratch_dir("model");
