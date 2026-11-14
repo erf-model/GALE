@@ -204,6 +204,25 @@ TEST(OwnedRunningStats, TheRowsWithABodyColumnAreTheFilesRowsAfterIt)
     EXPECT_EQ(n, 2);
 }
 
+TEST(LogStreams, TheDirectoryOfAPathEndsAtItsLastSeparator)
+{
+    // open_log_once() makes the directory in front of the last separator before it opens the file
+    const auto npos = std::string::npos;
+    EXPECT_EQ(erf_actuator::last_path_separator("farm_erf.csv"), npos);
+    EXPECT_EQ(erf_actuator::last_path_separator("a/bc/farm_erf.csv"), 4u);
+    EXPECT_EQ(erf_actuator::last_path_separator("/farm_erf.csv"), 0u);
+#ifdef _WIN32
+    // a path from std::filesystem has backslashes on Windows; mixed paths end at whichever comes last
+    EXPECT_EQ(erf_actuator::last_path_separator("C:\\a\\farm_erf.csv"), 4u);
+    EXPECT_EQ(erf_actuator::last_path_separator("a/b\\farm_erf.csv"), 3u);
+    EXPECT_EQ(erf_actuator::last_path_separator("a\\b/farm_erf.csv"), 3u);
+#else
+    // elsewhere a backslash is an ordinary character of a file name
+    EXPECT_EQ(erf_actuator::last_path_separator("a/b\\farm_erf.csv"), 1u);
+    EXPECT_EQ(erf_actuator::last_path_separator("a\\farm_erf.csv"), npos);
+#endif
+}
+
 TEST(LogStreams, AFileIsOpenedOnceAndAppendedToAfterARestart)
 {
     const auto dir = gtest_scratch_root() / "erf_gtest_logstreams";
