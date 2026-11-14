@@ -109,7 +109,9 @@ is kept; the radial and tangential components turn with each point's azimuth, as
   the same disk, so the calibration holds; it was not repeated for blades with different loads.
 
 The azimuthal weight is that of the ``lineToDiskGaussian3D`` projection of SOWFA-6
-(``horizontalAxisWindTurbinesALMOpenFAST.C``, commit 4069483). SOWFA evaluates it with an analytic
+(`horizontalAxisWindTurbinesALMOpenFAST.C, line 3388, commit 4069483
+<https://github.com/SOWFA/SOWFA-6/blob/406948345692c4a83039c49754d57951b68969d0/src/turbineModels/turbineModelsOpenFAST/horizontalAxisWindTurbinesALMOpenFAST/horizontalAxisWindTurbinesALMOpenFAST.C#L3388>`_),
+by Matt Churchfield and the SOWFA developers at NREL. SOWFA evaluates it with an analytic
 kernel in cylindrical coordinates with separate axial and radial widths, and applies each node's
 Cartesian force without turning it. GALE places points and spreads them with its own isotropic
 Gaussian kernel (:doc:`CouplingLoop`), and turns the in-plane components so the torque is kept.
