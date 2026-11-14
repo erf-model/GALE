@@ -109,7 +109,13 @@ when the line's kernel is wider than the optimal one, and vanishes when they coi
   OpenFAST's at each force node.
 - **Span grid.** The sum runs over a fine grid of spacing :math:`\epsilon_{opt}` / ``fllc_eps_dr``,
   onto which :math:`\mathbf{G}/|\mathbf{v}|` and :math:`\epsilon_{opt}` are interpolated, since the
-  optimal kernel is far narrower than the node spacing.
+  optimal kernel is far narrower than the node spacing. The grid ends at the tip: a step that lands
+  within :math:`10^{-6}` of a step short of it ends there, so the last spacing is never a rounding
+  residue. The error in :math:`\mathbf{u}_{opt}` against a converged grid depends on how much load
+  the tip carries. On the IEA 15 MW blade (50 to 300 points, :math:`\epsilon_{opt}/c` from 0.10 to
+  0.25) with a load that stays finite at the tip, ``fllc_eps_dr`` = 1 gives 13 to 43 %, 2 up to 7 %,
+  and 3 (the default) under 2 %. With a load that falls to zero at the tip, 1 gives 1 to 5 %.
+- **Stability.** See :ref:`fllc-stability`.
 - **Timing.** Computed from the loads of the step just taken, applied after sampling by linear
   interpolation along the span, starting at ``fllc_start_time``.
 - **State.** Checkpointed. ``<output_root>_fllc.csv`` records its largest and RMS value.
@@ -117,3 +123,73 @@ when the line's kernel is wider than the optimal one, and vanishes when they coi
   ``AirDens``.
 
 The implementation follows Kynema's variable-chord operator.
+
+.. _fllc-stability:
+
+Stability of the relaxation
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+**Why.** The correction changes the velocity the blade sees, and so its lift, and the lift sets the
+next correction. Too large a ``fllc_relax`` makes this loop overshoot and grow from one update to
+the next.
+
+**What sets the bound.** A correction :math:`\Delta u` along the lift direction changes the angle
+of attack by :math:`\Delta u/|\mathbf{v}|`. The lift per unit span per unit density then changes by
+:math:`\delta G = \tfrac{1}{2}\,c\,C_{L\alpha}\,|\mathbf{v}|\,\Delta u`, so the source
+:math:`G/|\mathbf{v}|` changes by :math:`\tfrac{1}{2}\,c\,C_{L\alpha}\,\Delta u`. A span-wise
+wave :math:`\Delta u \propto \cos(q r)` on a long blade of constant chord gives back the target
+
+.. math::
+
+   \delta(\mathbf{u}_{opt} - \mathbf{u}_{les}) = \lambda(q)\,\Delta u, \qquad
+   \lambda(q) = -\frac{c\,C_{L\alpha}}{4\pi}\left[\hat{k}(q, \epsilon_{opt}) - \hat{k}(q, \epsilon)\right],
+   \qquad \hat{k}(q, \epsilon) = \frac{\pi |q|}{2}\,\mathrm{erfc}\!\left(\frac{|q|\,\epsilon}{2}\right),
+
+where :math:`\hat{k}` is the Fourier transform of :math:`k`, :math:`c` the chord,
+:math:`C_{L\alpha}` the lift slope, :math:`\epsilon` the line's kernel and
+:math:`\epsilon_{opt} = \epsilon_c\,c` with :math:`\epsilon_c` = ``fllc_eps_chord``. The minus sign
+is the downwash: more lift, more correction against it. The update multiplies each wave by
+:math:`1 - f + f\lambda`, which stays within :math:`(-1, 1)` while :math:`f < 2/(1 - \lambda)`.
+:math:`\hat{k}(q, \epsilon)\,\epsilon` peaks at :math:`\pi x^* \mathrm{erfc}(x^*) = 0.7552`, where
+:math:`x^* = |q|\epsilon/2 = 0.5316` solves :math:`\mathrm{erfc}(x) = 2x\,e^{-x^2}/\sqrt{\pi}`.
+With a lift slope :math:`C_{L\alpha} = s \cdot 2\pi` and :math:`\epsilon \gg \epsilon_{opt}`, the
+most negative :math:`\lambda` is :math:`-0.7552\,s/(2\epsilon_c)`, and the loop is stable for
+:math:`f < 4\epsilon_c/(2\epsilon_c + 0.7552\,s)`. Tabulated airfoil slopes near zero lift exceed
+the thin-airfoil :math:`2\pi`: the IEA 15 MW polars reach :math:`s` = 1.37. The check therefore
+allows for :math:`s` = 1.4:
+
+.. math::
+
+   f < f_{max} = \frac{4\,\epsilon_c}{2\,\epsilon_c + 1.4 \times 0.7552}
+               = \frac{4\,\epsilon_c}{2\,\epsilon_c + 1.057}.
+
+The run stops at start-up when ``fllc_relax`` :math:`\ge f_{max}`.
+
+.. list-table:: :math:`f_{max}` from the formula and from the eigenvalues of the discrete loop on the IEA 15 MW blade
+   :header-rows: 1
+   :widths: 16 14 35 35
+
+   * - ``fllc_eps_chord``
+     - Formula, :math:`s` = 1.4
+     - Discrete, :math:`s` = 1.4
+     - Discrete, :math:`s` = 1 (formula 0.797, 0.569, 0.419)
+   * - 0.25
+     - 0.642
+     - 0.65 to 0.73
+     - 0.80 to 0.89
+   * - 0.15
+     - 0.442
+     - 0.45 to 0.51
+     - 0.58 to 0.65
+   * - 0.10
+     - 0.318
+     - 0.33 to 0.38
+     - 0.43 to 0.50
+
+The discrete values use 50 to 300 points per blade and :math:`\epsilon` from 5 to 10 m. For slopes
+up to :math:`s \cdot 2\pi` the formula with that :math:`s` is a lower bound in every case tried
+(320 cases, 20 to 1000 points, run kernels 2 to 20 m): a finite number of points cannot carry the
+shortest waves, and a narrower run kernel only raises the bound. The margin goes to about zero as
+the number of points grows. The bound assumes quasi-steady lift that answers the velocities of the
+same update; loads that lag the velocities by one update lower it to about :math:`1/|\lambda|`.
+The default 0.1 is stable for ``fllc_eps_chord`` above 0.028.

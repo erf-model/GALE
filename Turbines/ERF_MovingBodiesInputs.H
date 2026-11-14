@@ -67,10 +67,10 @@ struct MovingBodyInputs
     bool fllc_automatic{false};              //!< fllc = automatic: the correction on, with the AutomaticFLLC settings
     amrex::Real epsilon_diameters{0.0};      //!< > 0 (fllc = automatic): epsilon is this many rotor diameters, set in cells by
                                              //!< MovingBodies once the anchor level's spacing is known (epsilon is -1 until then)
-    amrex::Real fllc_relax{0.1};             //!< relaxation factor of the correction, in (0, 1]
+    amrex::Real fllc_relax{0.1};             //!< relaxation factor of the correction, in (0, 1] and below FLLC::max_stable_relax(fllc_eps_chord)
     amrex::Real fllc_start_time{0.0};        //!< the correction starts at this time (s)
     amrex::Real fllc_eps_chord{0.25};        //!< optimal kernel width in chords
-    amrex::Real fllc_eps_dr{1.0};            //!< the optimal kernel width over the fine-grid spacing of the correction (spacing = eps_opt / fllc_eps_dr)
+    amrex::Real fllc_eps_dr{3.0};            //!< the optimal kernel width over the fine-grid spacing of the correction (spacing = eps_opt / fllc_eps_dr)
     // ct_disk
     amrex::Real rotor_radius{0.0};           //!< disk radius (m)
     amrex::Real hub_height{0.0};             //!< disk centre above the base (m)
@@ -115,7 +115,7 @@ struct MovingBodyInputs
  *   erf.moving_bodies.T1.nacelle_area = 60.0            (m^2; default 0)
  *   erf.moving_bodies.T1.fllc        = true               (alm: filtered lifting-line correction; the alm default, set false to run without it;
  *                                                          automatic: on, with epsilon = 0.035 D and the other AutomaticFLLC settings)
- *   erf.moving_bodies.T1.fllc_relax  = 0.1                fllc_start_time = 0, fllc_eps_chord = 0.25, fllc_eps_dr = 1
+ *   erf.moving_bodies.T1.fllc_relax  = 0.1                fllc_start_time = 0, fllc_eps_chord = 0.25, fllc_eps_dr = 3
  *   erf.moving_bodies.T1.output_root = moving_bodies/T1
  *   erf.moving_bodies.T1.epsilon     = 2.0                (spreading width of the rotor's points, dx units; not with fllc = automatic)
  *   erf.moving_bodies.T1.epsilon_tower   = 2.0            (tower force nodes, needs num_force_points_tower > 0; default epsilon)

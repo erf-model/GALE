@@ -82,10 +82,11 @@ erf.moving_bodies.T1.fllc = true                   # true | false | automatic; d
                                                    #   fllc_eps_chord = 0.15, fllc_eps_dr = 3,
                                                    #   fllc_start_time = 5 s, num_force_points_blade
                                                    #   = 300; giving any of those with it aborts
-erf.moving_bodies.T1.fllc_relax      = 0.1         # (0, 1]: relaxation of the correction
+erf.moving_bodies.T1.fllc_relax      = 0.1         # (0, 1]: relaxation of the correction; with fllc on,
+                                                   #   below 4 eps_chord / (2 eps_chord + 1.057) (0.642 at 0.25)
 erf.moving_bodies.T1.fllc_start_time = 0.0         # >= 0 (s, simulation time). Excludes automatic
 erf.moving_bodies.T1.fllc_eps_chord  = 0.25        # > 0 (chords): optimal kernel width. Excludes automatic
-erf.moving_bodies.T1.fllc_eps_dr     = 1.0         # > 0: span spacing = optimal width / fllc_eps_dr.
+erf.moving_bodies.T1.fllc_eps_dr     = 3.0         # > 0: span spacing = optimal width / fllc_eps_dr.
                                                    #   Excludes automatic
 
 # =================================================================================================

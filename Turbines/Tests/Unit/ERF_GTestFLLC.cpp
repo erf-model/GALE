@@ -1,7 +1,8 @@
 // The filtered lifting-line correction: its kernel, the span interpolation, the induced
 // velocity of an elliptic lift distribution (the classical uniform downwash in the narrow-kernel
 // limit), a zero correction when the run's kernel is the optimal one, a downwash correction
-// when it is wider, the relaxation, and the state round trip.
+// when it is wider, the relaxation, the state round trip, the fine grid at the tip and the
+// stability bound of the relaxation.
 
 #include <array>
 #include <cmath>
@@ -188,4 +189,76 @@ TEST(FLLC, CorrectionVanishesAtTheOptimalKernelAndIsADownwashForAWiderOne)
     EXPECT_EQ(shifted.span()[3], relaxed.span()[3]);
     EXPECT_EQ(shifted.num_fine_points(), relaxed.num_fine_points());
     EXPECT_EQ(shifted.fine_span().back(), relaxed.fine_span().back());
+}
+
+// Ten steps of 0.1 added up end at 0.9999999999999999, one rounding short of the tip: the grid must
+// end at the tip with a full last step, not add the tip one rounding beyond its last point
+TEST(FLLC, FineGridEndsAtTheTipWithoutARoundingResidue)
+{
+    const std::vector<Real> r{0.0, 1.0}, eps{0.1, 0.1};
+    const auto rf = FLLC::fine_grid(r, eps, 1.0);
+    ASSERT_EQ(rf.size(), 11u);
+    EXPECT_EQ(rf.back(), Real(1.0));
+    EXPECT_NEAR(rf[rf.size()-1] - rf[rf.size()-2], Real(0.1), tol());
+    // the same over a long span with many uneven steps: no near-duplicate point (a step below 1e-3 of the smallest one)
+    std::vector<Real> r2, e2;
+    for (int i = 0; i <= 50; ++i) { r2.push_back(Real(4.0 + 2.4 * i)); e2.push_back(Real(0.25 * (5.0 - 0.09 * i))); }
+    for (const Real edr : {Real(1.0), Real(3.0), Real(7.0)}) {
+        const auto g = FLLC::fine_grid(r2, e2, edr);
+        EXPECT_EQ(g.back(), r2.back());
+        for (std::size_t j = 1; j < g.size(); ++j) {
+            EXPECT_GT(g[j] - g[j-1], Real(0.5) * e2.back() / edr * Real(1.0e-3)) << "eps_dr " << edr << " point " << j;
+        }
+        EXPECT_GT(g.back() - g[g.size()-2], Real(1.0e-6) * e2.back() / edr) << "eps_dr " << edr;
+    }
+}
+
+namespace {
+// The correction loop with a lift that answers the correction through the angle of attack: lift per
+// unit span (per unit density) L = 1/2 c Cl_alpha (alpha0 V^2 + V du_L), Cl_alpha = 1.4 x 2 pi (the
+// slope the bound allows for), du_L the
+// correction along the lift. Returns the largest change of the correction over the last update
+// after n updates, from a lift alpha0 = 0.1 rad on a constant chord.
+Real loop_change (Real relax, Real eps_chord, int n)
+{
+    const int nf = 200;
+    const Real span = 50.0, c = 4.0, V = 10.0, alpha0 = 0.1, cla = Real(1.4 * 2.0 * 3.14159265358979323846);
+    std::vector<Real> r(nf), chord(nf, c), vel(3 * nf, 0.0), force(3 * nf, 0.0);
+    for (int i = 0; i < nf; ++i) { r[i] = (i + Real(0.5)) / nf * span; vel[3*i] = V; }
+    const std::vector<Real> dr = FLLC::node_widths(r);
+    FLLC f("loop", r, chord, Real(20.0), eps_chord, Real(3.0), relax);
+    std::vector<Real> last(3 * nf, 0.0);
+    Real change = 0.0;
+    for (int it = 0; it < n; ++it) {
+        const auto& du = f.correction();
+        for (int i = 0; i < nf; ++i) {
+            const Real lift = Real(0.5) * c * cla * (alpha0 * V * V + V * du[3*i+2]);
+            force[3*i+2] = -lift * dr[i];   // on the fluid, against e_L = +z
+        }
+        last = f.correction();
+        f.update(force, vel);
+        change = 0.0;
+        for (int k = 0; k < 3 * nf; ++k) { change = std::max(change, std::abs(f.correction()[k] - last[k])); }
+    }
+    return change;
+}
+} // namespace
+
+// Below max_stable_relax the loop settles; a few per cent above it the correction grows each update.
+// The discrete bound of this 200-point blade lies 0.5 % above the formula at eps_chord 0.25 and
+// 1.2 % at 0.15 (a numpy eigenvalue sweep over 50 to 300 points: the formula is a lower bound).
+TEST(FLLC, RelaxationIsStableBelowTheBoundAndGrowsAboveIt)
+{
+    // 4 e / (2 e + 1.4 * 0.7551621776906395), evaluated outside the code
+    EXPECT_NEAR(FLLC::max_stable_relax(Real(0.25)), Real(0.6421671), Real(2.0e-6));
+    EXPECT_NEAR(FLLC::max_stable_relax(Real(0.15)), Real(0.4420778), Real(2.0e-6));
+    EXPECT_NEAR(FLLC::max_stable_relax(Real(0.10)), Real(0.3181605), Real(2.0e-6));
+    for (const Real ec : {Real(0.25), Real(0.15)}) {
+        const Real rm = FLLC::max_stable_relax(ec);
+        const Real settled = loop_change(Real(0.97) * rm, ec, 150);
+        const Real grown = loop_change(Real(1.05) * rm, ec, 150);
+        // the correction is about 0.5 m/s: settled means a change near the rounding of Real
+        EXPECT_LT(settled, sizeof(Real) == 4 ? Real(1.0e-4) : Real(1.0e-6)) << "eps_chord " << ec;
+        EXPECT_GT(grown, Real(1.0)) << "eps_chord " << ec;
+    }
 }

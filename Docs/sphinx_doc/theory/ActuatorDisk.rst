@@ -106,7 +106,9 @@ but that velocity divided by the factor of Shapiro, Gayme and Meneveau (2019, eq
 **Each step:**
 
 #. Sample :math:`u_d`, the axial velocity over the blade nodes, each weighted by its radius times
-   its share of the span.
+   its share of the span: half the distance between its two neighbours, and for the first and last
+   node the whole distance to their one neighbour. (The FLLC gives the end nodes half that
+   distance; for the axial velocity the two choices differ by less than 1 %.)
 #. Evaluate :math:`C_T` from the previous step's shaft thrust and free stream, clamped to 0.96.
 #. Set :math:`a = (1 - \sqrt{1 - C_T})/2` and :math:`U_\infty = M u_d / (1 - a)`.
 #. Scale the hub and blade node velocities by :math:`U_\infty / u_d`. Tower nodes keep the resolved

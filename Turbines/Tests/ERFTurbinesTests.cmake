@@ -1280,6 +1280,10 @@ if(ERF_ENABLE_OPENFAST AND ERF_OPENFAST_USE_STUB AND ERF_ENABLE_FFT AND ERF_ENAB
   set_tests_properties(MovingBodies_NoTimingByDefault PROPERTIES FAIL_REGULAR_EXPRESSION "Moving bodies timing")
   add_test_abort(MovingBodies_CorrectionRelaxOutOfRange ${_mb_cases}/OpenFAST_ADM_DiskCorrected OpenFAST_ADM_DiskCorrected.i
       "T1[.]correction_relax must be -1" "erf.moving_bodies.T1.correction_relax=1.5")
+  # fllc_relax at or above 4 eps_chord / (2 eps_chord + 1.057) (0.642 at the default eps_chord 0.25) makes
+  # the correction grow from one update to the next: the run stops at start-up, naming the bound
+  add_test_abort(MovingBodies_FllcRelaxAboveStabilityBound ${_mb_cases}/OpenFAST_ALM_FLLC OpenFAST_ALM_FLLC.i
+      "T1[.]fllc_relax = 0[.]65 is at or above the stability bound 0[.]642167" "erf.moving_bodies.T1.fllc_relax=0.65")
   # the actuator-line cases pass the tip-travel limit; this one must not, and must name the step that would
   add_test_abort(MovingBodies_ALMTipTravelLimit ${_mb_cases}/OpenFAST_ALM_Uniform OpenFAST_ALM_Uniform.i
       "the blade tip sweeps 0[.]9[0-9]* cells per step.*use erf[.]fixed_dt <= 0[.]0054" "erf.moving_bodies.alm_max_tip_cells=0.01")
@@ -1304,7 +1308,7 @@ if(ERF_ENABLE_OPENFAST AND ERF_OPENFAST_USE_STUB AND ERF_ENABLE_FFT AND ERF_ENAB
       "erf.moving_bodies.T1.mode=alm erf.moving_bodies.T1.fllc=false erf.moving_bodies.verify_tip_cells=1")
   foreach(_t MovingBodies_AnchorLevelAboveFinest MovingBodies_StopTimeNotWholeSteps MovingBodies_ImmersedForcingTerrainRefused MovingBodies_InitShrinkRefused MovingBodies_CtDiskDensityMismatch
              MovingBodies_MixedTimeSteps_OneRank
-             MovingBodies_FinerLevelOverTheBodies MovingBodies_FPETrapsRefused MovingBodies_CorrectionRelaxOutOfRange
+             MovingBodies_FinerLevelOverTheBodies MovingBodies_FPETrapsRefused MovingBodies_CorrectionRelaxOutOfRange MovingBodies_FllcRelaxAboveStabilityBound
              MovingBodies_ALMTipTravelLimit MovingBodies_ALMTipTravelPhysicalCells MovingBodies_ALMTipTravelStretched
              MovingBodies_ALMTipTravelPhysicalCells_Verify
              MovingBodies_StopTimeNotWholeCoarseSteps
