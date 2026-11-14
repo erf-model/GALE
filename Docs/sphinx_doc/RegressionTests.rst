@@ -148,6 +148,10 @@ stated otherwise each case checks Gold (plotfile, ``T1_flow.csv``) and the force
      - ``sampling = disk``; box parity of plotfiles and flow logs.
    * - ``OpenFAST_ADM_MergedRings``
      - ``adm_spreading = rings`` vs ``merged_rings``: plotfiles agree to :math:`10^{-12}` relative and absolute; 20 rings vs 60 (``Tests/RunOptionParity.cmake``).
+   * - ``OpenFAST_ADM_LineToDisk``
+     - ``adm_spreading = line_to_disk`` with 16 points per sector vs ``rings`` with 24 per ring: the stub's blades carry equal loads, so both are an even disk of 24 azimuths and the plotfiles agree to :math:`10^{-5}` relative and absolute (measured :math:`5 \times 10^{-6}`; the two disks differ by the blades' azimuth); 60 sectors vs 60 rings in the start-up line. The weights, unequal blades and the in-plane force are pinned by the unit tests ``OpenFASTRotor.LineToDisk*``.
+   * - ``OpenFASTADM_LineToDisk_BoxParity``
+     - ``line_to_disk``: box parity of plotfiles and flow logs.
    * - ``MovingBodies_AdmSpreadingUnknown``
      - Abort on an unknown ``adm_spreading``.
    * - ``OpenFAST_ADM_Upstream``, ``OpenFASTADM_Upstream_BoxParity``
@@ -398,8 +402,10 @@ under ``chk00005/moving_bodies``.
      - Checks
    * - ``OpenFAST_ADM_Restart``
      - Restart parity: wake average, correction, turbine, flow and statistics logs, momentum source and total load.
-   * - ``MovingBodies_Restart_ChangedBodyKey``, ``MovingBodies_Restart_ChangedAdmSpreading``, ``MovingBodies_Restart_ChangedStep``, ``MovingBodies_Restart_LaterStopTime``, ``MovingBodies_Restart_AddedBody``
-     - Abort on, in order: a changed ``num_points_t``, ``adm_spreading`` or ``erf.fixed_dt``; a stop time past the one OpenFAST was started with; a second body.
+   * - ``OpenFAST_ADM_LineToDisk_Restart``
+     - Restart parity with ``adm_spreading = line_to_disk``: plotfile, turbine and flow logs, momentum source and total load.
+   * - ``MovingBodies_Restart_ChangedBodyKey``, ``MovingBodies_Restart_ChangedAdmSpreading``, ``MovingBodies_Restart_ChangedToLineToDisk``, ``MovingBodies_Restart_ChangedStep``, ``MovingBodies_Restart_LaterStopTime``, ``MovingBodies_Restart_AddedBody``
+     - Abort on, in order: a changed ``num_points_t``, ``adm_spreading`` (to ``merged_rings``, to ``line_to_disk``) or ``erf.fixed_dt``; a stop time past the one OpenFAST was started with; a second body.
    * - ``MovingBodies_Restart_MalformedStatsOnRank1``, ``MovingBodies_Restart_MalformedWakeOnRank1``
      - Turbine on rank 1; a malformed statistics or wake-average file stops every rank with that file's message (a hang would hit the 180 s limit).
    * - ``MovingBodies_CtDisk_Restart``

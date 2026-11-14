@@ -12,7 +12,8 @@
 # identical and the test would pass while checking nothing.
 #
 # RTOL and ATOL, when given, replace the zero tolerances: for an option that changes how a sum is
-# taken, not what it is, so the answers may differ by rounding alone. ON_LOG_REGEX, when given, must
+# taken, not what it is, so the answers may differ by rounding alone, or for two options whose answers
+# agree to a stated accuracy (the caller says which and why). ON_LOG_REGEX, when given, must
 # match the on leg's simulation.log and not the off leg's, for an option that writes no file of its own;
 # OFF_LOG_REGEX, when given, the off leg's and not the on leg's.
 # -DX= defines X as empty, so test for a value, not for DEFINED

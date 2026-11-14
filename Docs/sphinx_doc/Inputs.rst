@@ -139,12 +139,13 @@ For ``mode = adm``.
      - Values
      - Default
    * - ``<name>.num_points_t``
-     - Points per ring.
+     - Points per ring, or per blade node's sector with ``adm_spreading = line_to_disk``.
      - int ≥ 2
      - 16
    * - ``<name>.adm_spreading``
-     - One ring per blade node, or one shared ring per radial station.
-     - ``rings``, ``merged_rings``
+     - One ring per blade node, one shared ring per radial station, or one sector per blade node between the
+       neighbouring blades, which keeps the differences between the blades. See :doc:`theory/ActuatorDisk`.
+     - ``rings``, ``merged_rings``, ``line_to_disk``
      - ``rings``
    * - ``<name>.sampling``
      - Where the velocity handed to OpenFAST comes from. See :doc:`theory/ActuatorDisk`.

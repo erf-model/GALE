@@ -275,6 +275,33 @@ if(ERF_ENABLE_OPENFAST AND ERF_OPENFAST_USE_STUB AND ERF_ENABLE_FFT AND ERF_ENAB
       FCOMPARE_RTOL "1.0e-12" FCOMPARE_ATOL "1.0e-12")
   set_property(TEST OpenFAST_ADM_MergedRings APPEND PROPERTY LABELS "moving-bodies")
 
+  # The same disk with adm_spreading = line_to_disk: each blade node is spread over the sector between its
+  # neighbouring blades with the weight cos^2(N_b dtheta / 4). The stub's three blades carry equal loads in this
+  # uniform flow, so the neighbours' weights add to a constant: 16 points per sector are an even ring of
+  # 3 * 16 / 2 = 24 azimuths, the disk that rings of 24 points give. The two rings differ by the blades' azimuth
+  # only. The kernel's cut-off at three widths and its discrete normalisation leave a small difference in the
+  # source for that turn, so the plotfiles agree closely and not to round-off; a weight that did not add to a
+  # constant, or to 1, would leave a three-per-revolution pattern or another thrust (measured: 2e-7 relative
+  # in u, 5e-6 in v and w; with cos^2(N_b dtheta / 2) 2e-4 and 3e-3). The start-up line must name the
+  # 60 sectors. Equal blades do not tell the cos^2 weight from another that adds to a constant; the unit tests
+  # (OpenFASTRotor.LineToDisk*) pin the weights, unequal blades and the in-plane force.
+  gale_add_test_option_parity(OpenFAST_ADM_LineToDisk OpenFAST_ADM_Uniform "plt00010"
+      COMMON_OPTIONS "erf.moving_bodies.T1.fst_file=../stub_turbine.fst"
+      OFF_OPTIONS "erf.moving_bodies.T1.num_points_t=24"
+      ON_OPTIONS "erf.moving_bodies.T1.adm_spreading=line_to_disk"
+      ON_LOG_REGEX "T1: hub axis .*, 60 blade-node sectors of 16 points, from the previous blade to the next"
+      OFF_LOG_REGEX "T1: hub axis .*, 60 rings of 24 points"
+      FCOMPARE_RTOL "1.0e-5" FCOMPARE_ATOL "1.0e-5")
+  set_property(TEST OpenFAST_ADM_LineToDisk APPEND PROPERTY LABELS "moving-bodies")
+  # The sectors follow the blades, so their points must be found and spread alike on one box and on boxes split
+  # unevenly in x and y.
+  gale_add_test_box_parity(OpenFASTADM_LineToDisk_BoxParity OpenFAST_ADM_Uniform "plt00010"
+      COMMON_OPTIONS "erf.moving_bodies.T1.adm_spreading=line_to_disk"
+      REFERENCE_OPTIONS "amr.max_grid_size=1024"
+      SPLIT_OPTIONS "amr.max_grid_size_x=16 amr.max_grid_size_y=10 amr.max_grid_size_z=64"
+      DATALOG "T1_flow.csv"
+      DATALOG_SIGDIGITS 8)
+
   # The same disk with sampling = upstream: the node velocities come from one diameter ahead of the
   # hub (the free stream, where OpenFAST's own induction model applies) instead of from the disk.
   # The shifted sampling points must be covered like the nodes, and the rings and spreading are
@@ -782,6 +809,13 @@ if(ERF_ENABLE_OPENFAST AND ERF_OPENFAST_USE_STUB AND ERF_ENABLE_FFT AND ERF_ENAB
       FCOMPARE_RTOL "0.0" FCOMPARE_ATOL "0.0"
       DATALOG "T1_wake_avg.csv T1_wake.csv T1_correction.csv T1_erf.csv T1_flow.csv T1_stats.csv moving_bodies/momentum_source.csv moving_bodies/total_load.csv"
       DATALOG_SIGDIGITS 10 OVERRUN)
+  # The same restart with adm_spreading = line_to_disk: the sectors are rebuilt from the blade positions OpenFAST
+  # restarts with, and the choice is in the restart record, so the restarted run must match the straight one.
+  gale_add_test_restart_parity(OpenFAST_ADM_LineToDisk_Restart OpenFAST_ADM_Restart 5 10
+      COMMON_OPTIONS "erf.moving_bodies.T1.adm_spreading=line_to_disk"
+      FCOMPARE_RTOL "0.0" FCOMPARE_ATOL "0.0"
+      DATALOG "T1_erf.csv T1_flow.csv moving_bodies/momentum_source.csv moving_bodies/total_load.csv"
+      DATALOG_SIGDIGITS 10 OVERRUN)
   # The same restart on two ranks with three 20-cell boxes in x, so that the turbine and its wake lines are owned by
   # rank 1 (MovingBodies_Owners_Wake): rank 1 alone samples the lines, so it must write their files and the running
   # sums into the checkpoint, which the restart takes over.
@@ -818,6 +852,9 @@ if(ERF_ENABLE_OPENFAST AND ERF_OPENFAST_USE_STUB AND ERF_ENABLE_FFT AND ERF_ENAB
   gale_add_test_restart_abort(MovingBodies_Restart_ChangedAdmSpreading OpenFAST_ADM_Restart 5
       "T1[.]adm_spreading changed on restart [(]rings in the "
       RESTART_OPTIONS "erf.moving_bodies.T1.adm_spreading=merged_rings")
+  gale_add_test_restart_abort(MovingBodies_Restart_ChangedToLineToDisk OpenFAST_ADM_Restart 5
+      "T1[.]adm_spreading changed on restart [(]rings in the checkpoint, line_to_disk now[)]"
+      RESTART_OPTIONS "erf.moving_bodies.T1.adm_spreading=line_to_disk")
   gale_add_test_restart_abort(MovingBodies_Restart_ChangedStep OpenFAST_ADM_Restart 5
       "the checkpoint's bodies stepped 0[.]5"
       RESTART_OPTIONS "erf.fixed_dt=0.25 max_step=20")
@@ -1222,7 +1259,7 @@ if(ERF_ENABLE_OPENFAST AND ERF_OPENFAST_USE_STUB AND ERF_ENABLE_FFT AND ERF_ENAB
   add_test_abort(MovingBodies_AnchorLevelAboveFinest ${_mb_cases}/OpenFAST_ADM_Restart OpenFAST_ADM_Restart.i
       "anchor_level = 1 is not a level of this run" "erf.moving_bodies.anchor_level=1")
   add_test_abort(MovingBodies_AdmSpreadingUnknown ${_mb_cases}/OpenFAST_ADM_Restart OpenFAST_ADM_Restart.i
-      "T1[.]adm_spreading must be rings or merged_rings, not 'merged'" "erf.moving_bodies.T1.adm_spreading=merged")
+      "T1[.]adm_spreading must be rings, merged_rings or line_to_disk, not 'merged'" "erf.moving_bodies.T1.adm_spreading=merged")
   # two turbines whose OpenFAST models step with different dt on one rank, which steps them together
   add_test_abort(MovingBodies_MixedTimeSteps_OneRank ${_mb_cases}/OpenFAST_ADM_TwoTurbines OpenFAST_ADM_TwoTurbines.i
       "use different time steps [(]25 vs 50 substeps per ERF step[)]" "erf.moving_bodies.T2.fst_file=stub_turbine_dt002.fst")

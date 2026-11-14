@@ -80,8 +80,16 @@ Actuator disk
 
 See :doc:`theory/ActuatorDisk`.
 
-- **In-plane force is averaged away.** The disk keeps the shaft force and torque exactly. The net
-  in-plane force, carried only by differences between blades, is lost in the flow.
+- **In-plane force is averaged away** with ``adm_spreading = rings`` and ``merged_rings``. The disk
+  keeps the shaft force and torque exactly. The net in-plane force, carried only by differences
+  between blades, is lost in the flow. ``line_to_disk`` keeps part of it (0.744 for three blades).
+- **Line to disk: turn per step.** The load pattern is held over the ERF step. Keep the rotor's
+  turn per step below about :math:`\pi / (2 N_b)` (30 degrees for three blades), where the part of
+  the load that differs between the blades has an error of about 22 %; 15 degrees gives about 11 %.
+  The code does not check this.
+- **Line to disk: point spacing.** The start-up audit accepts a spacing of :math:`2 \epsilon`
+  at the tip, which leaves a ripple of 17 % of the mean there, as for the rings. A spacing of
+  :math:`1.5 \epsilon` gives 2.5 %.
 - **Corrected disk: kernel range.** The correction factor was derived for filter widths up to
   1.25 rotor radii, so keep :math:`\epsilon \le 0.5 R`. Wider kernels give a warning.
 - **Corrected disk: calibration.** The correction uses the twice-filtered form of Shapiro et al.

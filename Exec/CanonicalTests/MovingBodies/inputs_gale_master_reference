@@ -36,7 +36,9 @@ erf.moving_bodies.T1.epsilon     = 2.0               # > 0 (cells): width of the
                                                      #   Excludes fllc = automatic, which sets it
 erf.moving_bodies.T1.output_root = moving_bodies/T1  # log-file prefix; default <diagnostics_dir>/<name>;
                                                      #   must differ between bodies
-erf.moving_bodies.T1.num_points_t = 16               # >= 2: points per ring (mode = adm, ct_disk)
+erf.moving_bodies.T1.num_points_t = 16               # >= 2: points per ring (mode = adm, ct_disk), or
+                                                     #   per blade node's sector (adm_spreading =
+                                                     #   line_to_disk)
 erf.moving_bodies.T1.air_density = 1.225             # > 0 (kg/m^3): must equal the model's AirDens;
                                                      #   checked against ERF's density at the hub
 erf.moving_bodies.T1.sample_diameters_upstream = 2.0 # > 0 (rotor diameters ahead of the hub);
@@ -66,7 +68,9 @@ erf.moving_bodies.T1.epsilon_nacelle = 2.0         # > 0 (cells); default epsilo
 
 # --- 3b. Actuator disk (mode = adm) --------------------------------------------------------------
 erf.moving_bodies.T1.adm_spreading = rings         # rings (one per blade node) | merged_rings (one
-                                                   #   per radial station)
+                                                   #   per radial station) | line_to_disk (one sector
+                                                   #   of num_points_t points per blade node, between
+                                                   #   the neighbouring blades)
 erf.moving_bodies.T1.sampling = disk_corrected     # disk | upstream | disk_corrected; default
                                                    #   disk_corrected (adm), disk (alm, none);
                                                    #   upstream and disk_corrected need mode = adm

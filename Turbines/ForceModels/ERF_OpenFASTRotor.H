@@ -155,6 +155,19 @@ amrex::Real disk_axial_velocity (const erf_openfast::TurbineState& t, const std:
  */
 amrex::Real tip_cells_per_step (const erf_openfast::TurbineState& t, amrex::Real dt, amrex::Real dx);
 
+/** How mode adm lays out the points of a rotor's disk (erf.moving_bodies.<name>.adm_spreading). */
+enum class AdmSpreading {
+    rings,          //!< one ring of points per blade node
+    merged_rings,   //!< one ring per radial station, for all the blades
+    line_to_disk    //!< one sector of points per blade node, weighted with cos^2 between the neighbouring blades
+};
+
+/**
+ * Whether name is a value of adm_spreading; sets spreading when it is. MovingBodiesInputs::read, which is
+ * built without OpenFAST too, checks the same three names.
+ */
+bool adm_spreading_from_name (const std::string& name, AdmSpreading& spreading);
+
 /**
  * Actuator-disk representation of an OpenFAST rotor's loads.
  *
@@ -169,8 +182,8 @@ amrex::Real tip_cells_per_step (const erf_openfast::TurbineState& t, amrex::Real
  * The forces produced are the forces ON THE FLUID: the negative of OpenFAST's, which are on
  * the structure.
  *
- * With merged (erf.moving_bodies.<name>.adm_spreading = merged_rings) the blades' nodes at the
- * same radial station share one ring instead of one ring each: at the blades' mean radius and
+ * With AdmSpreading::merged_rings (erf.moving_bodies.<name>.adm_spreading = merged_rings) the blades'
+ * nodes at the same radial station share one ring instead of one ring each: at the blades' mean radius and
  * mean distance along the shaft, carrying the sum of their axial, radial and tangential forces
  * (added in blade order). The blades' rings are at the same angles and, on a rigid rotor, at the
  * same radii, so the shared ring spreads the same source to rounding (spreading is linear in the
@@ -179,14 +192,30 @@ amrex::Real tip_cells_per_step (const erf_openfast::TurbineState& t, amrex::Real
  * the tip for blades whose deflections differ by da). The force along the shaft is kept exactly,
  * and the torque exactly when the blades' radii agree.
  *
+ * With AdmSpreading::line_to_disk (adm_spreading = line_to_disk) each blade node is spread over a
+ * sector of its circle instead of the whole circle: num_points_t points at the node's radius and
+ * distance along the shaft, equally spaced from the previous blade's azimuth to the next blade's
+ * (2 pi / N_b on either side of the node's own azimuth, at the midpoints of num_points_t equal
+ * intervals), weighted with cos^2(N_b dtheta / 4), which is 1 at the blade and 0 at its neighbours,
+ * and divided by the sum of the weights, so the weights of a node add to 1. The weights of two
+ * neighbouring blades add to a constant between them (cos^2 + sin^2 = 1), so equally spaced
+ * blades with equal loads give an even disk, and blades with different loads give a disk whose load varies smoothly with
+ * the azimuth and turns with the rotor. The axial component is kept and the radial and tangential
+ * components turn with each point's azimuth, as for the rings, so the force along the shaft and
+ * the torque about it are preserved exactly. The net in-plane force is kept in part (the sector
+ * mean of the turned radial and tangential directions) instead of averaged away. The azimuthal
+ * weight is that of the lineToDiskGaussian3D projection of SOWFA-6
+ * (horizontalAxisWindTurbinesALMOpenFAST.C).
+ *
  * @param[in] t the turbine after a step (positions, forces, hub position and axis)
- * @param[in] num_points_t points per ring
+ * @param[in] num_points_t points per ring, or per blade node's sector
  * @param[out] pos 3*n ring point positions (m), appended
  * @param[out] force 3*n forces on the fluid (N), appended
- * @param[in] merged one ring per radial station for all the blades (else one per blade node)
+ * @param[in] spreading the layout: one ring per blade node, one per radial station, or one sector per blade node
  */
 void adm_rings (const erf_openfast::TurbineState& t, int num_points_t,
-                std::vector<amrex::Real>& pos, std::vector<amrex::Real>& force, bool merged = false);
+                std::vector<amrex::Real>& pos, std::vector<amrex::Real>& force,
+                AdmSpreading spreading = AdmSpreading::rings);
 
 /**
  * Every point a forcing turbine puts into the flow, appended with the kernel width each is spread
@@ -197,12 +226,12 @@ void adm_rings (const erf_openfast::TurbineState& t, int num_points_t,
  * @param[in] mode adm or alm
  * @param[out] pos,force 3*n positions (m) and forces on the fluid (N), appended
  * @param[out] eps n kernel widths (m), appended
- * @param[in] merged_rings mode adm: the blades' rings merged (adm_rings)
- * @return the number of the rotor's points appended (rings or line, with the hub point)
+ * @param[in] spreading mode adm: the layout of the disk's points (adm_rings)
+ * @return the number of the rotor's points appended (rings, sectors or line, with the hub point)
  */
 int turbine_points (const erf_openfast::TurbineState& t, const std::string& mode, int num_points_t, bool nacelle,
                      const KernelWidths& w, std::vector<amrex::Real>& pos, std::vector<amrex::Real>& force,
-                     std::vector<amrex::Real>& eps, bool merged_rings = false);
+                     std::vector<amrex::Real>& eps, AdmSpreading spreading = AdmSpreading::rings);
 
 /**
  * Check that the blade force nodes lie close to the rotor plane of the hub axis: the largest

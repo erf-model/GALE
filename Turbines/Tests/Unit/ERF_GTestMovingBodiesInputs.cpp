@@ -406,8 +406,9 @@ TEST(MovingBodiesInputs, TheDiagnosticsFormatDefaultsToPerTurbineAndMustBeKnown)
     pp.add("diagnostics_format", std::string("per_turbine"));
 }
 
-// adm_spreading picks how a disk's rings are laid out: rings (one per blade node, the default) or
-// merged_rings (one per radial station for all the blades); any other value stops the run naming
+// adm_spreading picks how a disk's points are laid out: rings (one per blade node, the default),
+// merged_rings (one per radial station for all the blades) or line_to_disk (one sector per blade node,
+// read, kept and written to the restart record like merged_rings); any other value stops the run naming
 // the key. The choice is in an actuator disk's restart record, and a checkpoint written before the
 // key existed spread its disks with rings: a restart with merged_rings from it is a change.
 TEST(MovingBodiesInputs, TheAdmSpreadingDefaultsToRingsAndIsInTheRestartRecord)
@@ -429,7 +430,7 @@ TEST(MovingBodiesInputs, TheAdmSpreadingDefaultsToRingsAndIsInTheRestartRecord)
         amrex::ParmParse pb("erf.moving_bodies." + bad);
         pb.add("adm_spreading", std::string("merged"));
         const std::string msg = erf_gtest::abort_message([] { MovingBodiesInputs::read(); });
-        EXPECT_NE(msg.find(bad + ".adm_spreading must be rings or merged_rings"), std::string::npos) << msg;
+        EXPECT_NE(msg.find(bad + ".adm_spreading must be rings, merged_rings or line_to_disk, not 'merged'"), std::string::npos) << msg;
     }
 
     // recorded for an actuator disk only
@@ -455,6 +456,24 @@ TEST(MovingBodiesInputs, TheAdmSpreadingDefaultsToRingsAndIsInTheRestartRecord)
     chk["adm_spreading"] = "merged_rings";
     EXPECT_TRUE(MovingBodiesInputs::changed_record_entry(chk, MovingBodiesInputs::restart_record(b), key, was, now));
     EXPECT_EQ(key, "adm_spreading"); EXPECT_EQ(was, "merged_rings"); EXPECT_EQ(now, "rings");
+
+    // line_to_disk is read, recorded and compared like the other two
+    const std::string l2d = "Tsprl2d" + std::to_string(run);
+    set_turbine(l2d, "adm", "");
+    {
+        amrex::ParmParse pb("erf.moving_bodies." + l2d);
+        pb.add("adm_spreading", std::string("line_to_disk"));
+    }
+    b = only_body(MovingBodiesInputs::read());
+    EXPECT_EQ(b.adm_spreading, "line_to_disk");
+    r = MovingBodiesInputs::restart_record(b);
+    EXPECT_EQ(record_value(r, "adm_spreading"), "line_to_disk");
+    chk.clear();
+    for (const auto& kv : r) { chk[kv.first] = kv.second; }
+    EXPECT_FALSE(MovingBodiesInputs::changed_record_entry(chk, r, key, was, now));
+    chk["adm_spreading"] = "merged_rings";
+    EXPECT_TRUE(MovingBodiesInputs::changed_record_entry(chk, r, key, was, now));
+    EXPECT_EQ(key, "adm_spreading"); EXPECT_EQ(was, "merged_rings"); EXPECT_EQ(now, "line_to_disk");
 }
 
 TEST(MovingBodiesInputs, FllcAutomaticSetsTheStudySettingsAndLeavesEpsilonToTheRotor)

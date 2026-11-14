@@ -747,7 +747,7 @@ TEST(OpenFASTRotor, MergedRingsOnARigidRotorAreTheBladesRingsSummed)
     const TurbineState t = make_rotor(hub, axis, nodes, 120.0, 2.0e4, 3.0e3);
     std::vector<Real> pos, f, mpos, mf;
     erf_actuator::adm_rings(t, npt, pos, f);
-    erf_actuator::adm_rings(t, npt, mpos, mf, true);
+    erf_actuator::adm_rings(t, npt, mpos, mf, erf_actuator::AdmSpreading::merged_rings);
     ASSERT_EQ(pos.size(), 3u * (1 + 3 * nodes * npt));
     ASSERT_EQ(mpos.size(), 3u * (1 + nodes * npt));
     ASSERT_EQ(mf.size(), mpos.size());
@@ -801,7 +801,7 @@ TEST(OpenFASTRotor, MergedRingsOnADeflectedRotorKeepTheShaftForce)
         }
     }
     std::vector<Real> mpos, mf;
-    erf_actuator::adm_rings(t, npt, mpos, mf, true);
+    erf_actuator::adm_rings(t, npt, mpos, mf, erf_actuator::AdmSpreading::merged_rings);
     ASSERT_EQ(mpos.size(), 3u * (1 + nodes * npt));
     Real want_q = 0.0;    // mean radius times the summed tangential force, on the fluid
     for (int k = 0; k < nodes; ++k) {
@@ -843,18 +843,262 @@ TEST(OpenFASTRotor, MergedRingsAreForTheDiskOnly)
     const KernelWidths w{Real(10.0), Real(30.0), Real(20.0)};
     std::vector<Real> p1, f1, e1, p2, f2, e2;
     erf_actuator::turbine_points(t, "alm", nt, false, w, p1, f1, e1);
-    erf_actuator::turbine_points(t, "alm", nt, false, w, p2, f2, e2, true);
+    erf_actuator::turbine_points(t, "alm", nt, false, w, p2, f2, e2, erf_actuator::AdmSpreading::merged_rings);
     EXPECT_EQ(p1, p2); EXPECT_EQ(f1, f2); EXPECT_EQ(e1, e2);
     p1.clear(); f1.clear(); e1.clear(); p2.clear(); f2.clear(); e2.clear();
     erf_actuator::turbine_points(t, "adm", nt, false, w, p1, f1, e1);
-    erf_actuator::adm_rings(t, nt, p2, f2, false);
+    erf_actuator::adm_rings(t, nt, p2, f2, erf_actuator::AdmSpreading::rings);
     EXPECT_EQ(p1, p2); EXPECT_EQ(f1, f2);
     p1.clear(); f1.clear(); e1.clear();
-    EXPECT_EQ(erf_actuator::turbine_points(t, "adm", nt, false, w, p1, f1, e1, true), 1 + nodes * nt);
+    EXPECT_EQ(erf_actuator::turbine_points(t, "adm", nt, false, w, p1, f1, e1, erf_actuator::AdmSpreading::merged_rings), 1 + nodes * nt);
     EXPECT_EQ(e1.size(), std::size_t(1 + nodes * nt));
     // the last blade's nodes missing
     t.num_force_nodes -= nodes;
     std::vector<Real> p3, f3;
-    const std::string msg = erf_gtest::abort_message([&] { erf_actuator::adm_rings(t, nt, p3, f3, true); });
+    const std::string msg = erf_gtest::abort_message([&] { erf_actuator::adm_rings(t, nt, p3, f3, erf_actuator::AdmSpreading::merged_rings); });
     EXPECT_NE(msg.find("merged rings need every blade's force nodes"), std::string::npos) << msg;
+}
+
+// adm_spreading = line_to_disk: each blade node is spread over the sector from the previous blade's
+// azimuth to the next blade's, at its own radius and distance along the shaft, with the weights
+// cos^2(N_b dtheta / 4) over their sum. With 4 points and 3 blades the offsets are -+ pi/2 and -+ pi/6
+// and the weights (2 - sqrt 2) / 8 and (2 + sqrt 2) / 8 (cos^2 of 3 pi / 8 and of pi / 8, over 2).
+TEST(OpenFASTRotor, LineToDiskPointsAndWeightsOfOneLoadedBlade)
+{
+    const std::array<Real,3> hub{{500.0, 500.0, 150.0}};
+    const std::array<Real,3> axis{{1.0, 0.0, 0.0}};
+    const int nodes = 3, npt = 4;
+    const Real R = 120.0, fa = 2.0e4, phase = 0.3;
+    TurbineState t = make_rotor(hub, axis, nodes, R, fa, 0.0, phase);
+    // blades 1 and 2 carry nothing
+    for (int nd = 1 + nodes; nd < t.num_force_nodes; ++nd) { for (int d = 0; d < 3; ++d) { t.force[3*nd+d] = 0.0; } }
+    std::vector<Real> pos, f;
+    erf_actuator::adm_rings(t, npt, pos, f, erf_actuator::AdmSpreading::line_to_disk);
+    ASSERT_EQ(pos.size(), 3u * (1 + 3 * nodes * npt));
+    ASSERT_EQ(f.size(), pos.size());
+    const Real off[4] = {Real(-0.5 * pi), Real(-pi / 6.0), Real(pi / 6.0), Real(0.5 * pi)};
+    const Real lo = Real((2.0 - std::sqrt(2.0)) / 8.0), hi = Real((2.0 + std::sqrt(2.0)) / 8.0);
+    const Real wgt[4] = {lo, hi, hi, lo};
+    // make_rotor's in-plane basis for the x axis: e1 = z x axis = +y, e2 = axis x e1 = +z
+    for (int k = 0; k < nodes; ++k) {
+        const Real r = (k + Real(0.5)) / nodes * R;
+        for (int j = 0; j < npt; ++j) {
+            const std::size_t p = 1 + k * npt + j;
+            const Real th = phase + off[j];
+            EXPECT_NEAR(pos[3*p+0], hub[0], tol() * R) << "node " << k << " point " << j;
+            EXPECT_NEAR(pos[3*p+1], hub[1] + r * std::cos(th), tol() * R) << "node " << k << " point " << j;
+            EXPECT_NEAR(pos[3*p+2], hub[2] + r * std::sin(th), tol() * R) << "node " << k << " point " << j;
+            EXPECT_NEAR(f[3*p+0], -fa * wgt[j], tol() * fa) << "node " << k << " point " << j;
+            EXPECT_NEAR(f[3*p+1], 0.0, tol() * fa);
+            EXPECT_NEAR(f[3*p+2], 0.0, tol() * fa);
+        }
+    }
+    // the unloaded blades' sectors carry nothing
+    for (std::size_t p = 1 + nodes * npt; p < pos.size() / 3; ++p) {
+        for (int d = 0; d < 3; ++d) { EXPECT_EQ(f[3*p+d], Real(0.0)) << "point " << p; }
+    }
+}
+
+// The sectors keep the rotor's force along the shaft and its torque about it exactly, for blades with
+// different loads, on a yawed and tilted axis and with an odd or an even number of points: the weights
+// of a node add to 1 and the tangential force turns with each point. Every point of a node is at the
+// node's radius and distance along the shaft.
+TEST(OpenFASTRotor, LineToDiskKeepsTheShaftForceAndTheTorque)
+{
+    const std::array<Real,3> hub{{500.0, 500.0, 150.0}};
+    std::array<Real,3> axis{{static_cast<Real>(std::cos(0.4)), static_cast<Real>(std::sin(0.4)), Real(0.05)}};
+    const Real la = std::sqrt(axis[0]*axis[0] + axis[1]*axis[1] + axis[2]*axis[2]);
+    for (auto& a : axis) { a /= la; }
+    const int nodes = 5;
+    const Real R = 120.0;
+    for (const int npt : {2, 7, 16}) {
+        TurbineState t = make_rotor(hub, axis, nodes, R, 2.0e4, 3.0e3);
+        // blade b: its forces scaled by 1 + 0.4 b, pushed 2 (b + 1) m along the shaft
+        for (int b = 0; b < 3; ++b) {
+            for (int k = 0; k < nodes; ++k) {
+                const int nd = 1 + b * nodes + k;
+                for (int d = 0; d < 3; ++d) {
+                    t.force[3*nd+d] *= Real(1.0 + 0.4 * b);
+                    t.force_pos[3*nd+d] += Real(2.0 * (b + 1)) * axis[d];
+                }
+            }
+        }
+        std::vector<Real> pos, f;
+        erf_actuator::adm_rings(t, npt, pos, f, erf_actuator::AdmSpreading::line_to_disk);
+        ASSERT_EQ(pos.size(), 3u * (1 + 3 * nodes * npt));
+        for (int nd = 1; nd <= 3 * nodes; ++nd) {
+            const int b = (nd - 1) / nodes, k = (nd - 1) % nodes;
+            for (int j = 0; j < npt; ++j) {
+                const std::size_t p = 1 + (nd - 1) * npt + j;
+                Real along = 0.0, r2 = 0.0;
+                for (int d = 0; d < 3; ++d) { along += (pos[3*p+d] - hub[d]) * axis[d]; }
+                for (int d = 0; d < 3; ++d) { const Real q = pos[3*p+d] - hub[d] - along * axis[d]; r2 += q * q; }
+                EXPECT_NEAR(along, Real(2.0 * (b + 1)), tol() * R) << "npt " << npt << " node " << nd;
+                EXPECT_NEAR(std::sqrt(r2), (k + Real(0.5)) / nodes * R, tol() * R) << "npt " << npt << " node " << nd;
+            }
+        }
+        std::array<Real,3> got, want;
+        Real q_got, q_want;
+        totals(pos, f, hub, axis, got, q_got);
+        totals(t.force_pos, t.force, hub, axis, want, q_want);
+        Real got_ax = 0.0, want_ax = 0.0;
+        for (int d = 0; d < 3; ++d) { got_ax += got[d] * axis[d]; want_ax += want[d] * axis[d]; }
+        EXPECT_NEAR(got_ax, -want_ax, tol() * std::abs(want_ax)) << "npt " << npt;
+        EXPECT_NEAR(q_got, -q_want, tol() * std::abs(q_want)) << "npt " << npt;
+        EXPECT_GT(std::abs(want_ax), 1.0e5);
+        EXPECT_GT(std::abs(q_want), 1.0e5);
+    }
+}
+
+// Blades with equal loads and an even number of points: the sectors of neighbouring blades fall on the
+// same azimuths, and since cos^2 + sin^2 = 1 the summed force is the same at each of the 3 npt / 2
+// azimuths of a station: 2 / npt of one blade node's axial and tangential force, an even ring.
+TEST(OpenFASTRotor, LineToDiskOfEqualBladesIsAnEvenRing)
+{
+    const std::array<Real,3> hub{{500.0, 500.0, 150.0}};
+    const std::array<Real,3> axis{{1.0, 0.0, 0.0}};
+    const int nodes = 4, npt = 8, nb = 3;
+    const Real R = 120.0, fa = 2.0e4, ft = 3.0e3, phase = 0.3;
+    const TurbineState t = make_rotor(hub, axis, nodes, R, fa, ft, phase);
+    std::vector<Real> pos, f;
+    erf_actuator::adm_rings(t, npt, pos, f, erf_actuator::AdmSpreading::line_to_disk);
+    const int nbin = nb * npt / 2;
+    const Real dth = Real(2.0 * pi) / nbin;
+    for (int k = 0; k < nodes; ++k) {
+        const Real r = (k + Real(0.5)) / nodes * R;
+        std::vector<Real> ax(nbin, 0.0), tq(nbin, 0.0);
+        std::vector<int> count(nbin, 0);
+        for (int b = 0; b < nb; ++b) {
+            for (int j = 0; j < npt; ++j) {
+                const std::size_t p = 1 + (b * nodes + k) * npt + j;
+                const Real y = pos[3*p+1] - hub[1], z = pos[3*p+2] - hub[2];
+                // the azimuths are phase + (m + 1/2) dth
+                const Real x = (std::atan2(z, y) - phase) / dth - Real(0.5);
+                const int m = ((static_cast<int>(std::lround(x)) % nbin) + nbin) % nbin;
+                EXPECT_NEAR(std::remainder(x - m, static_cast<Real>(nbin)), 0.0, 1.0e-3) << "station " << k << " blade " << b << " point " << j;
+                ++count[m];
+                ax[m] += f[3*p];
+                tq[m] += (y * f[3*p+2] - z * f[3*p+1]) / r;   // about +x
+            }
+        }
+        for (int m = 0; m < nbin; ++m) {
+            EXPECT_EQ(count[m], 2) << "station " << k << " azimuth " << m;
+            EXPECT_NEAR(ax[m], -fa * Real(2.0) / npt, tol() * fa) << "station " << k << " azimuth " << m;
+            EXPECT_NEAR(tq[m], -ft * (r / R) * Real(2.0) / npt, tol() * ft) << "station " << k << " azimuth " << m;
+        }
+    }
+}
+
+// The net in-plane force of a blade is kept in part: a radial force F on one blade node, turned over its
+// sector, sums to F times the sector mean of cos(dtheta) under the weight, 27 sqrt 3 / (20 pi) = 0.7443
+// for three blades (the rings average it to zero).
+TEST(OpenFASTRotor, LineToDiskKeepsPartOfTheInPlaneForce)
+{
+    const std::array<Real,3> hub{{500.0, 500.0, 150.0}};
+    const std::array<Real,3> axis{{1.0, 0.0, 0.0}};
+    const Real phase = 0.3, F = 1.0e4;
+    TurbineState t = make_rotor(hub, axis, 1, 120.0, 0.0, 0.0, phase);
+    // blade 0's node pushed outwards with F (on the structure)
+    t.force[3*1+1] = F * std::cos(phase);
+    t.force[3*1+2] = F * std::sin(phase);
+    const Real want = Real(27.0 * std::sqrt(3.0) / (20.0 * pi));
+    std::vector<Real> pos, f, rpos, rf;
+    erf_actuator::adm_rings(t, 200, pos, f, erf_actuator::AdmSpreading::line_to_disk);
+    erf_actuator::adm_rings(t, 200, rpos, rf, erf_actuator::AdmSpreading::rings);
+    std::array<Real,3> got, ring;
+    Real q;
+    totals(pos, f, hub, axis, got, q);
+    EXPECT_NEAR(q, 0.0, tol() * F * 120.0);
+    EXPECT_NEAR(got[0], 0.0, tol() * F);
+    EXPECT_NEAR(got[1], -want * F * std::cos(phase), Real(1.0e-4) * F);
+    EXPECT_NEAR(got[2], -want * F * std::sin(phase), Real(1.0e-4) * F);
+    totals(rpos, rf, hub, axis, ring, q);
+    EXPECT_NEAR(ring[1], 0.0, Real(200) * tol() * F);
+    EXPECT_NEAR(ring[2], 0.0, Real(200) * tol() * F);
+}
+
+// The sector and the weight follow the number of blades. Two blades, 4 points: the sector is the whole
+// circle about the node, the offsets are -+ 3 pi / 4 and -+ pi / 4 and the weights (2 - sqrt 2) / 8 and
+// (2 + sqrt 2) / 8 (cos^2 of 3 pi / 8 and of pi / 8, over 2). A radial force keeps half of itself:
+// 2 [(2 + sqrt 2) - (2 - sqrt 2)] / 8 * cos(pi / 4) = 1 / 2.
+TEST(OpenFASTRotor, LineToDiskOfTwoBlades)
+{
+    const std::array<Real,3> hub{{500.0, 500.0, 150.0}};
+    const std::array<Real,3> axis{{1.0, 0.0, 0.0}};
+    const int npt = 4;
+    const Real r = 60.0, fa = 2.0e4, F = 1.0e4, phase = 0.3;
+    // the x axis: e1 = +y, e2 = +z. Blade 0 at the azimuth phase, loaded; blade 1 opposite, unloaded
+    TurbineState t;
+    t.name = "T1";
+    t.num_blades = 2;
+    t.num_force_pts_blade = 1;
+    t.num_force_pts_tower = 0;
+    t.num_force_nodes = 3;
+    t.hub_pos = hub;
+    t.hub_axis = axis;
+    t.force_pos.assign(9, 0.0);
+    t.force.assign(9, 0.0);
+    for (int d = 0; d < 3; ++d) { t.force_pos[d] = hub[d]; t.force_pos[3+d] = hub[d]; t.force_pos[6+d] = hub[d]; }
+    t.force_pos[3+1] += r * std::cos(phase); t.force_pos[3+2] += r * std::sin(phase);
+    t.force_pos[6+1] -= r * std::cos(phase); t.force_pos[6+2] -= r * std::sin(phase);
+    t.force[3+0] = fa; t.force[3+1] = F * std::cos(phase); t.force[3+2] = F * std::sin(phase);
+    std::vector<Real> pos, f;
+    erf_actuator::adm_rings(t, npt, pos, f, erf_actuator::AdmSpreading::line_to_disk);
+    ASSERT_EQ(pos.size(), 3u * (1 + 2 * npt));
+    const Real off[4] = {Real(-0.75 * pi), Real(-0.25 * pi), Real(0.25 * pi), Real(0.75 * pi)};
+    const Real lo = Real((2.0 - std::sqrt(2.0)) / 8.0), hi = Real((2.0 + std::sqrt(2.0)) / 8.0);
+    const Real wgt[4] = {lo, hi, hi, lo};
+    for (int j = 0; j < npt; ++j) {
+        const std::size_t p = 1 + j;
+        const Real th = phase + off[j];
+        EXPECT_NEAR(pos[3*p+1], hub[1] + r * std::cos(th), tol() * r) << "point " << j;
+        EXPECT_NEAR(pos[3*p+2], hub[2] + r * std::sin(th), tol() * r) << "point " << j;
+        EXPECT_NEAR(f[3*p+0], -fa * wgt[j], tol() * fa) << "point " << j;
+    }
+    std::array<Real,3> got;
+    Real q;
+    totals(pos, f, hub, axis, got, q);
+    EXPECT_NEAR(got[0], -fa, tol() * fa);
+    EXPECT_NEAR(got[1], Real(-0.5) * F * std::cos(phase), tol() * F);
+    EXPECT_NEAR(got[2], Real(-0.5) * F * std::sin(phase), tol() * F);
+    EXPECT_NEAR(q, 0.0, tol() * F * r);
+}
+
+// The sectors are an actuator-disk layout with as many points as the per-blade rings: the actuator line
+// ignores the choice, the three names map to the three layouts and no other name does, and a rotor
+// with fewer than two blades, or without all its blades' nodes, stops.
+TEST(OpenFASTRotor, LineToDiskIsForTheDiskOnly)
+{
+    const std::array<Real,3> hub{{500.0, 500.0, 150.0}};
+    const std::array<Real,3> axis{{1.0, 0.0, 0.0}};
+    const int nodes = 3, nt = 8;
+    TurbineState t = make_rotor(hub, axis, nodes, 120.0, 2.0e4, 3.0e3);
+    const KernelWidths w{Real(10.0), Real(30.0), Real(20.0)};
+    const auto l2d = erf_actuator::AdmSpreading::line_to_disk;
+    std::vector<Real> p1, f1, e1, p2, f2, e2;
+    erf_actuator::turbine_points(t, "alm", nt, false, w, p1, f1, e1);
+    erf_actuator::turbine_points(t, "alm", nt, false, w, p2, f2, e2, l2d);
+    EXPECT_EQ(p1, p2); EXPECT_EQ(f1, f2); EXPECT_EQ(e1, e2);
+    p1.clear(); f1.clear(); e1.clear(); p2.clear(); f2.clear();
+    EXPECT_EQ(erf_actuator::turbine_points(t, "adm", nt, false, w, p1, f1, e1, l2d), 1 + 3 * nodes * nt);
+    EXPECT_EQ(e1.size(), std::size_t(1 + 3 * nodes * nt));
+    erf_actuator::adm_rings(t, nt, p2, f2, l2d);
+    EXPECT_EQ(p1, p2); EXPECT_EQ(f1, f2);
+
+    erf_actuator::AdmSpreading s = erf_actuator::AdmSpreading::merged_rings;
+    EXPECT_TRUE(erf_actuator::adm_spreading_from_name("rings", s)); EXPECT_EQ(s, erf_actuator::AdmSpreading::rings);
+    EXPECT_TRUE(erf_actuator::adm_spreading_from_name("merged_rings", s)); EXPECT_EQ(s, erf_actuator::AdmSpreading::merged_rings);
+    EXPECT_TRUE(erf_actuator::adm_spreading_from_name("line_to_disk", s)); EXPECT_EQ(s, l2d);
+    EXPECT_FALSE(erf_actuator::adm_spreading_from_name("line", s)); EXPECT_EQ(s, l2d);
+
+    // one blade has no neighbour to share its sector with
+    t.num_blades = 1;
+    std::vector<Real> p3, f3;
+    const std::string msg = erf_gtest::abort_message([&] { erf_actuator::adm_rings(t, nt, p3, f3, l2d); });
+    EXPECT_NE(msg.find("T1.adm_spreading = line_to_disk: the sectors need at least two blades (1 given)"), std::string::npos) << msg;
+    // the last blade's nodes missing
+    t.num_blades = 3;
+    t.num_force_nodes -= nodes;
+    const std::string msg2 = erf_gtest::abort_message([&] { erf_actuator::adm_rings(t, nt, p3, f3, l2d); });
+    EXPECT_NE(msg2.find("T1.adm_spreading = line_to_disk: the sectors need every blade's force nodes"), std::string::npos) << msg2;
 }
