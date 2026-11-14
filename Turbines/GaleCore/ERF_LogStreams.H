@@ -62,6 +62,33 @@ inline std::string::size_type last_path_separator (const std::string& path)
 }
 
 /**
+ * True for a path that does not depend on the directory it is read from: one that starts with '/',
+ * and on Windows also one that starts with '\\' or with a drive letter and a colon ("C:").
+ */
+inline bool is_absolute_path (const std::string& path)
+{
+    if (path.empty()) { return false; }
+    if (path.front() == '/') { return true; }
+#ifdef _WIN32
+    if (path.front() == '\\') { return true; }
+    const char c = path.front();
+    if (path.size() > 1 && path[1] == ':' && ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z'))) { return true; }
+#endif
+    return false;
+}
+
+/**
+ * The file @p name as it is named inside the file @p file: in the directory of @p file, unless
+ * @p name is absolute or @p file has no directory part. The separator of @p file is kept.
+ */
+inline std::string path_beside (const std::string& file, const std::string& name)
+{
+    const auto slash = last_path_separator(file);
+    if (slash == std::string::npos || is_absolute_path(name)) { return name; }
+    return file.substr(0, slash + 1) + name;
+}
+
+/**
  * Open a diagnostics text file for writing (the caller writes CSV or space-separated rows),
  * creating its directory (once per process, make_directory_once()). With truncate (a fresh run)
  * the file starts empty; without it (a restarted run) the rows are appended to what the run it

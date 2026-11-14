@@ -223,6 +223,38 @@ TEST(LogStreams, TheDirectoryOfAPathEndsAtItsLastSeparator)
 #endif
 }
 
+TEST(LogStreams, AFileNamedInsideAnotherIsReadFromThatFilesDirectory)
+{
+    // an OpenFAST .fst file names its module files relative to itself
+    using erf_actuator::is_absolute_path;
+    using erf_actuator::path_beside;
+    EXPECT_EQ(path_beside("run/t1/model.fst", "ad.dat"), "run/t1/ad.dat");
+    EXPECT_EQ(path_beside("run/t1/model.fst", "../shared/ad.dat"), "run/t1/../shared/ad.dat");
+    EXPECT_EQ(path_beside("model.fst", "ad.dat"), "ad.dat");             // no directory part
+    EXPECT_EQ(path_beside("/model.fst", "ad.dat"), "/ad.dat");
+    EXPECT_EQ(path_beside("run/model.fst", "/opt/of/ad.dat"), "/opt/of/ad.dat");   // absolute names are kept
+    EXPECT_EQ(path_beside("run/model.fst", ""), "run/");                  // callers test for an empty name first
+    EXPECT_FALSE(is_absolute_path(""));
+    EXPECT_FALSE(is_absolute_path("ad.dat"));
+    EXPECT_TRUE(is_absolute_path("/ad.dat"));
+#ifdef _WIN32
+    // std::filesystem gives backslashes on Windows; the separator of the .fst path is kept
+    EXPECT_EQ(path_beside("C:\\run\\model.fst", "ad.dat"), "C:\\run\\ad.dat");
+    EXPECT_EQ(path_beside("run/t1\\model.fst", "ad.dat"), "run/t1\\ad.dat");
+    EXPECT_EQ(path_beside("C:\\run\\model.fst", "D:\\of\\ad.dat"), "D:\\of\\ad.dat");
+    EXPECT_EQ(path_beside("C:\\run\\model.fst", "\\of\\ad.dat"), "\\of\\ad.dat");
+    EXPECT_EQ(path_beside("C:\\run\\model.fst", "d:/of/ad.dat"), "d:/of/ad.dat");
+    EXPECT_TRUE(is_absolute_path("C:ad.dat"));     // drive-relative: still not beside the .fst file
+    EXPECT_FALSE(is_absolute_path("1:ad.dat"));
+#else
+    // elsewhere a backslash and a colon are ordinary characters of a file name
+    EXPECT_EQ(path_beside("run\\model.fst", "ad.dat"), "ad.dat");
+    EXPECT_EQ(path_beside("run/model.fst", "C:\\of\\ad.dat"), "run/C:\\of\\ad.dat");
+    EXPECT_EQ(path_beside("run/model.fst", "\\ad.dat"), "run/\\ad.dat");
+    EXPECT_FALSE(is_absolute_path("C:\\ad.dat"));
+#endif
+}
+
 TEST(LogStreams, AFileIsOpenedOnceAndAppendedToAfterARestart)
 {
     const auto dir = gtest_scratch_root() / "erf_gtest_logstreams";
