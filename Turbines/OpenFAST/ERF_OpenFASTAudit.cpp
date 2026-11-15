@@ -7,6 +7,7 @@
 #include <AMReX.H>
 #include <AMReX_Print.H>
 
+#include "ERF_LogStreams.H"
 #include "ERF_OpenFASTRotor.H"
 
 using namespace amrex;
@@ -17,15 +18,20 @@ std::string
 openfast_value (ModelFiles& files, const std::string& fname, const std::string& key)
 {
     for (const std::string& line : files.lines(fname)) {
-        std::istringstream ls(line);
+        // "value  Name  - comment"; a value in double quotes runs to the closing quote, so it may hold spaces
         std::string value, name;
-        if (!(ls >> value >> name)) { continue; }
-        if (name == key) {
-            if (value.size() >= 2 && value.front() == '"' && value.back() == '"') {
-                value = value.substr(1, value.size() - 2);
-            }
-            return value;
+        const auto first = line.find_first_not_of(" \t");
+        if (first != std::string::npos && line[first] == '"') {
+            const auto close = line.find('"', first + 1);
+            if (close == std::string::npos) { continue; }
+            value = line.substr(first + 1, close - first - 1);
+            std::istringstream ls(line.substr(close + 1));
+            if (!(ls >> name)) { continue; }
+        } else {
+            std::istringstream ls(line);
+            if (!(ls >> value >> name)) { continue; }
         }
+        if (name == key) { return value; }
     }
     return {};
 }
@@ -42,9 +48,7 @@ openfast_module_path (ModelFiles& files, const std::string& fst_file, const std:
 {
     const std::string f = openfast_value(files, fst_file, key);
     if (f.empty()) { return {}; }
-    const auto slash = fst_file.find_last_of('/');
-    if (slash != std::string::npos && f.front() != '/') { return fst_file.substr(0, slash + 1) + f; }
-    return f;
+    return erf_actuator::path_beside(fst_file, f);   // the module file is named relative to the .fst file
 }
 
 std::string
